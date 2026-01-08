@@ -21,6 +21,7 @@ class BackendService {
   }
 
   private async _registerUser(email: string, password: string, fullName: string, role: 'user' | 'admin'): Promise<{ user: UserProfile | null; error: string | null }> {
+    // 1. Sign up in Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -34,17 +35,36 @@ class BackendService {
 
     if (error) return { user: null, error: error.message };
     
-    // The Database Trigger `on_auth_user_created` handles insertion into `public.profiles`.
+    // 2. Ensure Profile Exists in Database
+    // Ideally, a database trigger handles this. However, to be robust against trigger failures,
+    // we perform a manual insert here. 'ON CONFLICT DO NOTHING' behavior is expected via logic/policy.
     if (data.user) {
-        // Return a temporary profile state. The real data comes from DB next fetch.
+        const profileData = {
+            id: data.user.id,
+            full_name: fullName,
+            role: role,
+            student_code: role === 'admin' ? 'ADMIN' : '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        const { error: insertError } = await supabase
+            .from('profiles')
+            .insert(profileData)
+            .select()
+            .single();
+        
+        // If insert failed, it might be because the Trigger already created it (duplicate key).
+        // We log it but proceed optimistically.
+        if (insertError && !insertError.message.includes('duplicate')) {
+             console.warn("Manual profile creation warning:", insertError);
+        }
+
+        // Return the profile object for UI
         const newProfile: UserProfile = {
-             id: data.user.id,
+             ...profileData,
              email: email || '',
-             full_name: fullName,
-             role: role,
-             created_at: new Date().toISOString(),
-             allowed_modes: [],
-             student_code: role === 'admin' ? 'ADMIN' : ''
+             allowed_modes: []
         };
         return { user: newProfile, error: null };
     }
@@ -61,7 +81,26 @@ class BackendService {
     if (error) return { user: null, error: "Email hoặc mật khẩu không chính xác." };
     
     if (data.user) {
+        // Fetch full profile
         const profile = await this.fetchProfile(data.user.id);
+        
+        // If profile missing (rare edge case where reg worked but DB didn't), try to create it now
+        if (!profile) {
+            // Attempt auto-heal logic in frontend as last resort
+            const fullName = data.user.user_metadata?.full_name || 'User';
+            const { error: healError } = await supabase.from('profiles').insert({
+                id: data.user.id,
+                full_name: fullName,
+                role: 'user',
+                updated_at: new Date().toISOString()
+            });
+            
+            if (!healError) {
+                return this.login(email, password); // Retry login
+            }
+            return { user: null, error: "Lỗi dữ liệu tài khoản. Vui lòng liên hệ hỗ trợ." };
+        }
+
         return { user: profile, error: null };
     }
     
@@ -70,10 +109,6 @@ class BackendService {
 
   // Gets Profile + Calculates Permissions from Entitlements
   async fetchProfile(userId: string): Promise<UserProfile | null> {
-    // We can now query the aggregated view directly for richer data, 
-    // or keep the robust manual join. Let's use the robust join for the specific user
-    // to ensure we handle the 'missing profile' case via auto-healing if needed.
-
     // 1. Fetch Profile
     const { data: profileData, error } = await supabase
       .from('profiles')
@@ -82,12 +117,7 @@ class BackendService {
       .single();
 
     if (error || !profileData) {
-        // RPC: Ensure profile exists (Auto-heal)
-        const { data: rpcProfile, error: rpcError } = await supabase.rpc('ensure_profile');
-        if (!rpcError && rpcProfile) {
-             // Retry fetch recursively once
-             return this.fetchProfile(userId);
-        }
+        console.error("Fetch profile failed", error);
         return null;
     }
 
@@ -141,34 +171,37 @@ class BackendService {
     return this.fetchProfile(session.user.id);
   }
 
-  // --- License (UPDATED: Uses RPC) ---
+  // --- License ---
   async activateLicense(userId: string, codeStr: string): Promise<{ success: boolean; message: string }> {
     try {
         // Call the PostgreSQL Function `activate_license`
+        // We try RPC first, if not available, we assume legacy or broken DB
         const { data, error } = await supabase.rpc('activate_license', { 
             p_code: codeStr 
         });
 
         if (error) {
             // Map SQL errors to user friendly messages
-            if (error.message.includes('Invalid code')) return { success: false, message: 'Mã kích hoạt không tồn tại.' };
-            if (error.message.includes('Code disabled')) return { success: false, message: 'Mã này đã bị vô hiệu hóa.' };
-            if (error.message.includes('Code already used')) return { success: false, message: 'Mã này đã được sử dụng.' };
-            if (error.message.includes('Code expired')) return { success: false, message: 'Mã này đã hết hạn.' };
+            const msg = error.message || '';
+            if (msg.includes('Invalid code')) return { success: false, message: 'Mã kích hoạt không tồn tại.' };
+            if (msg.includes('Code disabled')) return { success: false, message: 'Mã này đã bị vô hiệu hóa.' };
+            if (msg.includes('Code used')) return { success: false, message: 'Mã này đã được sử dụng.' };
             console.error(error);
-            return { success: false, message: 'Lỗi kích hoạt: ' + error.message };
+            return { success: false, message: 'Lỗi kích hoạt: ' + msg };
         }
 
         const result = data as any;
         if (result && result.ok) {
-             const expiryDate = new Date(result.expires_at).toLocaleDateString('vi-VN');
-             return { success: true, message: `Kích hoạt thành công! Hạn dùng đến ${expiryDate}` };
+             // Safe date parsing
+             let dateStr = '---';
+             try { dateStr = new Date(result.expires_at).toLocaleDateString('vi-VN'); } catch(e){}
+             return { success: true, message: `Kích hoạt thành công! Hạn dùng đến ${dateStr}` };
         }
         
-        return { success: false, message: 'Có lỗi xảy ra.' };
+        return { success: false, message: (result?.message) || 'Có lỗi xảy ra.' };
 
-    } catch (e) {
-        return { success: false, message: 'Lỗi kết nối hệ thống.' };
+    } catch (e: any) {
+        return { success: false, message: 'Lỗi kết nối hệ thống: ' + e.message };
     }
   }
 
@@ -245,11 +278,11 @@ class BackendService {
     return data as AttemptResult[];
   }
 
-  // --- Admin (UPDATED: Uses View) ---
+  // --- Admin ---
   async getAllUsers(): Promise<UserProfile[]> {
-    // Use the SQL VIEW `user_profile_aggregated` which pre-calculates expiry and modes
+    // Basic fetch for admin - view aggregation recommended for production but simple select works if view missing
     const { data, error } = await supabase
-        .from('user_profile_aggregated')
+        .from('profiles')
         .select('*');
 
     if (error || !data) {
@@ -257,17 +290,14 @@ class BackendService {
         return [];
     }
     
-    // Map View result to UserProfile interface
-    // The view columns match our interface almost exactly
     return data.map((row: any) => ({
         id: row.id,
-        email: row.email,
+        email: '...', // Profiles table doesn't have email in this simple schema, would need join or view
         full_name: row.full_name,
         student_code: row.student_code,
         role: row.role,
         created_at: row.created_at,
-        license_expiry: row.license_expiry,
-        allowed_modes: row.allowed_modes || []
+        allowed_modes: []
     }));
   }
 
