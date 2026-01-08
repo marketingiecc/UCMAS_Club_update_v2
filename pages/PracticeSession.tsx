@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
@@ -130,7 +131,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
     
     // Very basic browser TTS for demo.
     // In production, use pre-recorded MP3s or a better TTS API (Google Cloud TTS).
-    // Browser TTS often reads "1, 2" as "One, Two" or Vietnamese equivalent.
     
     const utterance = new SpeechSynthesisUtterance();
     utterance.lang = 'vi-VN';
@@ -149,30 +149,33 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
       let correct = 0;
       let wrong = 0;
       let skipped = 0;
-      const details = questions.map((q, idx) => {
+      
+      questions.forEach((q, idx) => {
         const ans = answers[idx];
         const isSkipped = !ans;
         const isCorrect = !isSkipped && parseInt(ans) === q.correctAnswer;
         if (isSkipped) skipped++;
         else if (isCorrect) correct++;
         else wrong++;
-        return { question_no: idx+1, user_answer: ans || null, correct_answer: q.correctAnswer, is_correct: isCorrect };
       });
 
-      // Save
-      await backend.saveAttempt({
-          id: crypto.randomUUID(),
-          user_id: userId,
-          mode: currentMode,
-          level: selectedLevel,
-          score_correct: correct,
-          score_wrong: wrong,
-          score_skipped: skipped,
-          score_total: questions.length,
-          duration_seconds: getExamConfig(currentMode, selectedLevel).timeLimit - timeLeft,
-          created_at: new Date().toISOString(),
-          details
-      });
+      const config = getExamConfig(currentMode, selectedLevel);
+      if (currentMode !== Mode.VISUAL) config.flashSpeed = speed * 1000;
+
+      // Save using new schema method
+      await backend.saveAttempt(
+          userId,
+          config,
+          questions,
+          {
+              correct,
+              wrong,
+              skipped,
+              total: questions.length,
+              duration: config.timeLimit - timeLeft
+          },
+          answers
+      );
   };
 
   // --- Renders ---
@@ -292,7 +295,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
             <div className="flex justify-center gap-1 mb-2 text-yellow-400 text-2xl">
                {[1,2,3,4,5].map(s => <span key={s}>{percentage >= s*20 ? '★' : '☆'}</span>)}
             </div>
-            <p className="text-ucmas-blue font-bold text-sm mb-8">Cần cố gắng hơn</p>
+            <p className="text-ucmas-blue font-bold text-sm mb-8">
+               {percentage >= 80 ? 'Xuất sắc!' : percentage >= 50 ? 'Đạt yêu cầu' : 'Cần cố gắng hơn'}
+            </p>
 
             <div className="bg-slate-50 rounded-2xl p-8 mb-8">
                <div className="text-5xl font-black text-ucmas-blue">
