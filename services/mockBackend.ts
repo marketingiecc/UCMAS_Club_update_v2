@@ -35,15 +35,15 @@ class BackendService {
     if (error) return { user: null, error: error.message };
     
     // The Database Trigger `on_auth_user_created` handles insertion into `public.profiles`.
-    // We just return the constructed profile for the UI state.
     if (data.user) {
+        // Return a temporary profile state. The real data comes from DB next fetch.
         const newProfile: UserProfile = {
              id: data.user.id,
              email: email || '',
              full_name: fullName,
              role: role,
              created_at: new Date().toISOString(),
-             allowed_modes: [], // New users have no entitlements
+             allowed_modes: [],
              student_code: role === 'admin' ? 'ADMIN' : ''
         };
         return { user: newProfile, error: null };
@@ -70,6 +70,10 @@ class BackendService {
 
   // Gets Profile + Calculates Permissions from Entitlements
   async fetchProfile(userId: string): Promise<UserProfile | null> {
+    // We can now query the aggregated view directly for richer data, 
+    // or keep the robust manual join. Let's use the robust join for the specific user
+    // to ensure we handle the 'missing profile' case via auto-healing if needed.
+
     // 1. Fetch Profile
     const { data: profileData, error } = await supabase
       .from('profiles')
@@ -78,16 +82,10 @@ class BackendService {
       .single();
 
     if (error || !profileData) {
-        // Fallback for auto-healing if trigger failed or latent
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user && user.id === userId) {
-            // Try to auto-create profile if missing
-             await supabase.from('profiles').upsert({
-                id: userId,
-                full_name: user.user_metadata?.full_name || '',
-                role: user.user_metadata?.role || 'user'
-             });
-             // Retry fetch
+        // RPC: Ensure profile exists (Auto-heal)
+        const { data: rpcProfile, error: rpcError } = await supabase.rpc('ensure_profile');
+        if (!rpcError && rpcProfile) {
+             // Retry fetch recursively once
              return this.fetchProfile(userId);
         }
         return null;
@@ -99,7 +97,7 @@ class BackendService {
         .from('entitlements')
         .select('*')
         .eq('user_id', userId)
-        .gt('expires_at', now); // Only get valid licenses
+        .gt('expires_at', now); 
 
     // 3. Aggregate Permissions
     let maxExpiry = 0;
@@ -110,7 +108,6 @@ class BackendService {
             const expTime = new Date(ent.expires_at).getTime();
             if (expTime > maxExpiry) maxExpiry = expTime;
 
-            // Parse scope jsonb: {"nhin_tinh": true}
             Object.keys(ent.scope || {}).forEach(key => {
                 if (ent.scope[key] === true) {
                     allowedModes.add(key as Mode);
@@ -120,9 +117,11 @@ class BackendService {
     }
 
     // 4. Construct UI Profile
+    const { data: { user } } = await supabase.auth.getUser();
+
     return {
         id: profileData.id,
-        email: '', // Supabase profiles table usually doesn't store email, getting from auth context usually better but keeping simplified here
+        email: user?.email || '',
         full_name: profileData.full_name,
         student_code: profileData.student_code,
         role: profileData.role,
@@ -139,80 +138,41 @@ class BackendService {
   async getCurrentUser(): Promise<UserProfile | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
-    const { data: { user } } = await supabase.auth.getUser(); // Refresh to ensure valid session
-    if (!user) return null;
-    
-    // Merge email from auth into profile result
-    const profile = await this.fetchProfile(user.id);
-    if (profile) profile.email = user.email || '';
-    return profile;
+    return this.fetchProfile(session.user.id);
   }
 
-  // --- License (Activates Code -> Creates Entitlement) ---
+  // --- License (UPDATED: Uses RPC) ---
   async activateLicense(userId: string, codeStr: string): Promise<{ success: boolean; message: string }> {
-    // 1. Find Code
-    const { data: codeData, error } = await supabase
-        .from('activation_codes')
-        .select('*')
-        .eq('code', codeStr)
-        .eq('status', 'active')
-        .single();
-        
-    if (error || !codeData) {
-        return { success: false, message: 'Mã kích hoạt không hợp lệ, đã hết hạn hoặc đã được sử dụng.' };
-    }
-
-    // Check strict expiry if exists
-    if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
-        return { success: false, message: 'Mã này đã hết hạn sử dụng.' };
-    }
-
-    // Check if single use and already used (Database logic rule)
-    if (codeData.used_by) {
-        return { success: false, message: 'Mã này đã được sử dụng.' };
-    }
-
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + (codeData.duration_days * 24 * 60 * 60 * 1000));
-
-    // 2. Perform updates (Ideally RPC, doing Client-side transaction simulation)
-    
-    // A. Mark code as used
-    const { error: updateError } = await supabase
-        .from('activation_codes')
-        .update({
-            status: 'disabled', // Disable after use if single-use
-            used_by: userId,
-            used_at: now.toISOString(),
-            updated_at: now.toISOString()
-        })
-        .eq('id', codeData.id)
-        .eq('status', 'active'); // Optimistic locking
-
-    if (updateError) {
-         return { success: false, message: 'Mã đã bị người khác sử dụng.' };
-    }
-
-    // B. Insert Entitlement
-    const { error: insertError } = await supabase
-        .from('entitlements')
-        .insert({
-            user_id: userId,
-            activation_code_id: codeData.id,
-            scope: codeData.scope,
-            starts_at: now.toISOString(),
-            expires_at: expiresAt.toISOString()
+    try {
+        // Call the PostgreSQL Function `activate_license`
+        const { data, error } = await supabase.rpc('activate_license', { 
+            p_code: codeStr 
         });
 
-    if (insertError) {
-        console.error("Entitlement error", insertError);
-        return { success: false, message: 'Lỗi hệ thống khi gán quyền.' };
-    }
+        if (error) {
+            // Map SQL errors to user friendly messages
+            if (error.message.includes('Invalid code')) return { success: false, message: 'Mã kích hoạt không tồn tại.' };
+            if (error.message.includes('Code disabled')) return { success: false, message: 'Mã này đã bị vô hiệu hóa.' };
+            if (error.message.includes('Code already used')) return { success: false, message: 'Mã này đã được sử dụng.' };
+            if (error.message.includes('Code expired')) return { success: false, message: 'Mã này đã hết hạn.' };
+            console.error(error);
+            return { success: false, message: 'Lỗi kích hoạt: ' + error.message };
+        }
 
-    return { success: true, message: `Kích hoạt thành công! Hạn dùng đến ${expiresAt.toLocaleDateString('vi-VN')}` };
+        const result = data as any;
+        if (result && result.ok) {
+             const expiryDate = new Date(result.expires_at).toLocaleDateString('vi-VN');
+             return { success: true, message: `Kích hoạt thành công! Hạn dùng đến ${expiryDate}` };
+        }
+        
+        return { success: false, message: 'Có lỗi xảy ra.' };
+
+    } catch (e) {
+        return { success: false, message: 'Lỗi kết nối hệ thống.' };
+    }
   }
 
-  // --- Attempts (Split into Attempts + Answers tables) ---
+  // --- Attempts ---
   async saveAttempt(
     userId: string, 
     config: ExamConfig, 
@@ -228,8 +188,8 @@ class BackendService {
         user_id: userId,
         mode: config.mode,
         level: config.level,
-        settings: config, // Save full config JSON
-        exam_data: { questions }, // Save generated questions JSON
+        settings: config, // JSONB
+        exam_data: { questions }, // JSONB
         started_at: new Date(Date.now() - stats.duration * 1000).toISOString(),
         finished_at: now,
         score_correct: stats.correct,
@@ -257,10 +217,10 @@ class BackendService {
         
         return {
             attempt_id: attempt.id,
-            question_no: idx + 1,
+            question_no: idx + 1, // SQL is 1-based usually, matching DB constraint check(question_no >= 1)
             user_answer: userAns || null,
-            is_correct: userAns ? isCorrect : null, // null if skipped
-            answered_at: now // In real app, track individual times
+            is_correct: userAns ? isCorrect : null,
+            answered_at: now
         };
     });
 
@@ -270,12 +230,10 @@ class BackendService {
 
     if (ansError) {
         console.error("Failed to save answers", ansError);
-        // We don't rollback attempt here in simple mock, but implies data inconsistency risk without transaction
     }
   }
 
   async getUserHistory(userId: string): Promise<AttemptResult[]> {
-    // This is a simplified fetch. Real apps might need pagination.
     const { data, error } = await supabase
         .from('attempts')
         .select('*')
@@ -287,19 +245,29 @@ class BackendService {
     return data as AttemptResult[];
   }
 
-  // --- Admin ---
+  // --- Admin (UPDATED: Uses View) ---
   async getAllUsers(): Promise<UserProfile[]> {
-    // Admin needs raw profiles + derived entitlement info. 
-    // Simplified: Just returning profiles for now.
-    const { data } = await supabase.from('profiles').select('*');
-    if (!data) return [];
+    // Use the SQL VIEW `user_profile_aggregated` which pre-calculates expiry and modes
+    const { data, error } = await supabase
+        .from('user_profile_aggregated')
+        .select('*');
+
+    if (error || !data) {
+        console.error("Admin fetch error", error);
+        return [];
+    }
     
-    // Map to UserProfile format (missing entitlement calc for bulk users to save perf in this demo)
-    return data.map(p => ({
-        ...p,
-        email: 'Hidden', // Email is in Auth, needs function/rpc to get
-        allowed_modes: [],
-        license_expiry: undefined
+    // Map View result to UserProfile interface
+    // The view columns match our interface almost exactly
+    return data.map((row: any) => ({
+        id: row.id,
+        email: row.email,
+        full_name: row.full_name,
+        student_code: row.student_code,
+        role: row.role,
+        created_at: row.created_at,
+        license_expiry: row.license_expiry,
+        allowed_modes: row.allowed_modes || []
     }));
   }
 
