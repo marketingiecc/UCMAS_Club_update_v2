@@ -8,6 +8,11 @@ interface AuthPageProps {
   setUser: (u: UserProfile) => void;
 }
 
+interface Notification {
+  type: 'success' | 'error';
+  message: string;
+}
+
 const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -16,14 +21,38 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<Notification | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Sync state with URL changes
+  // Sync state with URL changes and handle Confirm Email params
   useEffect(() => {
     setIsRegister(location.pathname === '/register');
-    setError(null);
-  }, [location.pathname]);
+    setNotification(null);
+
+    // Handle Email Confirmation Result
+    const searchParams = new URLSearchParams(location.search);
+    const confirmStatus = searchParams.get('confirm');
+    
+    if (confirmStatus) {
+      if (confirmStatus === 'ok') {
+        setNotification({ 
+          type: 'success', 
+          message: 'Xác thực email thành công! Bạn có thể đăng nhập ngay.' 
+        });
+      } else if (confirmStatus === 'fail') {
+        const msg = searchParams.get('message') || 'Link xác thực không hợp lệ hoặc đã hết hạn.';
+        setNotification({ 
+          type: 'error', 
+          message: `Xác thực thất bại: ${msg}` 
+        });
+      } else if (confirmStatus === 'missing') {
+        setNotification({ 
+          type: 'error', 
+          message: 'Link xác thực thiếu thông tin token.' 
+        });
+      }
+    }
+  }, [location.pathname, location.search]);
 
   const toggleMode = () => {
     if (isRegister) {
@@ -35,14 +64,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setNotification(null);
     setLoading(true);
 
     try {
       let res;
       if (isRegister) {
           if (!fullName.trim()) {
-              setError("Vui lòng nhập họ và tên.");
+              setNotification({ type: 'error', message: "Vui lòng nhập họ và tên." });
               setLoading(false);
               return;
           }
@@ -52,12 +81,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
       }
 
       if (res.error) {
-        setError(res.error);
+        setNotification({ type: 'error', message: res.error });
       } else if (res.user) {
         setUser(res.user);
       }
     } catch (err: any) {
-      setError(err.message || "Đã xảy ra lỗi không mong muốn.");
+      setNotification({ type: 'error', message: err.message || "Đã xảy ra lỗi không mong muốn." });
     } finally {
       setLoading(false);
     }
@@ -80,9 +109,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
             </p>
         </div>
         
-        {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 text-sm border border-red-100 flex items-center">
-            ⚠️ {error}
+        {notification && (
+          <div className={`p-4 rounded-lg mb-6 text-sm border flex items-start gap-2 ${
+            notification.type === 'success' 
+              ? 'bg-green-50 text-green-700 border-green-100' 
+              : 'bg-red-50 text-red-600 border-red-100'
+          }`}>
+            <span>{notification.type === 'success' ? '✅' : '⚠️'}</span>
+            <span>{notification.message}</span>
           </div>
         )}
 

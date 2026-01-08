@@ -9,6 +9,7 @@ import PracticeSession from './pages/PracticeSession';
 import ActivatePage from './pages/ActivatePage';
 import HistoryPage from './pages/HistoryPage';
 import AdminPage from './pages/AdminPage';
+import ConfirmEmailPage from './pages/ConfirmEmailPage'; // Import new page
 import { backend } from './services/mockBackend';
 import { UserProfile } from './types';
 
@@ -45,17 +46,17 @@ const App: React.FC = () => {
             <Layout user={user} setUser={setUser}>
                 <Routes>
                 <Route path="/" element={<HomePage user={user} />} />
+                
+                {/* Auth Routes */}
                 <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
                 <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
+                <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
                 
+                {/* Protected Routes */}
                 <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
-                
                 <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
-                
                 <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
-                
                 <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
-
                 <Route path="/admin" element={user && user.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
                 
                 </Routes>
