@@ -12,8 +12,8 @@ interface PracticeSessionProps {
 }
 
 const LANGUAGES = [
-    { code: 'vi-VN', label: 'Tiếng Việt', sample: 'Một hai ba bốn năm' },
-    { code: 'en-US', label: 'Tiếng Anh', sample: 'One two three four five' },
+    { code: 'vi-VN', label: 'Tiếng Việt', sample: 'Một hai ba bốn năm sáu bảy tám chín mười' },
+    { code: 'en-US', label: 'Tiếng Anh', sample: 'One two three four five six seven eight nine ten' },
     { code: 'ru-RU', label: 'Tiếng Nga', sample: 'один два три' },
     { code: 'zh-CN', label: 'Tiếng Trung', sample: '一 二 三 四 五' },
     { code: 'ja-JP', label: 'Tiếng Nhật', sample: 'いち に さん し ご' },
@@ -44,8 +44,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
   const [sourceType, setSourceType] = useState<'auto' | 'bank'>('auto');
   
   // Custom Settings
-  const [speed, setSpeed] = useState(1.0); // Seconds per item
+  const [speed, setSpeed] = useState(1.0); // Seconds per item (Lower is faster)
   const [selectedLang, setSelectedLang] = useState('vi-VN');
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   // Exam State
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -58,12 +59,40 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
 
   const timerRef = useRef<number | null>(null);
 
-  // Initialize form defaults
+  // Initialize form defaults & Load Voices
   useEffect(() => {
      if (userName) setFormName(userName);
+
+     // Function to load voices
+     const loadVoices = () => {
+         const voices = window.speechSynthesis.getVoices();
+         if (voices.length > 0) {
+             setAvailableVoices(voices);
+         }
+     };
+
+     // Chrome loads voices asynchronously
+     loadVoices();
+     window.speechSynthesis.onvoiceschanged = loadVoices;
+
+     return () => {
+         window.speechSynthesis.onvoiceschanged = null;
+     };
   }, [userName]);
 
   // --- Helpers ---
+  
+  // Find the best voice (Prioritize "Google" voices)
+  const getBestVoice = (langCode: string): SpeechSynthesisVoice | null => {
+      // 1. Try to find a voice that matches language AND contains "Google" (e.g., "Google tiếng Việt")
+      const googleVoice = availableVoices.find(v => v.lang === langCode && v.name.includes('Google'));
+      if (googleVoice) return googleVoice;
+
+      // 2. Fallback to any voice matching the language
+      const anyVoice = availableVoices.find(v => v.lang === langCode);
+      return anyVoice || null;
+  };
+
   const startExam = () => {
     if (!formName) {
         alert("Vui lòng nhập họ và tên!");
@@ -88,16 +117,32 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
     setFlashNumber(null);
   };
 
+  const getSpeechRate = (secondsPerItem: number) => {
+      // SpeechSynthesis Rate: 0.1 to 10. Default 1.
+      // Logic: If 1s/item -> rate ~ 1.
+      // If 0.5s/item (fast) -> rate ~ 1.8
+      // If 2s/item (slow) -> rate ~ 0.6
+      // Formula: Rate = 0.9 / secondsPerItem (approx tuned)
+      const rate = 0.9 / secondsPerItem;
+      return Math.min(Math.max(rate, 0.5), 3.0); // Clamp between 0.5 and 3
+  };
+
   const testVoice = () => {
       const langConfig = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
+      
+      // Cancel any current speaking
+      window.speechSynthesis.cancel();
+
       const utterance = new SpeechSynthesisUtterance(langConfig.sample);
       utterance.lang = selectedLang;
-      // SpeechSynthesis Rate: 1 is normal. 
-      // If speed is 1s (slow), rate ~ 1. 
-      // If speed is 0.5s (fast), rate ~ 2.
-      // Formula approximation: Rate = 1 / speed
-      utterance.rate = Math.min(Math.max(1 / speed, 0.5), 3); 
-      window.speechSynthesis.cancel(); // Stop previous
+      
+      // Assign specific voice if found
+      const voice = getBestVoice(selectedLang);
+      if (voice) utterance.voice = voice;
+
+      utterance.rate = getSpeechRate(speed);
+      
+      console.log(`Testing Voice: ${voice?.name || 'Default'}, Lang: ${selectedLang}, Rate: ${utterance.rate}`);
       window.speechSynthesis.speak(utterance);
   };
 
@@ -150,13 +195,26 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
     setIsPlayingAudio(true);
     const q = questions[currentQIndex];
     
+    window.speechSynthesis.cancel();
+    
     const utterance = new SpeechSynthesisUtterance();
     utterance.lang = selectedLang;
-    // Create a string with pauses
+    
+    // Assign specific voice
+    const voice = getBestVoice(selectedLang);
+    if (voice) utterance.voice = voice;
+    
+    // Create a string with pauses (commas add slight pause in most TTS engines)
+    // Or just space them out.
     utterance.text = q.operands.join('. '); 
-    utterance.rate = Math.min(Math.max(1 / speed, 0.5), 3);
+    utterance.rate = getSpeechRate(speed);
+    
     utterance.onend = () => setIsPlayingAudio(false);
-    window.speechSynthesis.cancel();
+    utterance.onerror = (e) => {
+        console.error("Speech error", e);
+        setIsPlayingAudio(false);
+    };
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -227,8 +285,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
                  />
               </div>
 
-              {/* Student Code Removed */}
-
               <div>
                  <label className={`block text-xs font-bold ${theme.color} mb-1.5 ml-1`}>🎓 Cấp độ</label>
                  <select 
@@ -283,8 +339,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
                             max="3.0" 
                             step="0.25" 
                             value={speed} 
-                            onChange={e => setSpeed(parseFloat(e.target.value))}
-                            className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                            className={`w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${theme.color}`}
                             style={{
                                 background: `linear-gradient(to right, ${currentMode === Mode.FLASH ? '#10B981' : '#E31E24'} 0%, ${currentMode === Mode.FLASH ? '#10B981' : '#E31E24'} ${(speed - 0.25) / (3.0 - 0.25) * 100}%, #e5e7eb ${(speed - 0.25) / (3.0 - 0.25) * 100}%, #e5e7eb 100%)`
                             }}
