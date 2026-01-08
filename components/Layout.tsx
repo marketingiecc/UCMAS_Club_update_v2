@@ -22,6 +22,15 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
 
   const isActive = (path: string) => location.pathname === path ? "text-ucmas-blue font-bold border-b-2 border-ucmas-blue" : "text-gray-600 hover:text-ucmas-blue";
 
+  // Calculate days remaining
+  const getDaysLeft = () => {
+     if (!user?.license_expiry) return 0;
+     const diff = new Date(user.license_expiry).getTime() - new Date().getTime();
+     return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+  
+  const daysLeft = getDaysLeft();
+
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
@@ -29,10 +38,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
-               <div className="flex flex-col items-start leading-none">
-                  <span className="text-4xl font-black text-ucmas-red tracking-tight">UCMAS</span>
-                  <span className="text-[10px] font-bold bg-ucmas-blue text-white px-1 py-px rounded-sm tracking-widest">EDUCATION WITH A DIFFERENCE</span>
-               </div>
+               <img 
+                 src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro" 
+                 alt="UCMAS Logo" 
+                 className="h-14 md:h-16 w-auto object-contain"
+               />
             </div>
 
             {/* Navigation Links */}
@@ -62,7 +72,14 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
               {user ? (
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:flex flex-col items-end">
-                     <span className="text-sm font-bold text-gray-800">{user.full_name}</span>
+                     <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-800">{user.full_name}</span>
+                        {user.role !== 'admin' && daysLeft > 0 && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${daysLeft <= 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                Còn {daysLeft} ngày
+                            </span>
+                        )}
+                     </div>
                      <span className="text-xs text-gray-500 uppercase">{user.role === 'admin' ? 'Quản trị viên' : 'Học viên'}</span>
                   </div>
                   <button 

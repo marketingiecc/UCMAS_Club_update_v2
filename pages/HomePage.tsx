@@ -1,9 +1,13 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mode } from '../types';
+import { Mode, UserProfile } from '../types';
 
-const HomePage: React.FC = () => {
+interface HomePageProps {
+    user: UserProfile | null;
+}
+
+const HomePage: React.FC<HomePageProps> = ({ user }) => {
   const navigate = useNavigate();
 
   const modes = [
@@ -31,9 +35,31 @@ const HomePage: React.FC = () => {
   ];
 
   const handleModeClick = (modeId: Mode) => {
-      // Navigate directly to practice page. 
-      // If user is not logged in, the protected route in App.tsx will redirect to Login.
+      if (!user) {
+          navigate('/login');
+          return;
+      }
+
+      // Check access
+      if (user.role !== 'admin') {
+          const isExpired = !user.license_expiry || new Date(user.license_expiry) < new Date();
+          const isAllowed = user.allowed_modes.includes(modeId);
+          
+          if (isExpired || !isAllowed) {
+              navigate('/activate');
+              return;
+          }
+      }
+
       navigate(`/practice/${modeId}`);
+  };
+
+  const hasAccess = (modeId: Mode) => {
+    if (!user) return false; // Show as available but will redirect to login
+    if (user.role === 'admin') return true;
+    if (!user.license_expiry) return false;
+    if (new Date(user.license_expiry) < new Date()) return false;
+    return user.allowed_modes.includes(modeId);
   };
 
   return (
@@ -47,28 +73,40 @@ const HomePage: React.FC = () => {
       </div>
 
       <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        {modes.map((mode) => (
-          <div 
-            key={mode.id} 
-            onClick={() => handleModeClick(mode.id)}
-            className="group bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 cursor-pointer flex flex-col items-center text-center"
-          >
-             <div className={`w-24 h-24 rounded-full ${mode.colorClass} text-white flex items-center justify-center text-4xl mb-8 shadow-lg bg-opacity-90 group-hover:bg-opacity-100`}>
-               {mode.icon}
-             </div>
+        {modes.map((mode) => {
+          // If user is not logged in, we act like it's open (click -> login)
+          // If logged in, we check license.
+          const locked = user ? !hasAccess(mode.id) : false;
+          
+          return (
+            <div 
+                key={mode.id} 
+                onClick={() => handleModeClick(mode.id)}
+                className={`group bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 transition-all duration-300 cursor-pointer flex flex-col items-center text-center relative ${locked ? 'opacity-70 grayscale-[0.5]' : 'hover:shadow-2xl hover:-translate-y-2'}`}
+            >
+                {/* Icon */}
+                <div className={`w-24 h-24 rounded-full ${mode.colorClass} text-white flex items-center justify-center text-4xl mb-8 shadow-lg bg-opacity-90 group-hover:bg-opacity-100 relative`}>
+                {mode.icon}
+                {locked && (
+                    <div className="absolute -top-1 -right-1 bg-gray-600 text-white rounded-full p-2 border-2 border-white shadow-sm">
+                        🔒
+                    </div>
+                )}
+                </div>
 
-             <h3 className="text-2xl font-bold text-gray-800 mb-2 group-hover:text-ucmas-blue transition-colors">
-               {mode.title}
-             </h3>
-             <p className="text-gray-500 font-medium">
-               {mode.subtitle}
-             </p>
+                <h3 className="text-2xl font-bold text-gray-800 mb-2 group-hover:text-ucmas-blue transition-colors">
+                {mode.title}
+                </h3>
+                <p className="text-gray-500 font-medium">
+                {mode.subtitle}
+                </p>
 
-             <div className="mt-8 px-6 py-2 rounded-full bg-gray-50 text-gray-400 text-sm font-semibold group-hover:bg-ucmas-blue group-hover:text-white transition-all">
-               Bắt đầu ngay ➝
-             </div>
-          </div>
-        ))}
+                <div className={`mt-8 px-6 py-2 rounded-full text-sm font-semibold transition-all ${locked ? 'bg-gray-200 text-gray-600' : 'bg-gray-50 text-gray-400 group-hover:bg-ucmas-blue group-hover:text-white'}`}>
+                {locked ? 'Yêu cầu kích hoạt' : 'Bắt đầu ngay ➝'}
+                </div>
+            </div>
+          );
+        })}
       </div>
       
       {/* Decorative blobs */}

@@ -3,12 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { generateExam, getExamConfig } from '../services/examService';
-import { Mode, Question, AttemptResult } from '../types';
+import { Mode, Question, AttemptResult, UserProfile } from '../types';
 
 interface PracticeSessionProps {
-  userId: string;
-  userName?: string;
-  studentCode?: string;
+  user: UserProfile;
 }
 
 const LANGUAGES = [
@@ -19,10 +17,26 @@ const LANGUAGES = [
     { code: 'ja-JP', label: 'Tiếng Nhật', sample: 'いち に さん し ご' },
 ];
 
-const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) => {
+const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const { mode } = useParams<{ mode: string }>();
   const navigate = useNavigate();
   const currentMode = mode as Mode;
+
+  // --- Security / License Check ---
+  useEffect(() => {
+     if (user.role === 'admin') return;
+
+     const now = new Date();
+     const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+     const hasLicense = expiry && expiry > now;
+     const isModeAllowed = user.allowed_modes.includes(currentMode);
+
+     if (!hasLicense || !isModeAllowed) {
+         // Prevent access
+         navigate('/activate');
+     }
+  }, [user, currentMode, navigate]);
+
 
   // --- Theme Config based on Mode ---
   const getTheme = (m: Mode) => {
@@ -39,7 +53,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
   const [status, setStatus] = useState<'setup' | 'running' | 'finished'>('setup');
   
   // Setup Form State
-  const [formName, setFormName] = useState(userName || '');
+  const [formName, setFormName] = useState(user.full_name || '');
   const [selectedLevel, setSelectedLevel] = useState(1);
   const [sourceType, setSourceType] = useState<'auto' | 'bank'>('auto');
   
@@ -61,7 +75,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
 
   // Initialize form defaults & Load Voices
   useEffect(() => {
-     if (userName) setFormName(userName);
+     if (user.full_name) setFormName(user.full_name);
 
      // Function to load voices
      const loadVoices = () => {
@@ -78,7 +92,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
      return () => {
          window.speechSynthesis.onvoiceschanged = null;
      };
-  }, [userName]);
+  }, [user.full_name]);
 
   // --- Helpers ---
   
@@ -241,7 +255,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) =
 
       // Save using new schema method
       await backend.saveAttempt(
-          userId,
+          user.id,
           config,
           questions,
           {

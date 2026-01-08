@@ -49,6 +49,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
     <div className="min-h-[80vh] flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
         <div className="text-center mb-8">
+            <img 
+                 src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro" 
+                 alt="UCMAS" 
+                 className="h-20 mx-auto mb-6 object-contain"
+            />
             <h2 className="text-3xl font-black text-ucmas-blue mb-2">
                 {isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập'}
             </h2>
