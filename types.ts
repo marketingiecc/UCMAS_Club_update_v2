@@ -56,6 +56,16 @@ export interface ExamConfig {
   digitRange: [number, number];
 }
 
+// DB Entity: Exam Rules (JSON Config)
+export interface DBExamRule {
+  id: string;
+  mode: Mode;
+  version_name: string;
+  rules_json: any; // Specific config overrides per level
+  created_by: string;
+  created_at: string;
+}
+
 // DB Entity: Attempt
 export interface DBAttempt {
   id: string;

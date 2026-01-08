@@ -1,12 +1,19 @@
+
 import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
-import { UserProfile, AttemptResult, Mode, ActivationCode } from '../types';
+import { UserProfile, AttemptResult, Mode, DBExamRule } from '../types';
 
 const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'codes' | 'attempts'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'codes' | 'attempts' | 'rules'>('users');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [attempts, setAttempts] = useState<AttemptResult[]>([]);
   
+  // Rules State
+  const [selectedRuleMode, setSelectedRuleMode] = useState<Mode>(Mode.VISUAL);
+  const [currentRuleJson, setCurrentRuleJson] = useState<string>('');
+  const [ruleHistory, setRuleHistory] = useState<DBExamRule[]>([]);
+  const [ruleSaveStatus, setRuleSaveStatus] = useState<string>('');
+
   // New Code State
   const [newCode, setNewCode] = useState('');
   const [duration, setDuration] = useState(30);
@@ -15,12 +22,52 @@ const AdminPage: React.FC = () => {
     loadData();
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'rules') {
+        loadRules(selectedRuleMode);
+    }
+  }, [selectedRuleMode, activeTab]);
+
   const loadData = async () => {
     if (activeTab === 'users') {
       setUsers(await backend.getAllUsers());
     } else if (activeTab === 'attempts') {
-      setAttempts(await backend.getAllAttempts()); // Note: MockBackend doesn't have this, ensure backend.ts handles logic or returns []
+      setAttempts(await backend.getAllAttempts()); 
     }
+  };
+
+  const loadRules = async (mode: Mode) => {
+      setRuleSaveStatus('');
+      const latest = await backend.getLatestExamRule(mode);
+      const history = await backend.getExamRuleHistory(mode);
+      setRuleHistory(history);
+      
+      if (latest) {
+          setCurrentRuleJson(JSON.stringify(latest.rules_json, null, 2));
+      } else {
+          // Default placeholder structure if no rule exists
+          const placeholder = {
+              "1": { "numQuestions": 10 },
+              "default": { "numQuestions": 20 }
+          };
+          setCurrentRuleJson(JSON.stringify(placeholder, null, 2));
+      }
+  };
+
+  const handleSaveRule = async () => {
+      try {
+          const parsed = JSON.parse(currentRuleJson); // Validate JSON
+          setRuleSaveStatus('Saving...');
+          const result = await backend.saveExamRule(selectedRuleMode, parsed);
+          if (result.success) {
+              setRuleSaveStatus('Đã lưu thành công phiên bản mới!');
+              loadRules(selectedRuleMode); // Refresh history
+          } else {
+              setRuleSaveStatus('Lỗi khi lưu: ' + result.error);
+          }
+      } catch (e) {
+          setRuleSaveStatus('Lỗi: Định dạng JSON không hợp lệ.');
+      }
   };
 
   const handleCreateCode = async (e: React.FormEvent) => {
@@ -53,6 +100,12 @@ const AdminPage: React.FC = () => {
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'attempts' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
             >
               📊 Kết Quả Thi
+            </button>
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'rules' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              ⚙️ Cấu hình Đề
             </button>
         </nav>
       </div>
@@ -134,6 +187,73 @@ const AdminPage: React.FC = () => {
                 </table>
             </div>
           </div>
+        )}
+
+        {activeTab === 'rules' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2">
+                    <h3 className="text-2xl font-bold mb-6 text-gray-800">Cấu hình Quy tắc Sinh đề (JSON)</h3>
+                    
+                    <div className="flex gap-2 mb-4">
+                        {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
+                            <button 
+                                key={m}
+                                onClick={() => setSelectedRuleMode(m)}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition ${selectedRuleMode === m ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                            >
+                                {m === Mode.VISUAL ? 'Nhìn Tính' : m === Mode.LISTENING ? 'Nghe Tính' : 'Flash'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="bg-gray-900 rounded-xl p-4 shadow-inner">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-gray-400 text-xs font-mono">config.json</span>
+                            <span className={`text-xs font-bold ${ruleSaveStatus.includes('thành công') ? 'text-green-400' : 'text-red-400'}`}>{ruleSaveStatus}</span>
+                        </div>
+                        <textarea 
+                            value={currentRuleJson}
+                            onChange={(e) => setCurrentRuleJson(e.target.value)}
+                            className="w-full h-96 bg-gray-900 text-green-400 font-mono text-sm focus:outline-none resize-none"
+                            spellCheck={false}
+                        />
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                         <button 
+                            onClick={handleSaveRule}
+                            className="bg-ucmas-red text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 shadow-md transition flex items-center gap-2"
+                         >
+                            💾 Lưu phiên bản mới
+                         </button>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 className="font-bold text-gray-700 mb-4">Lịch sử phiên bản</h4>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                        {ruleHistory.map((rule) => (
+                            <div key={rule.id} className="bg-white border border-gray-200 p-3 rounded-xl shadow-sm hover:bg-gray-50 transition">
+                                <div className="flex justify-between items-start">
+                                    <div className="font-bold text-sm text-gray-800">{rule.version_name}</div>
+                                    <div className="text-[10px] text-gray-400">{new Date(rule.created_at).toLocaleString('vi-VN')}</div>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1 truncate font-mono">
+                                    {JSON.stringify(rule.rules_json).substring(0, 50)}...
+                                </div>
+                                <button 
+                                    onClick={() => setCurrentRuleJson(JSON.stringify(rule.rules_json, null, 2))}
+                                    className="text-xs text-ucmas-blue font-bold mt-2 hover:underline"
+                                >
+                                    Mở phiên bản này
+                                </button>
+                            </div>
+                        ))}
+                        {ruleHistory.length === 0 && (
+                            <p className="text-sm text-gray-400 italic">Chưa có lịch sử cập nhật.</p>
+                        )}
+                    </div>
+                </div>
+            </div>
         )}
       </div>
     </div>

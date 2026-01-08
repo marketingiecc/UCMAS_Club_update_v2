@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { UserProfile, AttemptResult, DBEntitlement, DBAnswer, Mode, ExamConfig, Question } from '../types';
+import { UserProfile, AttemptResult, DBEntitlement, DBAnswer, Mode, ExamConfig, Question, DBExamRule } from '../types';
 
 // Configuration
 const SUPABASE_URL = 'https://rwtpwdyoxirfpposmdcg.supabase.co';
@@ -158,17 +158,7 @@ class BackendService {
   }
 
   // --- Public method for fetching other profiles (e.g. Admin viewing users) ---
-  // Note: This does NOT ensure profile, it just reads.
   async fetchProfile(userId: string): Promise<UserProfile | null> {
-      // Typically used by Admin, so we don't trigger auto-creation for others here.
-      // We just reuse the internal logic but without the ensure step if we wanted,
-      // but strictly speaking, fetchProfile in the original code was 'getCurrentUser' logic.
-      // Since we refactored getCurrentUser, this method might be redundant or used differently.
-      // We'll map it to _ensureAndFetchProfile assuming usage context implies 'get user details'.
-      // HOWEVER, if we don't have the email from Auth, we can't fully fill the UserProfile email field
-      // without an extra query to auth.users (which requires Admin rights).
-      
-      // Fallback: Query profile, return with placeholder email if not self.
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
@@ -177,7 +167,6 @@ class BackendService {
 
       if (error || !profileData) return null;
 
-      // Re-use logic? Let's keep it simple for now as it's mostly for internal checks
       return {
           id: profileData.id,
           email: '', // Hidden for security unless we are the user
@@ -289,6 +278,52 @@ class BackendService {
 
     if (error) return [];
     return data as AttemptResult[];
+  }
+
+  // --- Exam Rules Management ---
+
+  async getLatestExamRule(mode: Mode): Promise<DBExamRule | null> {
+    const { data, error } = await supabase
+        .from('exam_rules')
+        .select('*')
+        .eq('mode', mode)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+    
+    if (error) return null;
+    return data as DBExamRule;
+  }
+
+  async saveExamRule(mode: Mode, rulesJson: any): Promise<{ success: boolean, error?: string }> {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Unauthorized' };
+
+      const versionName = `ver_${Date.now()}`;
+
+      const { error } = await supabase
+        .from('exam_rules')
+        .insert({
+            mode: mode,
+            version_name: versionName,
+            rules_json: rulesJson,
+            created_by: user.id
+        });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  }
+
+  async getExamRuleHistory(mode: Mode): Promise<DBExamRule[]> {
+      const { data, error } = await supabase
+        .from('exam_rules')
+        .select('*')
+        .eq('mode', mode)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (error) return [];
+      return data as DBExamRule[];
   }
 
   // --- Admin ---

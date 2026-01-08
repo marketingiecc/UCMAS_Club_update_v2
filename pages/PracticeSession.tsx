@@ -60,6 +60,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   // Custom Settings
   const [speed, setSpeed] = useState(1.0); // Seconds per item (Lower is faster)
   const [selectedLang, setSelectedLang] = useState('vi-VN');
+  const [isLoadingRule, setIsLoadingRule] = useState(false);
   
   // Exam State
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -105,29 +106,43 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${langCode}&q=${encodeURIComponent(text)}`;
   };
 
-  const startExam = () => {
+  const startExam = async () => {
     if (!formName) {
         alert("Vui lòng nhập họ và tên!");
         return;
     }
 
-    // Config exam
-    const config = getExamConfig(currentMode, selectedLevel);
-    // Adjust speed if custom set (for Flash/Listening)
-    if (currentMode !== Mode.VISUAL) {
-        config.flashSpeed = speed * 1000;
-    }
-
-    const generatedQuestions = generateExam(config);
-    setQuestions(generatedQuestions);
-    setTimeLeft(config.timeLimit);
-    setStatus('running');
+    setIsLoadingRule(true);
     
-    // Reset states
-    setCurrentQIndex(0);
-    setAnswers({});
-    setPlayCounts({});
-    setFlashNumber(null);
+    try {
+        // Fetch dynamic rules from backend
+        const ruleData = await backend.getLatestExamRule(currentMode);
+        const customRules = ruleData ? ruleData.rules_json : null;
+
+        // Config exam
+        const config = getExamConfig(currentMode, selectedLevel, customRules);
+        
+        // Adjust speed if custom set (for Flash/Listening)
+        if (currentMode !== Mode.VISUAL) {
+            config.flashSpeed = speed * 1000;
+        }
+
+        const generatedQuestions = generateExam(config);
+        setQuestions(generatedQuestions);
+        setTimeLeft(config.timeLimit);
+        setStatus('running');
+        
+        // Reset states
+        setCurrentQIndex(0);
+        setAnswers({});
+        setPlayCounts({});
+        setFlashNumber(null);
+    } catch (e) {
+        console.error("Failed to start exam", e);
+        alert("Có lỗi khi tạo đề. Vui lòng thử lại.");
+    } finally {
+        setIsLoadingRule(false);
+    }
   };
 
   const getSpeechRate = (secondsPerItem: number) => {
@@ -400,9 +415,10 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
               <button 
                 onClick={startExam}
-                className={`w-full ${theme.bg} text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition mt-4 flex items-center justify-center gap-2`}
+                disabled={isLoadingRule}
+                className={`w-full ${theme.bg} text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition mt-4 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait`}
               >
-                 ✨ BẮT ĐẦU LUYỆN TẬP
+                 {isLoadingRule ? '⏳ Đang tạo đề...' : '✨ BẮT ĐẦU LUYỆN TẬP'}
               </button>
            </div>
         </div>

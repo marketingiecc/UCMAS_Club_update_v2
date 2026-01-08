@@ -1,34 +1,50 @@
+
 import { ExamConfig, Mode, Question } from '../types';
 
-// Simplified rules engine. In a real app, this would fetch the JSON rules from DB.
-export const getExamConfig = (mode: Mode, level: number): ExamConfig => {
-  const baseConfig = {
+// Default Hardcoded Rules (Fallback)
+const DEFAULT_RULES: Record<Mode, any> = {
+    [Mode.VISUAL]: {
+        "1": { numQuestions: 10, numOperandsRange: [2, 3], digitRange: [1, 9] },
+        "2": { numQuestions: 20, numOperandsRange: [3, 5], digitRange: [1, 9] },
+        "default": { numQuestions: 50, numOperandsRange: [5, 8], digitRange: [10, 99], timeLimit: 600 }
+    },
+    [Mode.LISTENING]: {
+        "1": { timeLimit: 120, numOperandsRange: [2, 3] },
+        "default": { timeLimit: 180, numOperandsRange: [3, 5], digitRange: [10, 99] }
+    },
+    [Mode.FLASH]: {
+        "1": { flashSpeed: 1500, numOperandsRange: [2, 3] },
+        "2": { flashSpeed: 1000, numOperandsRange: [3, 5] },
+        "default": { flashSpeed: 500, numOperandsRange: [5, 10] }
+    }
+};
+
+export const getExamConfig = (mode: Mode, level: number, customRules?: any): ExamConfig => {
+  const baseConfig: ExamConfig = {
     mode,
     level,
-    numQuestions: 20, // Reduced for demo (Visual usually 200)
+    numQuestions: mode === Mode.VISUAL ? 20 : 10,
     timeLimit: 300,
     flashSpeed: 1000,
-    numOperandsRange: [3, 5] as [number, number],
-    digitRange: [1, 9] as [number, number],
+    numOperandsRange: [3, 5],
+    digitRange: [1, 9],
   };
 
-  if (mode === Mode.VISUAL) {
-    if (level === 1) return { ...baseConfig, numQuestions: 10, numOperandsRange: [2, 3], digitRange: [1, 9] };
-    if (level === 2) return { ...baseConfig, numQuestions: 20, numOperandsRange: [3, 5], digitRange: [1, 9] };
-    if (level >= 3) return { ...baseConfig, numQuestions: 50, numOperandsRange: [5, 8], digitRange: [10, 99], timeLimit: 600 };
-  }
+  // 1. Determine which ruleset to use (Custom > Default)
+  let ruleset = DEFAULT_RULES[mode];
   
-  if (mode === Mode.LISTENING) {
-    baseConfig.numQuestions = 10;
-    if (level === 1) return { ...baseConfig, timeLimit: 120, numOperandsRange: [2, 3] };
-    if (level >= 2) return { ...baseConfig, timeLimit: 180, numOperandsRange: [3, 5], digitRange: [10, 99] };
+  if (customRules && typeof customRules === 'object') {
+     // Check if the customRules structure looks valid (has keys like "1", "2", "default")
+     if (customRules[level] || customRules['default']) {
+         ruleset = customRules;
+     }
   }
 
-  if (mode === Mode.FLASH) {
-    baseConfig.numQuestions = 10;
-    if (level === 1) return { ...baseConfig, flashSpeed: 1500, numOperandsRange: [2, 3] };
-    if (level === 2) return { ...baseConfig, flashSpeed: 1000, numOperandsRange: [3, 5] };
-    if (level >= 3) return { ...baseConfig, flashSpeed: 500, numOperandsRange: [5, 10] };
+  // 2. Apply rules for specific level, or fallback to 'default' key in ruleset
+  const levelConfig = ruleset[level.toString()] || ruleset['default'];
+
+  if (levelConfig) {
+      return { ...baseConfig, ...levelConfig };
   }
 
   return baseConfig;
