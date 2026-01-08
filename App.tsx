@@ -1,9 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
-import AdminLoginPage from './pages/AdminLoginPage';
 import Dashboard from './pages/Dashboard';
 import PracticeSession from './pages/PracticeSession';
 import ActivatePage from './pages/ActivatePage';
@@ -37,7 +37,6 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="*" element={
             <Layout user={user} setUser={setUser}>
                 <Routes>

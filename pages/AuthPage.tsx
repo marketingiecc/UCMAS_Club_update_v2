@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
@@ -117,12 +118,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
             >
                 {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký ngay'}
             </button>
-        </div>
-
-        <div className="mt-8 text-center border-t border-gray-100 pt-6">
-            <a href="#/admin/login" className="text-xs text-gray-400 hover:text-ucmas-red transition">
-               Dành cho Quản trị viên
-            </a>
         </div>
       </div>
     </div>

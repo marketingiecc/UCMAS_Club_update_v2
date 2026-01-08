@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
@@ -44,6 +45,14 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                    <Link to="/activate" className={`text-sm font-medium transition-colors ${isActive('/activate')}`}>Kích hoạt</Link>
                  </>
                )}
+               
+               {/* Admin Link Logic */}
+               {user?.role === 'admin' && (
+                 <Link to="/admin" className={`text-sm font-bold text-ucmas-red uppercase border border-red-100 bg-red-50 px-3 py-1 rounded hover:bg-ucmas-red hover:text-white transition-all ${isActive('/admin')}`}>
+                   Quản trị viên
+                 </Link>
+               )}
+
                <a href="#" className="text-sm font-medium text-gray-600 hover:text-ucmas-blue">Tin tức</a>
                <a href="#" className="text-sm font-medium text-gray-600 hover:text-ucmas-blue">Liên hệ</a>
             </div>
@@ -54,7 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:flex flex-col items-end">
                      <span className="text-sm font-bold text-gray-800">{user.full_name}</span>
-                     <span className="text-xs text-gray-500 uppercase">{user.student_code || 'Học viên'}</span>
+                     <span className="text-xs text-gray-500 uppercase">{user.student_code || (user.role === 'admin' ? 'Admin' : 'Học viên')}</span>
                   </div>
                   <button 
                     onClick={handleLogout}
