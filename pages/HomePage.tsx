@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mode } from '../types';
@@ -30,8 +31,9 @@ const HomePage: React.FC = () => {
   ];
 
   const handleModeClick = (modeId: Mode) => {
-      // Logic: User not logged in, clicking mode redirects to login
-      navigate('/login');
+      // Navigate directly to practice page. 
+      // If user is not logged in, the protected route in App.tsx will redirect to Login.
+      navigate(`/practice/${modeId}`);
   };
 
   return (

@@ -63,7 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:flex flex-col items-end">
                      <span className="text-sm font-bold text-gray-800">{user.full_name}</span>
-                     <span className="text-xs text-gray-500 uppercase">{user.student_code || (user.role === 'admin' ? 'Admin' : 'Học viên')}</span>
+                     <span className="text-xs text-gray-500 uppercase">{user.role === 'admin' ? 'Quản trị viên' : 'Học viên'}</span>
                   </div>
                   <button 
                     onClick={handleLogout}

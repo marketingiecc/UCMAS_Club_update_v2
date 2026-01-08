@@ -11,7 +11,15 @@ interface PracticeSessionProps {
   studentCode?: string;
 }
 
-const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, studentCode }) => {
+const LANGUAGES = [
+    { code: 'vi-VN', label: 'Tiếng Việt', sample: 'Một hai ba bốn năm' },
+    { code: 'en-US', label: 'Tiếng Anh', sample: 'One two three four five' },
+    { code: 'ru-RU', label: 'Tiếng Nga', sample: 'один два три' },
+    { code: 'zh-CN', label: 'Tiếng Trung', sample: '一 二 三 四 五' },
+    { code: 'ja-JP', label: 'Tiếng Nhật', sample: 'いち に さん し ご' },
+];
+
+const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName }) => {
   const { mode } = useParams<{ mode: string }>();
   const navigate = useNavigate();
   const currentMode = mode as Mode;
@@ -32,10 +40,12 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
   
   // Setup Form State
   const [formName, setFormName] = useState(userName || '');
-  const [formCode, setFormCode] = useState(studentCode || '');
   const [selectedLevel, setSelectedLevel] = useState(1);
   const [sourceType, setSourceType] = useState<'auto' | 'bank'>('auto');
-  const [speed, setSpeed] = useState(1.0); // Seconds
+  
+  // Custom Settings
+  const [speed, setSpeed] = useState(1.0); // Seconds per item
+  const [selectedLang, setSelectedLang] = useState('vi-VN');
 
   // Exam State
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -51,8 +61,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
   // Initialize form defaults
   useEffect(() => {
      if (userName) setFormName(userName);
-     if (studentCode) setFormCode(studentCode);
-  }, [userName, studentCode]);
+  }, [userName]);
 
   // --- Helpers ---
   const startExam = () => {
@@ -66,7 +75,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
     // Adjust speed if custom set (for Flash/Listening)
     if (currentMode !== Mode.VISUAL) {
         config.flashSpeed = speed * 1000;
-        // Logic adjustment for listening pause could go here
     }
 
     const generatedQuestions = generateExam(config);
@@ -78,6 +86,19 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
     setCurrentQIndex(0);
     setAnswers({});
     setFlashNumber(null);
+  };
+
+  const testVoice = () => {
+      const langConfig = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
+      const utterance = new SpeechSynthesisUtterance(langConfig.sample);
+      utterance.lang = selectedLang;
+      // SpeechSynthesis Rate: 1 is normal. 
+      // If speed is 1s (slow), rate ~ 1. 
+      // If speed is 0.5s (fast), rate ~ 2.
+      // Formula approximation: Rate = 1 / speed
+      utterance.rate = Math.min(Math.max(1 / speed, 0.5), 3); 
+      window.speechSynthesis.cancel(); // Stop previous
+      window.speechSynthesis.speak(utterance);
   };
 
   // --- Running Logic ---
@@ -129,15 +150,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
     setIsPlayingAudio(true);
     const q = questions[currentQIndex];
     
-    // Very basic browser TTS for demo.
-    // In production, use pre-recorded MP3s or a better TTS API (Google Cloud TTS).
-    
     const utterance = new SpeechSynthesisUtterance();
-    utterance.lang = 'vi-VN';
+    utterance.lang = selectedLang;
     // Create a string with pauses
     utterance.text = q.operands.join('. '); 
-    utterance.rate = 1.5 / speed; // Approximate rate adjustment
+    utterance.rate = Math.min(Math.max(1 / speed, 0.5), 3);
     utterance.onend = () => setIsPlayingAudio(false);
+    window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   };
 
@@ -208,16 +227,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
                  />
               </div>
 
-              <div>
-                 <label className={`block text-xs font-bold ${theme.color} mb-1.5 ml-1`}># Mã học sinh</label>
-                 <input 
-                   type="text" 
-                   value={formCode} 
-                   onChange={e => setFormCode(e.target.value)}
-                   placeholder="Nhập mã học sinh (tùy chọn)"
-                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                 />
-              </div>
+              {/* Student Code Removed */}
 
               <div>
                  <label className={`block text-xs font-bold ${theme.color} mb-1.5 ml-1`}>🎓 Cấp độ</label>
@@ -244,24 +254,54 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
                  </div>
               </div>
 
+              {/* Language Selection for Listening */}
+              {currentMode === Mode.LISTENING && (
+                  <div>
+                    <label className={`block text-xs font-bold ${theme.color} mb-1.5 ml-1`}>🗣️ Ngôn ngữ giọng đọc</label>
+                    <select 
+                        value={selectedLang} 
+                        onChange={e => setSelectedLang(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition appearance-none"
+                    >
+                        {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+                    </select>
+                  </div>
+              )}
+
+              {/* Speed Slider for Flash & Listening */}
               {(currentMode === Mode.FLASH || currentMode === Mode.LISTENING) && (
                  <div>
-                    <div className="flex justify-between mb-1.5 ml-1">
-                        <label className={`block text-xs font-bold ${theme.color}`}>⏱️ Tốc độ hiển thị</label>
-                        <span className={`text-xs font-bold ${theme.color}`}>{speed}s</span>
+                    <div className="flex justify-between items-center mb-2 ml-1">
+                        <label className={`text-xs font-bold ${theme.color}`}>⏱️ Tốc độ hiển thị</label>
+                        <span className={`text-xs font-bold ${theme.color} bg-gray-100 px-2 py-1 rounded`}>{speed} giây/số</span>
                     </div>
-                    <input 
-                      type="range" 
-                      min="0.25" 
-                      max="3.0" 
-                      step="0.25" 
-                      value={speed} 
-                      onChange={e => setSpeed(parseFloat(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                       <span>Nhanh (0.25s)</span>
-                       <span>Chậm (3s)</span>
+                    
+                    <div className="relative pt-1 pb-4">
+                        <input 
+                            type="range" 
+                            min="0.25" 
+                            max="3.0" 
+                            step="0.25" 
+                            value={speed} 
+                            onChange={e => setSpeed(parseFloat(e.target.value))}
+                            className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{
+                                background: `linear-gradient(to right, ${currentMode === Mode.FLASH ? '#10B981' : '#E31E24'} 0%, ${currentMode === Mode.FLASH ? '#10B981' : '#E31E24'} ${(speed - 0.25) / (3.0 - 0.25) * 100}%, #e5e7eb ${(speed - 0.25) / (3.0 - 0.25) * 100}%, #e5e7eb 100%)`
+                            }}
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-500 font-medium mt-2">
+                            <span>Siêu nhanh (0.25s)</span>
+                            <span>Chậm (3s)</span>
+                        </div>
+                    </div>
+
+                    <div className="text-center">
+                         <button 
+                            onClick={testVoice}
+                            className={`text-xs font-bold px-4 py-2 rounded-full border transition ${currentMode === Mode.LISTENING ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-green-200 text-green-600 hover:bg-green-50'}`}
+                         >
+                             {currentMode === Mode.LISTENING ? '🔊 Nghe thử tốc độ & giọng đọc' : '⚡ Chạy thử tốc độ'}
+                         </button>
                     </div>
                  </div>
               )}
@@ -359,10 +399,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ userId, userName, stu
            </div>
            
            <div className="bg-gray-50 rounded-xl p-4 mb-4">
-               <div className="flex justify-between text-xs mb-2">
-                   <span className="text-gray-500">Mã học sinh</span>
-                   <span className="font-bold text-gray-800">{formCode || '---'}</span>
-               </div>
                <div className="flex justify-between text-xs mb-2">
                    <span className="text-gray-500">Cấp độ</span>
                    <span className="font-bold text-ucmas-green">Cấp {selectedLevel}</span>
