@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
 
@@ -8,12 +9,29 @@ interface AuthPageProps {
 }
 
 const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
-  const [isRegister, setIsRegister] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [isRegister, setIsRegister] = useState(location.pathname === '/register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Sync state with URL changes
+  useEffect(() => {
+    setIsRegister(location.pathname === '/register');
+    setError(null);
+  }, [location.pathname]);
+
+  const toggleMode = () => {
+    if (isRegister) {
+      navigate('/login');
+    } else {
+      navigate('/register');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +136,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
 
         <div className="mt-6 text-center">
             <button 
-                onClick={() => { setIsRegister(!isRegister); setError(null); }}
+                onClick={toggleMode}
                 className="text-sm font-medium text-ucmas-blue hover:underline"
             >
                 {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký ngay'}

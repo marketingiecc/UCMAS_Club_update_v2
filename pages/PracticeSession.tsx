@@ -60,8 +60,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   // Custom Settings
   const [speed, setSpeed] = useState(1.0); // Seconds per item (Lower is faster)
   const [selectedLang, setSelectedLang] = useState('vi-VN');
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-
+  
   // Exam State
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -70,41 +69,40 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [flashNumber, setFlashNumber] = useState<number | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  
+  // Track replays: Map<QuestionIndex, Count>
+  const [playCounts, setPlayCounts] = useState<Record<number, number>>({});
 
   const timerRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize form defaults & Load Voices
+  // Initialize form defaults
   useEffect(() => {
      if (user.full_name) setFormName(user.full_name);
-
-     // Function to load voices
-     const loadVoices = () => {
-         const voices = window.speechSynthesis.getVoices();
-         if (voices.length > 0) {
-             setAvailableVoices(voices);
-         }
-     };
-
-     // Chrome loads voices asynchronously
-     loadVoices();
-     window.speechSynthesis.onvoiceschanged = loadVoices;
-
-     return () => {
-         window.speechSynthesis.onvoiceschanged = null;
-     };
   }, [user.full_name]);
+
+  // Cleanup Audio on unmount
+  useEffect(() => {
+      return () => {
+          if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current = null;
+          }
+      };
+  }, []);
+
+  // Update audio speed dynamically
+  useEffect(() => {
+      if (audioRef.current && isPlayingAudio) {
+          audioRef.current.playbackRate = getSpeechRate(speed);
+      }
+  }, [speed, isPlayingAudio]);
 
   // --- Helpers ---
   
-  // Find the best voice (Prioritize "Google" voices)
-  const getBestVoice = (langCode: string): SpeechSynthesisVoice | null => {
-      // 1. Try to find a voice that matches language AND contains "Google" (e.g., "Google tiếng Việt")
-      const googleVoice = availableVoices.find(v => v.lang === langCode && v.name.includes('Google'));
-      if (googleVoice) return googleVoice;
-
-      // 2. Fallback to any voice matching the language
-      const anyVoice = availableVoices.find(v => v.lang === langCode);
-      return anyVoice || null;
+  const getGoogleTTSUrl = (text: string, lang: string) => {
+      const langCode = lang.split('-')[0]; // vi-VN -> vi
+      return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${langCode}&q=${encodeURIComponent(text)}`;
   };
 
   const startExam = () => {
@@ -128,36 +126,40 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     // Reset states
     setCurrentQIndex(0);
     setAnswers({});
+    setPlayCounts({});
     setFlashNumber(null);
   };
 
   const getSpeechRate = (secondsPerItem: number) => {
-      // SpeechSynthesis Rate: 0.1 to 10. Default 1.
-      // Logic: If 1s/item -> rate ~ 1.
-      // If 0.5s/item (fast) -> rate ~ 1.8
-      // If 2s/item (slow) -> rate ~ 0.6
-      // Formula: Rate = 0.9 / secondsPerItem (approx tuned)
+      // Audio Playback Rate: 1.0 is normal.
       const rate = 0.9 / secondsPerItem;
-      return Math.min(Math.max(rate, 0.5), 3.0); // Clamp between 0.5 and 3
+      return Math.min(Math.max(rate, 0.5), 2.5); 
   };
 
   const testVoice = () => {
       const langConfig = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
       
-      // Cancel any current speaking
-      window.speechSynthesis.cancel();
+      // Stop existing
+      if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+      }
+      setIsPlayingAudio(false); 
 
-      const utterance = new SpeechSynthesisUtterance(langConfig.sample);
-      utterance.lang = selectedLang;
+      const url = getGoogleTTSUrl(langConfig.sample, selectedLang);
+      const audio = new Audio(url);
       
-      // Assign specific voice if found
-      const voice = getBestVoice(selectedLang);
-      if (voice) utterance.voice = voice;
+      audio.playbackRate = getSpeechRate(speed);
+      
+      console.log(`Testing Voice: Google TTS, Lang: ${selectedLang}, Rate: ${audio.playbackRate}`);
+      audio.play().catch(e => alert("Không thể phát âm thanh. Kiểm tra kết nối mạng."));
+  };
 
-      utterance.rate = getSpeechRate(speed);
-      
-      console.log(`Testing Voice: ${voice?.name || 'Default'}, Lang: ${selectedLang}, Rate: ${utterance.rate}`);
-      window.speechSynthesis.speak(utterance);
+  // Helper to check replay limit (Max 2: 1 initial + 1 review)
+  const canPlay = (idx: number) => {
+      if (currentMode === Mode.VISUAL) return true;
+      const count = playCounts[idx] || 0;
+      return count < 2; 
   };
 
   // --- Running Logic ---
@@ -181,17 +183,34 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   // Auto-start Flash/Audio when question changes
   useEffect(() => {
     if (status === 'running') {
-      if (currentMode === Mode.FLASH) {
-        runFlashSequence(currentQIndex);
-      } else if (currentMode === Mode.LISTENING) {
-        // Reset audio state, user must click play
-        setIsPlayingAudio(false);
+      // Reset Audio
+      setIsPlayingAudio(false);
+      if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+      }
+
+      // Auto-play logic for Flash
+      // Only auto-play if it's the FIRST time (count is 0)
+      const count = playCounts[currentQIndex] || 0;
+      
+      if (count === 0) {
+          if (currentMode === Mode.FLASH) {
+            runFlashSequence(currentQIndex);
+          }
+          // For Listening, we usually wait for user click or auto-play. 
+          // To keep it simple and consistent with previous UX, Listening is manual trigger 
+          // but we could make it auto. Let's keep manual button for Listening to allow preparation.
       }
     }
   }, [currentQIndex, status]);
 
   const runFlashSequence = async (qIndex: number) => {
+    if (!canPlay(qIndex)) return; // Should be handled by UI disabled state, but double check
+
+    setPlayCounts(prev => ({...prev, [qIndex]: (prev[qIndex] || 0) + 1}));
     setIsFlashing(true);
+    
     const q = questions[qIndex];
     await new Promise(r => setTimeout(r, 500)); // Pre-delay
 
@@ -206,34 +225,36 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   const playAudio = () => {
     if (isPlayingAudio) return;
+    if (!canPlay(currentQIndex)) return;
+
+    setPlayCounts(prev => ({...prev, [currentQIndex]: (prev[currentQIndex] || 0) + 1}));
     setIsPlayingAudio(true);
+    
     const q = questions[currentQIndex];
+    const text = q.operands.join(', ');
+    const url = getGoogleTTSUrl(text, selectedLang);
     
-    window.speechSynthesis.cancel();
+    const audio = new Audio(url);
+    audio.playbackRate = getSpeechRate(speed);
     
-    const utterance = new SpeechSynthesisUtterance();
-    utterance.lang = selectedLang;
-    
-    // Assign specific voice
-    const voice = getBestVoice(selectedLang);
-    if (voice) utterance.voice = voice;
-    
-    // Create a string with pauses (commas add slight pause in most TTS engines)
-    // Or just space them out.
-    utterance.text = q.operands.join('. '); 
-    utterance.rate = getSpeechRate(speed);
-    
-    utterance.onend = () => setIsPlayingAudio(false);
-    utterance.onerror = (e) => {
-        console.error("Speech error", e);
+    audio.onended = () => setIsPlayingAudio(false);
+    audio.onerror = (e) => {
+        console.error("Audio error", e);
         setIsPlayingAudio(false);
+        alert("Lỗi tải giọng đọc Google.");
     };
 
-    window.speechSynthesis.speak(utterance);
+    audioRef.current = audio;
+    audio.play().catch(e => {
+        console.error("Play error", e);
+        setIsPlayingAudio(false);
+    });
   };
 
   const submitExam = async () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioRef.current) audioRef.current.pause(); 
+      
       setStatus('finished');
       
       // Calculate Stats
@@ -243,7 +264,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       
       questions.forEach((q, idx) => {
         const ans = answers[idx];
-        const isSkipped = !ans;
+        const isSkipped = !ans || ans.trim() === '';
         const isCorrect = !isSkipped && parseInt(ans) === q.correctAnswer;
         if (isSkipped) skipped++;
         else if (isCorrect) correct++;
@@ -253,7 +274,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       const config = getExamConfig(currentMode, selectedLevel);
       if (currentMode !== Mode.VISUAL) config.flashSpeed = speed * 1000;
 
-      // Save using new schema method
       await backend.saveAttempt(
           user.id,
           config,
@@ -365,14 +385,16 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                         </div>
                     </div>
 
-                    <div className="text-center">
-                         <button 
-                            onClick={testVoice}
-                            className={`text-xs font-bold px-4 py-2 rounded-full border transition ${currentMode === Mode.LISTENING ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-green-200 text-green-600 hover:bg-green-50'}`}
-                         >
-                             {currentMode === Mode.LISTENING ? '🔊 Nghe thử tốc độ & giọng đọc' : '⚡ Chạy thử tốc độ'}
-                         </button>
-                    </div>
+                    {currentMode === Mode.LISTENING && (
+                        <div className="text-center">
+                             <button 
+                                onClick={testVoice}
+                                className={`text-xs font-bold px-4 py-2 rounded-full border transition border-red-200 text-red-600 hover:bg-red-50`}
+                             >
+                                 🔊 Nghe thử giọng Google
+                             </button>
+                        </div>
+                    )}
                  </div>
               )}
 
@@ -458,7 +480,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
-        {/* Sidebar Question Nav (Visual Mode Mainly, but shown for all as per screenshot) */}
+        {/* Sidebar Question Nav */}
         <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit">
            <div className="flex items-center gap-3 mb-6">
               <div className={`w-10 h-10 rounded-full ${theme.bg} text-white flex items-center justify-center`}>{theme.icon}</div>
@@ -491,18 +513,29 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
            <div className="text-xs font-bold text-gray-800 mb-3">Câu hỏi</div>
            <div className="grid grid-cols-5 gap-2">
-              {questions.map((_, idx) => (
-                  <button 
-                    key={idx}
-                    onClick={() => !isFlashing && setCurrentQIndex(idx)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold transition ${
-                        currentQIndex === idx ? `${theme.bg} text-white shadow-md transform scale-110` :
-                        answers[idx] ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                    }`}
-                  >
-                     {idx + 1}
-                  </button>
-              ))}
+              {questions.map((_, idx) => {
+                  // Only allow clicking if question is done (has answer) or is current
+                  const isDone = answers[idx] !== undefined;
+                  const isActive = currentQIndex === idx;
+                  
+                  return (
+                    <button 
+                        key={idx}
+                        onClick={() => {
+                            if (!isFlashing && (isDone || isActive)) {
+                                setCurrentQIndex(idx);
+                            }
+                        }}
+                        disabled={isFlashing || (!isDone && !isActive)}
+                        className={`w-8 h-8 rounded-lg text-xs font-bold transition ${
+                            isActive ? `${theme.bg} text-white shadow-md transform scale-110` :
+                            isDone ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                        }`}
+                    >
+                        {idx + 1}
+                    </button>
+                  );
+              })}
            </div>
         </div>
 
@@ -549,11 +582,16 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                    {flashNumber}
                                 </div>
                             ) : (
-                                <div onClick={() => runFlashSequence(currentQIndex)} className="cursor-pointer group">
+                                <div 
+                                    onClick={() => runFlashSequence(currentQIndex)} 
+                                    className={`cursor-pointer group ${!canPlay(currentQIndex) ? 'opacity-50 pointer-events-none' : ''}`}
+                                >
                                     <div className="w-24 h-24 bg-ucmas-blue rounded-full flex items-center justify-center text-white text-4xl shadow-xl group-hover:scale-110 transition mx-auto mb-4">
                                        ▶
                                     </div>
-                                    <p className="text-gray-400 text-sm">Nhấn để xem lại (Chỉ Flash)</p>
+                                    <p className="text-gray-400 text-sm">
+                                        {canPlay(currentQIndex) ? 'Nhấn để xem lại (Tối đa 2 lần)' : 'Đã hết lượt xem'}
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -566,30 +604,20 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                             </div>
                             <button 
                                onClick={playAudio}
-                               disabled={isPlayingAudio}
-                               className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition"
+                               disabled={isPlayingAudio || !canPlay(currentQIndex)}
+                               className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                               {isPlayingAudio ? 'Đang đọc...' : '🔊 Bắt đầu nghe'}
+                               {isPlayingAudio ? 'Đang đọc...' : canPlay(currentQIndex) ? '🔊 Bắt đầu nghe' : '🚫 Hết lượt nghe'}
                             </button>
-                            <p className="text-red-500 text-xs font-bold mt-4 bg-red-50 inline-block px-3 py-1 rounded">Mỗi câu chỉ được nghe 1 lần!</p>
+                            <p className="text-red-500 text-xs font-bold mt-4 bg-red-50 inline-block px-3 py-1 rounded">
+                                Mỗi câu chỉ được nghe tối đa 2 lần
+                            </p>
                         </div>
                     )}
                 </div>
 
                 {/* Bottom Input Area */}
                 <div className="bg-white border-t border-gray-100 p-6 flex justify-center items-center gap-4 relative z-10">
-                    <button 
-                        onClick={() => {
-                             if(currentQIndex > 0) {
-                                 setCurrentQIndex(p => p-1);
-                                 if(currentMode === Mode.LISTENING) setIsPlayingAudio(false);
-                             }
-                        }}
-                        disabled={currentQIndex === 0}
-                        className="px-6 py-3 rounded-xl border border-gray-200 text-gray-500 font-bold hover:bg-gray-50 disabled:opacity-30 transition"
-                    >
-                        &lt; Câu trước
-                    </button>
                     
                     <div className="relative w-full max-w-md">
                         <input 
@@ -599,7 +627,19 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                           onChange={(e) => setAnswers(prev => ({...prev, [currentQIndex]: e.target.value}))}
                           onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                  if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1);
+                                  e.preventDefault();
+                                  // Mark blank if empty to register as done
+                                  if (answers[currentQIndex] === undefined) {
+                                      setAnswers(prev => ({...prev, [currentQIndex]: ''}));
+                                  }
+
+                                  if (currentQIndex < questions.length - 1) {
+                                      setCurrentQIndex(p => p+1);
+                                      // Stop any media
+                                      setIsFlashing(false);
+                                      setIsPlayingAudio(false);
+                                      if(audioRef.current) audioRef.current.pause();
+                                  }
                                   else submitExam();
                               }
                           }}
@@ -613,10 +653,16 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
                     {currentQIndex < questions.length - 1 ? (
                         <button 
-                            onClick={() => setCurrentQIndex(p => p+1)}
+                            onClick={() => {
+                                // Manual click Next also counts as completing the question even if blank
+                                if (answers[currentQIndex] === undefined) {
+                                    setAnswers(prev => ({...prev, [currentQIndex]: ''}));
+                                }
+                                setCurrentQIndex(p => p+1);
+                            }}
                             className="px-6 py-3 rounded-xl border border-ucmas-blue text-ucmas-blue font-bold hover:bg-blue-50 transition min-w-[120px]"
                         >
-                            Câu sau &gt;
+                            Tiếp theo &gt;
                         </button>
                     ) : (
                         <button 

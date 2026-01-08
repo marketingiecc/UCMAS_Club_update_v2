@@ -46,6 +46,7 @@ const App: React.FC = () => {
                 <Routes>
                 <Route path="/" element={<HomePage user={user} />} />
                 <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
+                <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
                 
                 <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
                 

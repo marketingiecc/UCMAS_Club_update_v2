@@ -94,7 +94,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                    <Link to="/login" className="px-5 py-2.5 rounded-full text-sm font-bold text-ucmas-blue hover:bg-blue-50 transition">
                      Đăng nhập
                    </Link>
-                   <Link to="/login" className="px-5 py-2.5 rounded-full text-sm font-bold bg-ucmas-red text-white hover:bg-red-700 shadow-md transition transform hover:-translate-y-0.5">
+                   <Link to="/register" className="px-5 py-2.5 rounded-full text-sm font-bold bg-ucmas-red text-white hover:bg-red-700 shadow-md transition transform hover:-translate-y-0.5">
                      Đăng ký
                    </Link>
                 </div>
