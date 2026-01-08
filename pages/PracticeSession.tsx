@@ -76,6 +76,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form defaults
   useEffect(() => {
@@ -303,6 +304,17 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           answers
       );
   };
+
+  // --- Disable Logic ---
+  const isInputDisabled = (currentMode === Mode.FLASH && isFlashing) || 
+                          (currentMode === Mode.LISTENING && isPlayingAudio);
+
+  // Auto focus when input becomes enabled
+  useEffect(() => {
+    if (!isInputDisabled && inputRef.current) {
+        inputRef.current.focus();
+    }
+  }, [isInputDisabled]);
 
   // --- Renders ---
 
@@ -538,11 +550,11 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     <button 
                         key={idx}
                         onClick={() => {
-                            if (!isFlashing && (isDone || isActive)) {
+                            if (!isFlashing && !isInputDisabled && (isDone || isActive)) {
                                 setCurrentQIndex(idx);
                             }
                         }}
-                        disabled={isFlashing || (!isDone && !isActive)}
+                        disabled={isFlashing || isInputDisabled || (!isDone && !isActive)}
                         className={`w-8 h-8 rounded-lg text-xs font-bold transition ${
                             isActive ? `${theme.bg} text-white shadow-md transform scale-110` :
                             isDone ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
@@ -637,13 +649,18 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     
                     <div className="relative w-full max-w-md">
                         <input 
+                          ref={inputRef}
                           type="number" 
                           autoFocus
+                          disabled={isInputDisabled}
                           value={answers[currentQIndex] || ''}
                           onChange={(e) => setAnswers(prev => ({...prev, [currentQIndex]: e.target.value}))}
                           onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                   e.preventDefault();
+                                  // Prevent submission if disabled (though input is disabled, good safeguard)
+                                  if (isInputDisabled) return;
+
                                   // Mark blank if empty to register as done
                                   if (answers[currentQIndex] === undefined) {
                                       setAnswers(prev => ({...prev, [currentQIndex]: ''}));
@@ -659,10 +676,10 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                   else submitExam();
                               }
                           }}
-                          className={`w-full border-2 ${answers[currentQIndex] ? 'border-ucmas-blue bg-blue-50' : 'border-gray-200'} rounded-xl py-3 px-4 text-center text-xl font-bold text-ucmas-blue focus:border-ucmas-blue focus:ring-0 outline-none transition`}
-                          placeholder="Nhập đáp án..."
+                          className={`w-full border-2 ${isInputDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : answers[currentQIndex] ? 'border-ucmas-blue bg-blue-50' : 'border-gray-200'} rounded-xl py-3 px-4 text-center text-xl font-bold text-ucmas-blue focus:border-ucmas-blue focus:ring-0 outline-none transition`}
+                          placeholder={isInputDisabled ? "Vui lòng lắng nghe/quan sát..." : "Nhập đáp án..."}
                         />
-                        {answers[currentQIndex] && (
+                        {answers[currentQIndex] && !isInputDisabled && (
                             <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-green-500">✓</div>
                         )}
                     </div>
@@ -676,14 +693,16 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                 }
                                 setCurrentQIndex(p => p+1);
                             }}
-                            className="px-6 py-3 rounded-xl border border-ucmas-blue text-ucmas-blue font-bold hover:bg-blue-50 transition min-w-[120px]"
+                            disabled={isInputDisabled}
+                            className="px-6 py-3 rounded-xl border border-ucmas-blue text-ucmas-blue font-bold hover:bg-blue-50 transition min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Tiếp theo &gt;
                         </button>
                     ) : (
                         <button 
                             onClick={submitExam}
-                            className="px-6 py-3 rounded-xl bg-ucmas-red text-white font-bold hover:bg-red-700 shadow-lg transition min-w-[120px]"
+                            disabled={isInputDisabled}
+                            className="px-6 py-3 rounded-xl bg-ucmas-red text-white font-bold hover:bg-red-700 shadow-lg transition min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Nộp bài 🏁
                         </button>
