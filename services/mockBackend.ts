@@ -11,14 +11,25 @@ class BackendService {
   
   // --- Auth ---
   
-  // Register new user
+  // Register new user (Student)
   async register(email: string, password: string, fullName: string): Promise<{ user: UserProfile | null; error: string | null }> {
+    return this._registerUser(email, password, fullName, 'user');
+  }
+
+  // Register new Admin (Requires check on frontend or secure environment)
+  async registerAdmin(email: string, password: string, fullName: string): Promise<{ user: UserProfile | null; error: string | null }> {
+    return this._registerUser(email, password, fullName, 'admin');
+  }
+
+  // Internal helper for registration
+  private async _registerUser(email: string, password: string, fullName: string, role: 'user' | 'admin'): Promise<{ user: UserProfile | null; error: string | null }> {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
+          role: role // Save to metadata as well
         },
       },
     });
@@ -26,19 +37,28 @@ class BackendService {
     if (error) return { user: null, error: error.message };
     
     if (data.user) {
-        // Manually create profile if no Trigger is set up in Supabase
+        // Create profile object
         const newProfile: UserProfile = {
              id: data.user.id,
-             email: email,
+             email: email || '',
              full_name: fullName,
-             role: 'user',
+             role: role,
              created_at: new Date().toISOString(),
              allowed_modes: [],
-             student_code: ''
+             student_code: role === 'admin' ? 'ADMIN' : ''
         };
         
-        // Try to insert profile. If it fails (duplicate because of trigger), we ignore.
-        const { error: profileError } = await supabase.from('profiles').insert(newProfile);
+        // FIX: Use UPSERT instead of INSERT.
+        // This handles cases where a trigger might have partially created the user, 
+        // or allows retry without duplicate key errors.
+        const { error: profileError } = await supabase.from('profiles').upsert(newProfile);
+        
+        if (profileError) {
+             console.error("Registration DB Sync Warning:", profileError);
+             // Note: We do NOT fail here. If RLS blocks the insert (e.g. email not confirmed yet),
+             // we still return the user. The `fetchProfile` method (called on login)
+             // contains a fix to save the profile to DB if it's missing.
+        }
         
         return { user: newProfile, error: null };
     }
@@ -64,6 +84,7 @@ class BackendService {
   }
 
   // Helper to fetch profile after auth state change
+  // FIX: Implemented Auto-Healing
   async fetchProfile(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabase
       .from('profiles')
@@ -71,19 +92,38 @@ class BackendService {
       .eq('id', userId)
       .single();
 
-    if (error) {
-      // Fallback: try to get metadata from auth user if profile missing
-      const { data: user } = await supabase.auth.getUser();
-      if (user.user && user.user.id === userId) {
-           return {
+    // If profile is missing in DB but User exists in Auth (e.g. failed insert during register)
+    if (error || !data) {
+      // 1. Get Auth Metadata
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user && user.id === userId) {
+           const metaRole = user.user_metadata?.role || 'user';
+           
+           // 2. Construct Profile from Metadata
+           const fallbackProfile: UserProfile = {
              id: userId,
-             email: user.user.email || '',
-             full_name: user.user.user_metadata?.full_name || 'Học viên',
-             role: 'user',
+             email: user.email || '',
+             full_name: user.user_metadata?.full_name || 'Người dùng',
+             role: metaRole,
              created_at: new Date().toISOString(),
              allowed_modes: [],
-             student_code: ''
+             student_code: metaRole === 'admin' ? 'ADMIN' : ''
            };
+
+           // 3. AUTO-HEAL: Save this profile to DB immediately
+           // This ensures subsequent fetches (and Admin view) will see this user.
+           const { error: saveError } = await supabase
+              .from('profiles')
+              .upsert(fallbackProfile);
+            
+           if (saveError) {
+               console.error("Auto-healing profile failed:", saveError);
+           } else {
+               console.log("Profile auto-healed successfully");
+           }
+
+           return fallbackProfile;
       }
       return null;
     }
@@ -117,8 +157,9 @@ class BackendService {
     const code = codes as ActivationCode;
     
     // 2. Update user
-    const profile = await this.fetchProfile(userId);
-    if (!profile) return { success: false, message: 'Không tìm thấy người dùng.' };
+    // Ensure we have a profile to update
+    let profile = await this.fetchProfile(userId);
+    if (!profile) return { success: false, message: 'Không tìm thấy hồ sơ người dùng.' };
 
     const currentExpiry = profile.license_expiry ? new Date(profile.license_expiry).getTime() : Date.now();
     const newExpiry = new Date(Math.max(currentExpiry, Date.now()));
@@ -135,7 +176,7 @@ class BackendService {
         })
         .eq('id', userId);
 
-    if (updateError) return { success: false, message: 'Lỗi kích hoạt.' };
+    if (updateError) return { success: false, message: 'Lỗi cập nhật hồ sơ.' };
 
     return { success: true, message: `Kích hoạt thành công! Hạn dùng đến ${newExpiry.toLocaleDateString('vi-VN')}` };
   }
@@ -165,7 +206,7 @@ class BackendService {
         .from('attempts')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100); // Limit to recent 100 for performance
+        .limit(100); 
     return (data || []) as AttemptResult[];
   }
 }
