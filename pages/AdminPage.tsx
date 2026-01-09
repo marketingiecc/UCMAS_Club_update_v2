@@ -67,8 +67,8 @@ const AdminPage: React.FC = () => {
   };
 
   const loadCustomExams = async (mode: Mode) => {
-      setUploadedExams([]); // Clear first
-      // Fetch ALL exams regardless of status to debug
+      setUploadedExams([]); 
+      // Admin should see ALL exams (active, draft, disabled) to debug
       const exams = await backend.getCustomExams(mode, undefined, 'all');
       setUploadedExams(exams);
   };
@@ -149,7 +149,7 @@ const AdminPage: React.FC = () => {
                   level: parseInt(level),
                   time_limit: parseInt(timeLimit),
                   questions: json.questions,
-                  is_public: false // Default private per prompt
+                  is_public: false // Explicitly private by default
               });
 
               if (result.success) {

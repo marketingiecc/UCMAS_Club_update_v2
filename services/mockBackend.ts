@@ -210,17 +210,11 @@ class BackendService {
 
   // --- CUSTOM EXAMS (UPDATED LOGIC) ---
 
-  /**
-   * Helper: Chuẩn hóa câu hỏi từ file JSON
-   * - Tự động tính toán correctAnswer nếu thiếu
-   * - Tự động tạo ID nếu thiếu
-   */
   private _normalizeQuestions(questions: any[]): Question[] {
      if (!Array.isArray(questions)) return [];
      
      return questions.map((q, idx) => {
          let correctAnswer = q.correctAnswer;
-         // Nếu file JSON không có đáp án, tự tính tổng các toán hạng
          if (correctAnswer === undefined || correctAnswer === null) {
              if (Array.isArray(q.operands)) {
                  correctAnswer = q.operands.reduce((a: number, b: number) => a + b, 0);
@@ -249,10 +243,8 @@ class BackendService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { success: false, error: 'Bạn cần đăng nhập để tải đề.' };
 
-      // 1. Chuẩn hóa dữ liệu câu hỏi trước khi lưu
       const normalizedQuestions = this._normalizeQuestions(examData.questions);
 
-      // 2. Insert vào DB
       const { error } = await supabase
         .from('custom_exams')
         .insert({
@@ -261,9 +253,9 @@ class BackendService {
             mode: examData.mode,
             level: examData.level,
             time_limit: examData.time_limit,
-            questions: normalizedQuestions, // Lưu mảng đã chuẩn hóa (có correctAnswer)
-            is_public: examData.is_public ?? false, // Mặc định false (private)
-            status: 'active', // Luôn set active khi mới upload
+            questions: normalizedQuestions, 
+            is_public: examData.is_public ?? false, 
+            status: 'active',
             created_by: user.id
         });
 
@@ -274,35 +266,96 @@ class BackendService {
   async getCustomExams(
       mode: Mode, 
       level?: number, 
-      status: 'active' | 'disabled' | 'draft' | 'all' = 'all' // Mặc định lấy tất cả để dễ debug nếu không truyền tham số
+      status: 'active' | 'disabled' | 'draft' | 'all' = 'all' 
   ): Promise<CustomExam[]> {
-      let query = supabase
-        .from('custom_exams')
-        .select('*')
-        .eq('mode', mode)
-        .order('created_at', { ascending: false });
-      
-      if (level !== undefined) {
-          query = query.eq('level', level);
+      const { data: { user } } = await supabase.auth.getUser();
+      const allExamsMap = new Map<string, CustomExam>();
+
+      const processExams = (exams: any[]) => {
+          exams.forEach(e => {
+              if (!allExamsMap.has(e.id)) {
+                  allExamsMap.set(e.id, {
+                      ...e,
+                      questions: Array.isArray(e.questions) ? e.questions : []
+                  });
+              }
+          });
+      };
+
+      // Helper: Apply common filters
+      const applyFilters = (queryBuilder: any) => {
+          let q = queryBuilder.eq('mode', mode);
+          if (typeof level === 'number') q = q.eq('level', level);
+          if (status !== 'all') q = q.eq('status', status);
+          return q;
+      };
+
+      // We split queries into separate Try-Catch blocks.
+      // If RLS policies are circular, one of these (usually Public or Admin-All) will fail with 42P17.
+      // By isolating them, we ensure valid queries (like "My Exams" or "Shared Access") still return data.
+
+      // 1. Fetch Public Exams
+      try {
+          const { data, error } = await applyFilters(
+              supabase.from('custom_exams').select('*').eq('is_public', true)
+          );
+          if (!error && data) processExams(data);
+      } catch (e) {
+          console.warn("Error fetching public exams (RLS?):", e);
       }
 
-      // Filter status nếu không phải 'all'
-      if (status && status !== 'all') {
-          query = query.eq('status', status);
+      if (user) {
+          // 2. Fetch My Exams (Created by me)
+          try {
+              const { data, error } = await applyFilters(
+                  supabase.from('custom_exams').select('*').eq('created_by', user.id)
+              );
+              if (!error && data) processExams(data);
+          } catch (e) {
+              console.warn("Error fetching my exams:", e);
+          }
+
+          // 3. Fetch Shared Exams (Via Access Table - explicit bypass of circular RLS by ID)
+          try {
+              const { data: sharedAccess } = await supabase
+                .from('custom_exam_access')
+                .select('exam_id')
+                .eq('user_id', user.id);
+              
+              if (sharedAccess && sharedAccess.length > 0) {
+                  const sharedIds = sharedAccess.map(r => r.exam_id);
+                  const { data, error } = await applyFilters(
+                      supabase.from('custom_exams').select('*').in('id', sharedIds)
+                  );
+                  if (!error && data) processExams(data);
+              }
+          } catch (e) {
+              console.warn("Error fetching shared exams:", e);
+          }
+
+          // 4. Admin Catch-All
+          // Attempt to fetch ALL exams if user is Admin. 
+          // Note: If RLS recurses on `select *`, this might fail, but `try-catch` prevents crash.
+          try {
+             // Check role directly from profiles to decide whether to attempt full fetch
+             const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+             if (profile?.role === 'admin') {
+                 // Try fetching all without public/owner filters
+                 const { data, error } = await applyFilters(
+                     supabase.from('custom_exams').select('*')
+                 );
+                 if (!error && data) processExams(data);
+             }
+          } catch (e) {
+              console.warn("Error fetching all exams for admin:", e);
+          }
       }
 
-      const { data, error } = await query;
-      
-      if (error) {
-          console.error(`Error fetching exams [mode=${mode}, level=${level}, status=${status}]:`, error);
-          return [];
-      }
-      
-      // Map đảm bảo types
-      return (data || []).map((exam: any) => ({
-          ...exam,
-          questions: Array.isArray(exam.questions) ? exam.questions : []
-      })) as CustomExam[];
+      // Final Deduplicated Result
+      const finalExams = Array.from(allExamsMap.values());
+      finalExams.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return finalExams;
   }
 
   async deleteCustomExam(id: string): Promise<boolean> {
@@ -314,6 +367,23 @@ class BackendService {
       const { data, error } = await supabase.from('custom_exams').select('*').eq('id', id).single();
       if (error) return null;
       return data as CustomExam;
+  }
+
+  // --- Share Exam (Requirement G) ---
+  async shareExamWithUser(examId: string, targetUserId: string): Promise<{ success: boolean, error?: string }> {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Unauthorized' };
+
+      const { error } = await supabase
+        .from('custom_exam_access')
+        .insert({
+            exam_id: examId,
+            user_id: targetUserId,
+            granted_by: user.id
+        });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
   }
 
   // --- Admin ---
