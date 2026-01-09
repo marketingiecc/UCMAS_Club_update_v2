@@ -1,13 +1,32 @@
+
 import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
-import { AttemptResult } from '../types';
+import { AttemptResult, Question } from '../types';
+import ResultDetailModal from '../components/ResultDetailModal';
 
 const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
   const [history, setHistory] = useState<AttemptResult[]>([]);
+  const [selectedAttempt, setSelectedAttempt] = useState<AttemptResult | null>(null);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   useEffect(() => {
     backend.getUserHistory(userId).then(setHistory);
   }, [userId]);
+
+  const handleViewDetails = async (attempt: AttemptResult) => {
+      setIsLoadingDetails(true);
+      try {
+          const answers = await backend.getAttemptAnswers(attempt.id);
+          setSelectedAnswers(answers);
+          setSelectedAttempt(attempt);
+      } catch (error) {
+          console.error("Failed to load attempt details", error);
+          alert("Không thể tải chi tiết bài thi.");
+      } finally {
+          setIsLoadingDetails(false);
+      }
+  };
 
   if (history.length === 0) {
     return (
@@ -21,9 +40,22 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+        
+        {/* Detail Modal */}
+        {selectedAttempt && (
+            <ResultDetailModal 
+                isOpen={!!selectedAttempt}
+                onClose={() => setSelectedAttempt(null)}
+                questions={selectedAttempt.exam_data?.questions || []}
+                userAnswers={selectedAnswers}
+                title={`Kết quả: ${selectedAttempt.mode === 'nhin_tinh' ? 'Nhìn Tính' : selectedAttempt.mode === 'nghe_tinh' ? 'Nghe Tính' : 'Flash'} - Cấp ${selectedAttempt.level}`}
+            />
+        )}
+
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-8 border-b border-gray-100">
             <h2 className="text-2xl font-black text-gray-800">Lịch Sử Luyện Tập</h2>
+            <p className="text-sm text-gray-500 mt-1">Nhấn vào từng dòng để xem lại chi tiết bài làm</p>
         </div>
         <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -38,8 +70,12 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
             </thead>
             <tbody className="divide-y divide-gray-100">
                 {history.map((h) => (
-                <tr key={h.id} className="hover:bg-blue-50 transition group cursor-default">
-                    <td className="px-8 py-5 text-sm text-gray-600 font-mono">
+                <tr 
+                    key={h.id} 
+                    onClick={() => handleViewDetails(h)}
+                    className="hover:bg-blue-50 transition cursor-pointer group"
+                >
+                    <td className="px-8 py-5 text-sm text-gray-600 font-mono group-hover:text-ucmas-blue transition-colors">
                     {new Date(h.created_at).toLocaleString('vi-VN')}
                     </td>
                     <td className="px-8 py-5">
@@ -66,6 +102,12 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
             </table>
         </div>
         </div>
+        
+        {isLoadingDetails && (
+            <div className="fixed inset-0 bg-white bg-opacity-50 z-50 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ucmas-blue"></div>
+            </div>
+        )}
     </div>
   );
 };

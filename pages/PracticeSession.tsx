@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { generateExam, getExamConfig } from '../services/examService';
 import { Mode, Question, AttemptResult, UserProfile } from '../types';
+import ResultDetailModal from '../components/ResultDetailModal';
 
 interface PracticeSessionProps {
   user: UserProfile;
@@ -70,6 +71,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [flashNumber, setFlashNumber] = useState<number | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  
+  // Review Modal State
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
   
   // Track replays: Map<QuestionIndex, Count>
   const [playCounts, setPlayCounts] = useState<Record<number, number>>({});
@@ -444,6 +448,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
     return (
       <div className="min-h-[80vh] flex items-center justify-center py-12">
+        <ResultDetailModal 
+            isOpen={isReviewOpen} 
+            onClose={() => setIsReviewOpen(false)} 
+            questions={questions} 
+            userAnswers={answers}
+        />
+
         <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-md text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 text-green-600">
                🏆
@@ -487,7 +498,10 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                </div>
             </div>
 
-            <button className="w-full border border-ucmas-blue text-ucmas-blue font-bold py-3 rounded-xl hover:bg-blue-50 transition mb-3">
+            <button 
+               onClick={() => setIsReviewOpen(true)}
+               className="w-full border border-ucmas-blue text-ucmas-blue font-bold py-3 rounded-xl hover:bg-blue-50 transition mb-3 flex items-center justify-center gap-2"
+            >
                👁️ Xem lại kết quả
             </button>
             <div className="flex gap-3">

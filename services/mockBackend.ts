@@ -280,6 +280,24 @@ class BackendService {
     return data as AttemptResult[];
   }
 
+  async getAttemptAnswers(attemptId: string): Promise<Record<number, string>> {
+      const { data, error } = await supabase
+        .from('answers')
+        .select('question_no, user_answer')
+        .eq('attempt_id', attemptId);
+      
+      if (error || !data) return {};
+
+      const answers: Record<number, string> = {};
+      data.forEach((row: any) => {
+          if (row.user_answer !== null) {
+              // Convert 1-based question_no back to 0-based index
+              answers[row.question_no - 1] = row.user_answer;
+          }
+      });
+      return answers;
+  }
+
   // --- Exam Rules Management ---
 
   async getLatestExamRule(mode: Mode): Promise<DBExamRule | null> {
