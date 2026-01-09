@@ -110,7 +110,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   useEffect(() => {
       if (sourceType === 'bank') {
           const fetchExams = async () => {
-              const exams = await backend.getCustomExams(currentMode, selectedLevel);
+              // Only fetch 'active' exams for students
+              const exams = await backend.getCustomExams(currentMode, selectedLevel, 'active');
               setAvailableExams(exams);
               if (exams.length > 0) setSelectedExamId(exams[0].id);
               else setSelectedExamId('');
