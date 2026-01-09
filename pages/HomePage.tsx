@@ -14,21 +14,21 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
     {
       id: Mode.VISUAL,
       title: "Nhìn Tính",
-      subtitle: "Hàng tỷ phép tính hay • Đa dạng cấp độ",
+      subtitle: "1 tỷ phép tính hay • 10 cấp độ",
       icon: "👁️",
       colorClass: "bg-ucmas-blue",
     },
     {
       id: Mode.LISTENING,
       title: "Nghe Tính",
-      subtitle: "Luyện đa ngôn ngữ • Đa dạng cấp độ",
+      subtitle: "Luyện đa ngôn ngữ • 10 cấp độ",
       icon: "🎧",
       colorClass: "bg-ucmas-red",
     },
     {
       id: Mode.FLASH,
       title: "Flash",
-      subtitle: "Luyện tốc độ • Đa dạng cấp độ",
+      subtitle: "Luyện tốc độ • 10 cấp độ",
       icon: "⚡",
       colorClass: "bg-ucmas-green",
     }
