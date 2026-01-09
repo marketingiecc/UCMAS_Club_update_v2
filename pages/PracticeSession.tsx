@@ -577,7 +577,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
         {/* Sidebar Question Nav */}
-        <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit">
+        <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit shrink-0">
            <div className="flex items-center gap-3 mb-6">
               <div className={`w-10 h-10 rounded-full ${theme.bg} text-white flex items-center justify-center`}>{theme.icon}</div>
               <div>
@@ -591,9 +591,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                    <span className="text-gray-500">Cấp độ</span>
                    <span className="font-bold text-ucmas-green">Cấp {selectedLevel}</span>
                </div>
-               <div className="flex justify-between text-xs">
+               <div className="flex justify-between text-xs mb-2">
                    <span className="text-gray-500">Tốc độ</span>
                    <span className="font-bold text-gray-800">{speed}s</span>
+               </div>
+               {/* Moved Question Counter Here */}
+               <div className="flex justify-between text-xs pt-2 border-t border-gray-200 mt-2">
+                   <span className="text-gray-500">Câu hỏi</span>
+                   <span className="font-bold text-ucmas-blue text-lg">{currentQIndex + 1}/{questions.length}</span>
                </div>
            </div>
 
@@ -607,7 +612,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
               </div>
            </div>
 
-           <div className="text-xs font-bold text-gray-800 mb-3">Câu hỏi</div>
+           <div className="text-xs font-bold text-gray-800 mb-3">Danh sách câu</div>
            <div className="grid grid-cols-5 gap-2">
               {questions.map((_, idx) => {
                   // Only allow clicking if question is done (has answer) or is current
@@ -643,9 +648,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                <span className="text-red-500 font-mono font-bold">{Math.floor(timeLeft/60)}:{((timeLeft%60)).toString().padStart(2,'0')}</span>
             </div>
 
-            <div className="flex-grow bg-white rounded-3xl shadow-sm border border-gray-100 relative flex flex-col overflow-hidden">
+            <div className="flex-grow bg-white rounded-3xl shadow-sm border border-gray-100 relative flex flex-col lg:flex-row overflow-hidden">
                 {/* Timer Desktop */}
-                <div className="hidden lg:flex absolute top-6 right-6 bg-ucmas-blue text-white px-4 py-2 rounded-xl items-center gap-2 shadow-lg">
+                <div className="hidden lg:flex absolute top-6 right-6 bg-ucmas-blue text-white px-4 py-2 rounded-xl items-center gap-2 shadow-lg z-20">
                    <span className="text-xs uppercase font-bold opacity-80">Thời gian</span>
                    <span className="text-2xl font-mono font-bold">{Math.floor(timeLeft/60)}:{((timeLeft%60)).toString().padStart(2,'0')}</span>
                 </div>
@@ -654,27 +659,23 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     <span className="text-gray-400 text-sm">Câu <span className="text-ucmas-blue font-bold text-xl">{currentQIndex+1}</span> / {questions.length}</span>
                 </div>
                 
-                <div className="hidden lg:block absolute top-8 left-1/2 transform -translate-x-1/2 text-gray-400 font-medium">
-                    Câu <span className={`text-3xl font-bold ${theme.color} mx-1`}>{currentQIndex + 1}</span> / {questions.length}
-                </div>
-
-                {/* Question Area */}
-                <div className="flex-grow flex flex-col items-center justify-center p-8">
+                {/* LEFT SIDE: Question Area */}
+                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
                     
                     {currentMode === Mode.VISUAL && (
-                       <div className="bg-gray-100 p-8 rounded-2xl min-w-[200px] text-center shadow-inner">
+                       <div className="bg-gray-50 p-10 rounded-2xl min-w-[240px] text-center shadow-inner border border-gray-100">
                           {currentQ.operands.map((num, i) => (
-                             <div key={i} className="text-4xl font-bold text-ucmas-blue mb-2 font-mono tracking-wider">{num}</div>
+                             <div key={i} className="text-7xl font-bold text-ucmas-blue mb-4 font-mono tracking-wider leading-tight">{num}</div>
                           ))}
-                          <div className="border-t-4 border-gray-400 w-16 mx-auto mt-4 mb-4"></div>
-                          <div className="text-5xl font-black text-ucmas-blue">?</div>
+                          <div className="border-t-4 border-gray-400 w-24 mx-auto mt-6 mb-6"></div>
+                          <div className="text-7xl font-black text-gray-300">?</div>
                        </div>
                     )}
 
                     {currentMode === Mode.FLASH && (
                         <div className="text-center">
                             {isFlashing ? (
-                                <div className="text-[150px] font-black text-ucmas-blue leading-none tracking-tighter transition-all transform scale-110">
+                                <div className="text-[180px] font-black text-ucmas-blue leading-none tracking-tighter transition-all transform scale-110">
                                    {flashNumber}
                                 </div>
                             ) : (
@@ -682,7 +683,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                     onClick={() => runFlashSequence(currentQIndex)} 
                                     className={`cursor-pointer group ${!canPlay(currentQIndex) ? 'opacity-50 pointer-events-none' : ''}`}
                                 >
-                                    <div className="w-24 h-24 bg-ucmas-blue rounded-full flex items-center justify-center text-white text-4xl shadow-xl group-hover:scale-110 transition mx-auto mb-4">
+                                    <div className="w-32 h-32 bg-ucmas-blue rounded-full flex items-center justify-center text-white text-5xl shadow-xl group-hover:scale-110 transition mx-auto mb-4">
                                        ▶
                                     </div>
                                     <p className="text-gray-400 text-sm">
@@ -695,27 +696,31 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
                     {currentMode === Mode.LISTENING && (
                         <div className="text-center">
-                            <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl text-white shadow-2xl mb-8 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-110 animate-pulse' : 'bg-ucmas-red'}`}>
+                            <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl text-white shadow-2xl mb-8 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-110 animate-pulse' : 'bg-ucmas-red'}`}>
                                 🎧
                             </div>
                             <button 
                                onClick={playAudio}
                                disabled={isPlayingAudio || !canPlay(currentQIndex)}
-                               className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                               className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-10 py-4 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-50 disabled:cursor-not-allowed text-lg"
                             >
                                {isPlayingAudio ? 'Đang đọc...' : canPlay(currentQIndex) ? '🔊 Bắt đầu nghe' : '🚫 Hết lượt nghe'}
                             </button>
-                            <p className="text-red-500 text-xs font-bold mt-4 bg-red-50 inline-block px-3 py-1 rounded">
+                            <p className="text-red-500 text-xs font-bold mt-6 bg-red-50 inline-block px-4 py-2 rounded">
                                 Mỗi câu chỉ được nghe tối đa 2 lần
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* Bottom Input Area */}
-                <div className="bg-white border-t border-gray-100 p-6 flex justify-center items-center gap-4 relative z-10">
-                    
-                    <div className="relative w-full max-w-md">
+                {/* RIGHT SIDE: Input Area */}
+                <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-gray-100 p-8 flex flex-col justify-center bg-gray-50/50 z-10">
+                    <div className="text-center mb-6 lg:mb-10">
+                         <h3 className="text-gray-500 font-bold uppercase text-sm mb-2">Nhập đáp án</h3>
+                         <div className="text-xs text-gray-400">Câu {currentQIndex + 1}</div>
+                    </div>
+
+                    <div className="relative w-full mb-6">
                         <input 
                           ref={inputRef}
                           type="number" 
@@ -744,37 +749,39 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                   else submitExam();
                               }
                           }}
-                          className={`w-full border-2 ${isInputDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : answers[currentQIndex] ? 'border-ucmas-blue bg-blue-50' : 'border-gray-200'} rounded-xl py-3 px-4 text-center text-xl font-bold text-ucmas-blue focus:border-ucmas-blue focus:ring-0 outline-none transition`}
-                          placeholder={isInputDisabled ? "Vui lòng lắng nghe/quan sát..." : "Nhập đáp án..."}
+                          className={`w-full border-2 ${isInputDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : answers[currentQIndex] ? 'border-ucmas-blue bg-white shadow-lg' : 'border-gray-300 bg-white'} rounded-2xl py-6 px-4 text-center text-4xl font-bold text-ucmas-blue focus:border-ucmas-blue focus:ring-4 focus:ring-blue-100 outline-none transition`}
+                          placeholder={isInputDisabled ? "..." : "?"}
                         />
                         {answers[currentQIndex] && !isInputDisabled && (
-                            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-green-500">✓</div>
+                            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-green-500 text-2xl">✓</div>
                         )}
                     </div>
 
-                    {currentQIndex < questions.length - 1 ? (
-                        <button 
-                            onClick={() => {
-                                // Manual click Next also counts as completing the question even if blank
-                                if (answers[currentQIndex] === undefined) {
-                                    setAnswers(prev => ({...prev, [currentQIndex]: ''}));
-                                }
-                                setCurrentQIndex(p => p+1);
-                            }}
-                            disabled={isInputDisabled}
-                            className="px-6 py-3 rounded-xl border border-ucmas-blue text-ucmas-blue font-bold hover:bg-blue-50 transition min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Tiếp theo &gt;
-                        </button>
-                    ) : (
-                        <button 
-                            onClick={submitExam}
-                            disabled={isInputDisabled}
-                            className="px-6 py-3 rounded-xl bg-ucmas-red text-white font-bold hover:bg-red-700 shadow-lg transition min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Nộp bài 🏁
-                        </button>
-                    )}
+                    <div className="flex flex-col gap-3">
+                        {currentQIndex < questions.length - 1 ? (
+                            <button 
+                                onClick={() => {
+                                    // Manual click Next also counts as completing the question even if blank
+                                    if (answers[currentQIndex] === undefined) {
+                                        setAnswers(prev => ({...prev, [currentQIndex]: ''}));
+                                    }
+                                    setCurrentQIndex(p => p+1);
+                                }}
+                                disabled={isInputDisabled}
+                                className="w-full px-6 py-4 rounded-xl border-2 border-ucmas-blue text-ucmas-blue font-bold text-lg hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Tiếp theo &gt;
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={submitExam}
+                                disabled={isInputDisabled}
+                                className="w-full px-6 py-4 rounded-xl bg-ucmas-red text-white font-bold text-lg hover:bg-red-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Nộp bài 🏁
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
