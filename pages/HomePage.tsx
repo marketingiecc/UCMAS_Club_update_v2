@@ -14,21 +14,21 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
     {
       id: Mode.VISUAL,
       title: "Nhìn Tính",
-      subtitle: "200 câu hỏi • 8 phút",
+      subtitle: "Hàng tỷ phép tính hay • Đa dạng cấp độ",
       icon: "👁️",
       colorClass: "bg-ucmas-blue",
     },
     {
       id: Mode.LISTENING,
       title: "Nghe Tính",
-      subtitle: "30 câu hỏi • Nghe đọc số",
+      subtitle: "Luyện đa ngôn ngữ • Đa dạng cấp độ",
       icon: "🎧",
       colorClass: "bg-ucmas-red",
     },
     {
       id: Mode.FLASH,
       title: "Flash",
-      subtitle: "30 câu hỏi • Thẻ số nhanh",
+      subtitle: "Luyện tốc độ • Đa dạng cấp độ",
       icon: "⚡",
       colorClass: "bg-ucmas-green",
     }
