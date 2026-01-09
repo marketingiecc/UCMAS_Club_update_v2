@@ -136,6 +136,27 @@ class BackendService {
     }
   }
 
+  // Admin Direct Activation
+  async adminActivateUser(userId: string, durationMonths: number): Promise<{ success: boolean; error?: string; expiresAt?: string }> {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Basic check, ideally protected by RLS
+      if (!user) return { success: false, error: 'Unauthorized' };
+
+      const startsAt = new Date();
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+
+      const { error } = await supabase.from('entitlements').insert({
+          user_id: userId,
+          scope: { [Mode.VISUAL]: true, [Mode.LISTENING]: true, [Mode.FLASH]: true },
+          starts_at: startsAt.toISOString(),
+          expires_at: expiresAt.toISOString()
+      });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true, expiresAt: expiresAt.toISOString() };
+  }
+
   // --- Attempts ---
   async saveAttempt(userId: string, config: ExamConfig, questions: Question[], stats: any, answers: Record<number, string>): Promise<void> {
     const now = new Date().toISOString();
@@ -282,7 +303,6 @@ class BackendService {
           });
       };
 
-      // Helper: Apply common filters
       const applyFilters = (queryBuilder: any) => {
           let q = queryBuilder.eq('mode', mode);
           if (typeof level === 'number') q = q.eq('level', level);
@@ -290,32 +310,21 @@ class BackendService {
           return q;
       };
 
-      // We split queries into separate Try-Catch blocks.
-      // If RLS policies are circular, one of these (usually Public or Admin-All) will fail with 42P17.
-      // By isolating them, we ensure valid queries (like "My Exams" or "Shared Access") still return data.
-
-      // 1. Fetch Public Exams
       try {
           const { data, error } = await applyFilters(
               supabase.from('custom_exams').select('*').eq('is_public', true)
           );
           if (!error && data) processExams(data);
-      } catch (e) {
-          console.warn("Error fetching public exams (RLS?):", e);
-      }
+      } catch (e) { console.warn("Error fetching public exams:", e); }
 
       if (user) {
-          // 2. Fetch My Exams (Created by me)
           try {
               const { data, error } = await applyFilters(
                   supabase.from('custom_exams').select('*').eq('created_by', user.id)
               );
               if (!error && data) processExams(data);
-          } catch (e) {
-              console.warn("Error fetching my exams:", e);
-          }
+          } catch (e) { console.warn("Error fetching my exams:", e); }
 
-          // 3. Fetch Shared Exams (Via Access Table - explicit bypass of circular RLS by ID)
           try {
               const { data: sharedAccess } = await supabase
                 .from('custom_exam_access')
@@ -329,29 +338,19 @@ class BackendService {
                   );
                   if (!error && data) processExams(data);
               }
-          } catch (e) {
-              console.warn("Error fetching shared exams:", e);
-          }
+          } catch (e) { console.warn("Error fetching shared exams:", e); }
 
-          // 4. Admin Catch-All
-          // Attempt to fetch ALL exams if user is Admin. 
-          // Note: If RLS recurses on `select *`, this might fail, but `try-catch` prevents crash.
           try {
-             // Check role directly from profiles to decide whether to attempt full fetch
              const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
              if (profile?.role === 'admin') {
-                 // Try fetching all without public/owner filters
                  const { data, error } = await applyFilters(
                      supabase.from('custom_exams').select('*')
                  );
                  if (!error && data) processExams(data);
              }
-          } catch (e) {
-              console.warn("Error fetching all exams for admin:", e);
-          }
+          } catch (e) { console.warn("Error fetching all exams for admin:", e); }
       }
 
-      // Final Deduplicated Result
       const finalExams = Array.from(allExamsMap.values());
       finalExams.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -369,7 +368,6 @@ class BackendService {
       return data as CustomExam;
   }
 
-  // --- Share Exam (Requirement G) ---
   async shareExamWithUser(examId: string, targetUserId: string): Promise<{ success: boolean, error?: string }> {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { success: false, error: 'Unauthorized' };
@@ -388,22 +386,143 @@ class BackendService {
 
   // --- Admin ---
   async getAllUsers(): Promise<UserProfile[]> {
-    const { data } = await supabase.from('user_profile_aggregated').select('*');
-    return data ? data.map((row: any) => ({
-        id: row.id,
-        email: row.email,
-        full_name: row.full_name,
-        student_code: row.student_code,
-        role: row.role,
-        created_at: row.created_at,
-        license_expiry: row.license_expiry,
-        allowed_modes: row.allowed_modes || []
-    })) : [];
+    // Attempt 1: Try the aggregated view
+    try {
+        const { data: viewData, error: viewError } = await supabase.from('user_profile_aggregated').select('*');
+        if (!viewError && viewData && viewData.length > 0) {
+            return viewData.map((row: any) => ({
+                id: row.id,
+                email: row.email || '---',
+                full_name: row.full_name || 'Không tên',
+                student_code: row.student_code,
+                role: row.role,
+                created_at: row.created_at,
+                license_expiry: row.license_expiry,
+                allowed_modes: row.allowed_modes || []
+            }));
+        }
+    } catch (e) {
+        console.warn("View lookup failed, using manual fallback.", e);
+    }
+    
+    // Attempt 2: Fallback to manual aggregation (if view fails or is empty due to RLS)
+    console.warn("Using fallback manual user fetch");
+    
+    const { data: profiles } = await supabase.from('profiles').select('*');
+    if (!profiles) return [];
+
+    // Fetch entitlements manually to calculate expiry
+    const { data: entitlements } = await supabase.from('entitlements').select('*');
+    
+    return profiles.map((p: any) => {
+        // Calculate max expiry
+        let maxExpiry = 0;
+        let allowedModes: Mode[] = [];
+        
+        if (entitlements) {
+            const userEntitlements = entitlements.filter((e: any) => e.user_id === p.id);
+            userEntitlements.forEach((ent: any) => {
+                 const exp = new Date(ent.expires_at).getTime();
+                 if (exp > maxExpiry) maxExpiry = exp;
+                 // Merge scopes
+                 if (ent.scope) {
+                     Object.keys(ent.scope).forEach(k => {
+                         if (ent.scope[k]) allowedModes.push(k as Mode);
+                     });
+                 }
+            });
+        }
+
+        return {
+            id: p.id,
+            email: 'Ẩn (Cần quyền Admin DB)', // Fallback since we can't get auth.users
+            full_name: p.full_name,
+            student_code: p.student_code,
+            role: p.role,
+            created_at: p.created_at,
+            license_expiry: maxExpiry > 0 ? new Date(maxExpiry).toISOString() : undefined,
+            allowed_modes: Array.from(new Set(allowedModes))
+        };
+    });
   }
 
   async getAllAttempts(): Promise<AttemptResult[]> {
     const { data } = await supabase.from('attempts').select('*').order('created_at', { ascending: false }).limit(50); 
     return (data || []) as AttemptResult[];
+  }
+
+  // --- Reporting ---
+  async getReportData(timeRange: 'day' | 'week' | 'month'): Promise<any> {
+    const now = new Date();
+    let startDate = new Date();
+
+    if (timeRange === 'day') startDate.setDate(now.getDate() - 1);
+    else if (timeRange === 'week') startDate.setDate(now.getDate() - 7);
+    else if (timeRange === 'month') startDate.setMonth(now.getMonth() - 1);
+
+    const isoStart = startDate.toISOString();
+
+    try {
+        // 1. New Users
+        const { count: newUsersCount } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .gt('created_at', isoStart);
+
+        // 2. Active Licenses (New activations in period)
+        const { count: activeLicensesCount } = await supabase
+            .from('entitlements')
+            .select('*', { count: 'exact', head: true })
+            .gt('created_at', isoStart);
+
+        // 3. Active Students (Those who made at least one attempt)
+        const { data: recentAttempts } = await supabase
+            .from('attempts')
+            .select('user_id, created_at, score_correct')
+            .gt('created_at', isoStart)
+            .limit(1000);
+        
+        const uniqueStudents = new Set(recentAttempts?.map(a => a.user_id));
+        
+        // 4. Top Students
+        // Group by user_id and count attempts
+        const leaderboard: Record<string, number> = {};
+        recentAttempts?.forEach(a => {
+            leaderboard[a.user_id] = (leaderboard[a.user_id] || 0) + 1;
+        });
+
+        // Get Top 5 IDs
+        const sortedLeaderboard = Object.entries(leaderboard)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5);
+        
+        const topStudents = [];
+        for (const [uid, count] of sortedLeaderboard) {
+            // We need names. Fetch from cache or DB. DB is safer here.
+            const { data: u } = await supabase.from('profiles').select('full_name, email').eq('id', uid).single(); // Warning: email might be null
+            if (u) {
+                topStudents.push({
+                    id: uid,
+                    full_name: u.full_name,
+                    email: u.email || 'N/A',
+                    attempts_count: count
+                });
+            }
+        }
+
+        return {
+            new_users: newUsersCount || 0,
+            new_licenses: activeLicensesCount || 0,
+            active_students: uniqueStudents.size,
+            total_attempts: recentAttempts?.length || 0,
+            top_students: topStudents
+        };
+    } catch (e) {
+        console.error("Report Generation Error", e);
+        return {
+            new_users: 0, new_licenses: 0, active_students: 0, total_attempts: 0, top_students: []
+        };
+    }
   }
 }
 
