@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { generateExam, getExamConfig } from '../services/examService';
-import { Mode, Question, AttemptResult, UserProfile } from '../types';
+import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 
 interface PracticeSessionProps {
@@ -57,6 +57,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [formName, setFormName] = useState(user.full_name || '');
   const [selectedLevel, setSelectedLevel] = useState(1);
   const [sourceType, setSourceType] = useState<'auto' | 'bank'>('auto');
+  const [availableExams, setAvailableExams] = useState<CustomExam[]>([]);
+  const [selectedExamId, setSelectedExamId] = useState<string>('');
   
   // Custom Settings
   const [speed, setSpeed] = useState(1.0); // Seconds per item (Lower is faster)
@@ -104,6 +106,19 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       }
   }, [speed, isPlayingAudio]);
 
+  // Fetch available exams when Source Type or Level changes
+  useEffect(() => {
+      if (sourceType === 'bank') {
+          const fetchExams = async () => {
+              const exams = await backend.getCustomExams(currentMode, selectedLevel);
+              setAvailableExams(exams);
+              if (exams.length > 0) setSelectedExamId(exams[0].id);
+              else setSelectedExamId('');
+          };
+          fetchExams();
+      }
+  }, [sourceType, selectedLevel, currentMode]);
+
   // --- Helpers ---
   
   const getGoogleTTSUrl = (text: string, lang: string) => {
@@ -117,24 +132,39 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         return;
     }
 
+    if (sourceType === 'bank' && !selectedExamId) {
+        alert("Vui lòng chọn đề bài từ danh sách.");
+        return;
+    }
+
     setIsLoadingRule(true);
     
     try {
-        // Fetch dynamic rules from backend
-        const ruleData = await backend.getLatestExamRule(currentMode);
-        const customRules = ruleData ? ruleData.rules_json : null;
+        let generatedQuestions: Question[] = [];
+        let examTimeLimit = 0;
 
-        // Config exam
-        const config = getExamConfig(currentMode, selectedLevel, customRules);
-        
-        // Adjust speed if custom set (for Flash/Listening)
-        if (currentMode !== Mode.VISUAL) {
-            config.flashSpeed = speed * 1000;
+        if (sourceType === 'auto') {
+            // Fetch dynamic rules from backend
+            const ruleData = await backend.getLatestExamRule(currentMode);
+            const customRules = ruleData ? ruleData.rules_json : null;
+
+            // Config exam
+            const config = getExamConfig(currentMode, selectedLevel, customRules);
+            generatedQuestions = generateExam(config);
+            examTimeLimit = config.timeLimit;
+            
+        } else {
+            // Fetch custom exam
+            const exam = await backend.getCustomExamById(selectedExamId);
+            if (!exam) throw new Error("Không tìm thấy đề thi.");
+            
+            // USE QUESTIONS DIRECTLY FROM DB (Already normalized)
+            generatedQuestions = exam.questions;
+            examTimeLimit = exam.time_limit;
         }
-
-        const generatedQuestions = generateExam(config);
+        
         setQuestions(generatedQuestions);
-        setTimeLeft(config.timeLimit);
+        setTimeLeft(examTimeLimit);
         setStatus('running');
         
         // Reset states
@@ -285,6 +315,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         else wrong++;
       });
 
+      // If custom exam, we might not have a full config object, so recreate basic
       const config = getExamConfig(currentMode, selectedLevel);
       if (currentMode !== Mode.VISUAL) config.flashSpeed = speed * 1000;
 
@@ -297,14 +328,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
               wrong,
               skipped,
               total: questions.length,
-              duration: config.timeLimit - timeLeft
+              duration: (questions.length * 300) // Placeholder if time limit varies in custom
           },
           answers
       );
   };
 
   // 2. Watcher for Timeout (Must be placed after submitExam is defined)
-  // This ensures we always access the latest `answers` state when time runs out
   useEffect(() => {
     if (status === 'running' && timeLeft <= 0) {
         submitExam();
@@ -363,6 +393,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                  </select>
               </div>
 
+              {/* Source Selection - Enabled for ALL modes now */}
               <div>
                  <label className={`block text-xs font-bold ${theme.color} mb-1.5 ml-1`}>📄 Nguồn đề</label>
                  <div className="flex gap-4">
@@ -376,6 +407,26 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     </label>
                  </div>
               </div>
+
+              {/* Dynamic Exam Selector when Bank is chosen */}
+              {sourceType === 'bank' && (
+                  <div className="animate-fade-in bg-gray-50 p-3 rounded-xl border border-gray-200">
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Chọn đề thi</label>
+                      <select 
+                          value={selectedExamId}
+                          onChange={(e) => setSelectedExamId(e.target.value)}
+                          className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                      >
+                          {availableExams.length === 0 ? (
+                              <option value="">-- Không có đề nào cho Cấp {selectedLevel} --</option>
+                          ) : (
+                              availableExams.map(ex => (
+                                  <option key={ex.id} value={ex.id}>{ex.name} ({ex.questions.length} câu)</option>
+                              ))
+                          )}
+                      </select>
+                  </div>
+              )}
 
               {/* Language Selection for Listening */}
               {currentMode === Mode.LISTENING && (

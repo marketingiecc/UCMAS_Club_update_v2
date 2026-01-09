@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { UserProfile, AttemptResult, DBEntitlement, DBAnswer, Mode, ExamConfig, Question, DBExamRule } from '../types';
+import { UserProfile, AttemptResult, DBEntitlement, DBAnswer, Mode, ExamConfig, Question, DBExamRule, CustomExam } from '../types';
 
 // Configuration
 const SUPABASE_URL = 'https://rwtpwdyoxirfpposmdcg.supabase.co';
@@ -17,16 +17,12 @@ class BackendService {
     try {
         console.log(`[Auth] Ensuring profile for ${userId} (${userEmail})...`);
 
-        // 1. SAFETY NET: Call RPC to ensure row exists in public.profiles
-        // This is idempotent (ON CONFLICT DO NOTHING) and Security Definer (bypasses RLS for insertion)
         const { error: rpcError } = await supabase.rpc('ensure_profile');
         
         if (rpcError) {
             console.error("[Auth] ensure_profile RPC failed:", rpcError);
-            // We continue anyway, because maybe the profile exists and the RPC failed for another reason
         }
 
-        // 2. Fetch Profile Data
         const { data: profileData, error: fetchError } = await supabase
             .from('profiles')
             .select('*')
@@ -38,7 +34,6 @@ class BackendService {
             return null;
         }
 
-        // 3. Fetch Active Entitlements (License check)
         const now = new Date().toISOString();
         const { data: entitlements } = await supabase
             .from('entitlements')
@@ -46,7 +41,6 @@ class BackendService {
             .eq('user_id', userId)
             .gt('expires_at', now); 
 
-        // 4. Aggregate Permissions
         let maxExpiry = 0;
         const allowedModes = new Set<Mode>();
 
@@ -62,8 +56,6 @@ class BackendService {
                 });
             });
         }
-
-        console.log(`[Auth] Profile loaded successfully: ${profileData.full_name}`);
 
         return {
             id: profileData.id,
@@ -93,7 +85,6 @@ class BackendService {
   }
 
   private async _registerUser(email: string, password: string, fullName: string, role: 'user' | 'admin'): Promise<{ user: UserProfile | null; error: string | null }> {
-    // 1. Sign Up
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -107,13 +98,10 @@ class BackendService {
 
     if (error) return { user: null, error: error.message };
 
-    // 2. Handle Email Confirmation Case
-    // If user is created but no session, email confirmation is likely enabled.
     if (data.user && !data.session) {
         return { user: null, error: "Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản." };
     }
     
-    // 3. Robust Profile Fetch
     if (data.user && data.session) {
         const profile = await this._ensureAndFetchProfile(data.user.id, email);
         if (profile) return { user: profile, error: null };
@@ -123,7 +111,6 @@ class BackendService {
   }
 
   async login(email: string, password: string): Promise<{ user: UserProfile | null; error: string | null }> {
-    // 1. Sign In
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -131,12 +118,9 @@ class BackendService {
 
     if (error) return { user: null, error: "Email hoặc mật khẩu không chính xác." };
     
-    // 2. Robust Profile Fetch
     if (data.user && data.session) {
         const profile = await this._ensureAndFetchProfile(data.user.id, data.user.email || '');
-        
         if (profile) return { user: profile, error: null };
-        
         return { user: null, error: "Lỗi dữ liệu: Không tìm thấy hồ sơ người dùng. Vui lòng thử lại sau." };
     }
     
@@ -148,16 +132,11 @@ class BackendService {
   }
 
   async getCurrentUser(): Promise<UserProfile | null> {
-    // 1. Get Session
     const { data: { session } } = await supabase.auth.getSession();
-    
     if (!session?.user) return null;
-
-    // 2. Robust Profile Fetch
     return this._ensureAndFetchProfile(session.user.id, session.user.email || '');
   }
 
-  // --- Public method for fetching other profiles (e.g. Admin viewing users) ---
   async fetchProfile(userId: string): Promise<UserProfile | null> {
       const { data: profileData, error } = await supabase
         .from('profiles')
@@ -169,7 +148,7 @@ class BackendService {
 
       return {
           id: profileData.id,
-          email: '', // Hidden for security unless we are the user
+          email: '', 
           full_name: profileData.full_name,
           student_code: profileData.student_code,
           role: profileData.role,
@@ -178,7 +157,6 @@ class BackendService {
       };
   }
 
-  // --- License ---
   async activateLicense(userId: string, codeStr: string): Promise<{ success: boolean; message: string }> {
     try {
         const { data, error } = await supabase.rpc('activate_license', { 
@@ -191,7 +169,6 @@ class BackendService {
             if (msg.includes('Code disabled')) return { success: false, message: 'Mã này đã bị vô hiệu hóa.' };
             if (msg.includes('Code used')) return { success: false, message: 'Mã này đã được sử dụng.' };
             if (msg.includes('Code expired')) return { success: false, message: 'Mã này đã hết hạn.' };
-            console.error(error);
             return { success: false, message: 'Lỗi kích hoạt: ' + msg };
         }
 
@@ -203,7 +180,6 @@ class BackendService {
         }
         
         return { success: false, message: (result?.message) || 'Có lỗi xảy ra.' };
-
     } catch (e: any) {
         return { success: false, message: 'Lỗi kết nối hệ thống: ' + e.message };
     }
@@ -217,9 +193,7 @@ class BackendService {
     stats: { correct: number, wrong: number, skipped: number, total: number, duration: number },
     answers: Record<number, string>
   ): Promise<void> {
-    
     const now = new Date().toISOString();
-
     const attemptData = {
         user_id: userId,
         mode: config.mode,
@@ -241,10 +215,7 @@ class BackendService {
         .select()
         .single();
 
-    if (error || !attempt) {
-        console.error("Failed to save attempt header", error);
-        throw new Error("Lỗi lưu kết quả bài thi.");
-    }
+    if (error || !attempt) throw new Error("Lỗi lưu kết quả bài thi.");
 
     const answersData: DBAnswer[] = questions.map((q, idx) => {
         const userAns = answers[idx];
@@ -259,13 +230,7 @@ class BackendService {
         };
     });
 
-    const { error: ansError } = await supabase
-        .from('answers')
-        .insert(answersData);
-
-    if (ansError) {
-        console.error("Failed to save answers", ansError);
-    }
+    await supabase.from('answers').insert(answersData);
   }
 
   async getUserHistory(userId: string): Promise<AttemptResult[]> {
@@ -275,7 +240,6 @@ class BackendService {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
-
     if (error) return [];
     return data as AttemptResult[];
   }
@@ -291,7 +255,6 @@ class BackendService {
       const answers: Record<number, string> = {};
       data.forEach((row: any) => {
           if (row.user_answer !== null) {
-              // Convert 1-based question_no back to 0-based index
               answers[row.question_no - 1] = row.user_answer;
           }
       });
@@ -299,7 +262,6 @@ class BackendService {
   }
 
   // --- Exam Rules Management ---
-
   async getLatestExamRule(mode: Mode): Promise<DBExamRule | null> {
     const { data, error } = await supabase
         .from('exam_rules')
@@ -308,7 +270,6 @@ class BackendService {
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-    
     if (error) return null;
     return data as DBExamRule;
   }
@@ -317,13 +278,11 @@ class BackendService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { success: false, error: 'Unauthorized' };
 
-      const versionName = `ver_${Date.now()}`;
-
       const { error } = await supabase
         .from('exam_rules')
         .insert({
             mode: mode,
-            version_name: versionName,
+            version_name: `ver_${Date.now()}`,
             rules_json: rulesJson,
             created_by: user.id
         });
@@ -339,18 +298,130 @@ class BackendService {
         .eq('mode', mode)
         .order('created_at', { ascending: false })
         .limit(20);
-      
       if (error) return [];
       return data as DBExamRule[];
   }
 
+  // --- Custom Exams (DB Implementation) ---
+
+  /**
+   * Helper to normalize questions from uploaded JSON.
+   * Ensures every question has an ID and a correct Answer.
+   */
+  private _normalizeQuestions(questions: any[]): Question[] {
+     if (!Array.isArray(questions)) return [];
+     
+     return questions.map((q, idx) => {
+         // Calculate sum if correctAnswer is missing
+         let correctAnswer = q.correctAnswer;
+         if (correctAnswer === undefined || correctAnswer === null) {
+             if (Array.isArray(q.operands)) {
+                 correctAnswer = q.operands.reduce((a: number, b: number) => a + b, 0);
+             } else {
+                 correctAnswer = 0;
+             }
+         }
+
+         return {
+             id: q.id || `q-${Date.now()}-${idx}`,
+             operands: Array.isArray(q.operands) ? q.operands : [],
+             correctAnswer: parseInt(correctAnswer)
+         };
+     });
+  }
+
+  async uploadCustomExam(examData: {
+      name: string;
+      description?: string;
+      mode: Mode;
+      level: number;
+      time_limit: number;
+      questions: any[]; // Raw input, normalized inside
+      is_public?: boolean;
+  }): Promise<{ success: boolean, error?: string }> {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Unauthorized' };
+
+      const normalizedQuestions = this._normalizeQuestions(examData.questions);
+
+      const { error } = await supabase
+        .from('custom_exams')
+        .insert({
+            name: examData.name,
+            description: examData.description || '',
+            mode: examData.mode,
+            level: examData.level,
+            time_limit: examData.time_limit,
+            questions: normalizedQuestions, // Stored as JSONB
+            is_public: examData.is_public ?? true, // Default public for now
+            status: 'active',
+            created_by: user.id
+        });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  }
+
+  async getCustomExams(mode: Mode, level?: number): Promise<CustomExam[]> {
+      let query = supabase
+        .from('custom_exams')
+        .select('*')
+        .eq('mode', mode)
+        .eq('status', 'active') // Only show active exams
+        .order('created_at', { ascending: false });
+      
+      if (level !== undefined) {
+          query = query.eq('level', level);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+          console.error("Error fetching exams:", error);
+          return [];
+      }
+      return data as CustomExam[];
+  }
+
+  async deleteCustomExam(id: string): Promise<boolean> {
+      // Logic deletion (set status to disabled) is safer, but hard delete for now per prompt implies clean up
+      const { error } = await supabase
+        .from('custom_exams')
+        .delete()
+        .eq('id', id);
+      return !error;
+  }
+
+  async getCustomExamById(id: string): Promise<CustomExam | null> {
+      const { data, error } = await supabase
+        .from('custom_exams')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) return null;
+      return data as CustomExam;
+  }
+
+  // --- Share Exam (Requirement G) ---
+  async shareExamWithUser(examId: string, targetUserId: string): Promise<{ success: boolean, error?: string }> {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Unauthorized' };
+
+      const { error } = await supabase
+        .from('custom_exam_access')
+        .insert({
+            exam_id: examId,
+            user_id: targetUserId,
+            granted_by: user.id
+        });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  }
+
   // --- Admin ---
   async getAllUsers(): Promise<UserProfile[]> {
-    // Attempt to use view first
-    const { data, error } = await supabase
-        .from('user_profile_aggregated')
-        .select('*');
-
+    const { data, error } = await supabase.from('user_profile_aggregated').select('*');
     if (!error && data) {
         return data.map((row: any) => ({
             id: row.id,
@@ -363,12 +434,8 @@ class BackendService {
             allowed_modes: row.allowed_modes || []
         }));
     }
-
-    // Fallback to basic profile table
-    console.warn("View 'user_profile_aggregated' not accessible, falling back to profiles table.");
     const { data: profiles } = await supabase.from('profiles').select('*');
     if (!profiles) return [];
-
     return profiles.map((row: any) => ({
         id: row.id,
         email: '...', 

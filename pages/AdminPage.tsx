@@ -1,10 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
-import { UserProfile, AttemptResult, Mode, DBExamRule } from '../types';
+import { UserProfile, AttemptResult, Mode, DBExamRule, CustomExam } from '../types';
 
 const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'codes' | 'attempts' | 'rules'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'codes' | 'attempts' | 'rules' | 'exams'>('users');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [attempts, setAttempts] = useState<AttemptResult[]>([]);
   
@@ -13,6 +13,12 @@ const AdminPage: React.FC = () => {
   const [currentRuleJson, setCurrentRuleJson] = useState<string>('');
   const [ruleHistory, setRuleHistory] = useState<DBExamRule[]>([]);
   const [ruleSaveStatus, setRuleSaveStatus] = useState<string>('');
+
+  // Exam Upload State
+  const [selectedExamMode, setSelectedExamMode] = useState<Mode>(Mode.VISUAL);
+  const [uploadedExams, setUploadedExams] = useState<CustomExam[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
 
   // New Code State
   const [newCode, setNewCode] = useState('');
@@ -27,6 +33,13 @@ const AdminPage: React.FC = () => {
         loadRules(selectedRuleMode);
     }
   }, [selectedRuleMode, activeTab]);
+
+  useEffect(() => {
+      if (activeTab === 'exams') {
+          loadCustomExams(selectedExamMode);
+          setUploadStatus('');
+      }
+  }, [selectedExamMode, activeTab]);
 
   const loadData = async () => {
     if (activeTab === 'users') {
@@ -45,7 +58,6 @@ const AdminPage: React.FC = () => {
       if (latest) {
           setCurrentRuleJson(JSON.stringify(latest.rules_json, null, 2));
       } else {
-          // Default placeholder structure if no rule exists
           const placeholder = {
               "1": { "numQuestions": 10 },
               "default": { "numQuestions": 20 }
@@ -54,14 +66,19 @@ const AdminPage: React.FC = () => {
       }
   };
 
+  const loadCustomExams = async (mode: Mode) => {
+      const exams = await backend.getCustomExams(mode);
+      setUploadedExams(exams);
+  };
+
   const handleSaveRule = async () => {
       try {
-          const parsed = JSON.parse(currentRuleJson); // Validate JSON
+          const parsed = JSON.parse(currentRuleJson);
           setRuleSaveStatus('Saving...');
           const result = await backend.saveExamRule(selectedRuleMode, parsed);
           if (result.success) {
               setRuleSaveStatus('Đã lưu thành công phiên bản mới!');
-              loadRules(selectedRuleMode); // Refresh history
+              loadRules(selectedRuleMode);
           } else {
               setRuleSaveStatus('Lỗi khi lưu: ' + result.error);
           }
@@ -72,10 +89,90 @@ const AdminPage: React.FC = () => {
 
   const handleCreateCode = async (e: React.FormEvent) => {
       e.preventDefault();
-      // Logic for creating code (Needs DB support)
-      // For now, alert as placeholder since we can't easily alter DB schema from client code securely without RPC
       alert('Chức năng tạo mã cần được cấu hình phía Backend (Supabase Edge Function hoặc RPC).');
   }
+
+  // --- Exam Upload Logic ---
+  const downloadSampleJson = () => {
+      const sampleTitle = selectedExamMode === Mode.VISUAL ? 'Nhìn Tính' 
+                        : selectedExamMode === Mode.LISTENING ? 'Nghe Tính' 
+                        : 'Flash';
+      
+      const sample = {
+          "name": `Đề mẫu ${sampleTitle} Cấp 1`,
+          "level": 1,
+          "timeLimit": 300,
+          "questions": [
+            { "operands": [8, -8] },
+            { "operands": [12, 9, 6, -9] },
+            { "operands": [5, -1, 3] },
+            { "operands": [14, 9, -7, 4] },
+            { "operands": [10, 2, 5] }
+          ]
+      };
+      
+      const blob = new Blob([JSON.stringify(sample, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `mau_de_${selectedExamMode}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+          try {
+              setIsUploading(true);
+              setUploadStatus('Đang xử lý...');
+              const json = JSON.parse(event.target?.result as string);
+
+              // Validation
+              if (!json.name || !json.questions || !Array.isArray(json.questions)) {
+                  throw new Error("File JSON thiếu thông tin bắt buộc (name, questions).");
+              }
+
+              // MAPPING: Handle "timeLimit" (JSON standard from sample) vs "time_limit" (Database)
+              const timeLimit = json.timeLimit || json.time_limit || 300;
+              const level = json.level || 1;
+
+              const result = await backend.uploadCustomExam({
+                  name: json.name,
+                  mode: selectedExamMode,
+                  level: parseInt(level),
+                  time_limit: parseInt(timeLimit),
+                  questions: json.questions,
+                  is_public: true // Default
+              });
+
+              if (result.success) {
+                  setUploadStatus('✅ Tải lên Database thành công!');
+                  loadCustomExams(selectedExamMode);
+              } else {
+                  setUploadStatus('❌ Lỗi: ' + result.error);
+              }
+
+          } catch (err: any) {
+              setUploadStatus('❌ Lỗi file: ' + err.message);
+          } finally {
+              setIsUploading(false);
+              e.target.value = '';
+          }
+      };
+      reader.readAsText(file);
+  };
+
+  const handleDeleteExam = async (id: string) => {
+      if (window.confirm('Bạn có chắc chắn muốn xóa đề này khỏi hệ thống?')) {
+          await backend.deleteCustomExam(id);
+          loadCustomExams(selectedExamMode);
+      }
+  };
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
@@ -100,6 +197,12 @@ const AdminPage: React.FC = () => {
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'attempts' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
             >
               📊 Kết Quả Thi
+            </button>
+            <button
+              onClick={() => setActiveTab('exams')}
+              className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'exams' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              📚 Kho đề thi
             </button>
             <button
               onClick={() => setActiveTab('rules')}
@@ -187,6 +290,112 @@ const AdminPage: React.FC = () => {
                 </table>
             </div>
           </div>
+        )}
+
+        {activeTab === 'exams' && (
+            <div>
+                 <h3 className="text-2xl font-bold mb-2 text-gray-800">Quản lý Kho Đề Thi</h3>
+                 <p className="text-gray-500 mb-8 text-sm">Chọn phân hệ bên dưới để tải đề thi tương ứng</p>
+                 
+                 {/* Mode Selector */}
+                 <div className="flex gap-2 mb-8 border-b border-gray-100 pb-4">
+                    {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
+                        <button 
+                            key={m}
+                            onClick={() => setSelectedExamMode(m)}
+                            className={`px-6 py-2 rounded-full text-sm font-bold transition ${selectedExamMode === m ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                            {m === Mode.VISUAL ? 'Nhìn Tính' : m === Mode.LISTENING ? 'Nghe Tính' : 'Flash'}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Upload Section - REDESIGNED */}
+                    <div className="bg-white rounded-xl p-6 h-fit border border-gray-200 shadow-sm">
+                         <div className="flex justify-between items-start mb-4">
+                             <div>
+                                 <h4 className="font-bold text-gray-800 text-lg">
+                                     📤 Tải lên đề mới
+                                 </h4>
+                                 <p className="text-xs text-gray-500 mt-1">
+                                     File .json định dạng chuẩn
+                                 </p>
+                             </div>
+                             <button 
+                                onClick={downloadSampleJson}
+                                className="text-xs font-bold text-ucmas-blue hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg transition border border-blue-100 flex items-center gap-1"
+                             >
+                                <span>⬇️</span> Tải file mẫu
+                             </button>
+                         </div>
+
+                         {/* Primary Action Area */}
+                         <label className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition relative group ${isUploading ? 'bg-gray-50 border-gray-300' : 'bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-ucmas-blue'}`}>
+                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                 {isUploading ? (
+                                     <div className="animate-spin text-2xl mb-2">⏳</div>
+                                 ) : (
+                                     <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">📂</div>
+                                 )}
+                                 <p className="mb-1 text-sm text-gray-600 font-medium">
+                                     {isUploading ? 'Đang xử lý...' : 'Nhấn để chọn file đề thi'}
+                                 </p>
+                                 <p className="text-xs text-gray-400">JSON (Max 2MB)</p>
+                             </div>
+                             <input 
+                                type="file" 
+                                accept=".json"
+                                onChange={handleFileUpload}
+                                disabled={isUploading}
+                                className="hidden" 
+                             />
+                         </label>
+
+                         {uploadStatus && (
+                             <div className={`mt-4 text-sm font-bold animate-fade-in p-3 rounded-lg text-center ${uploadStatus.includes('thành công') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                 {uploadStatus}
+                             </div>
+                         )}
+                    </div>
+
+                    {/* List Section */}
+                    <div className="lg:col-span-2">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="font-bold text-gray-700">Danh sách đề đã tải lên ({uploadedExams.length})</h4>
+                            {uploadedExams.length > 0 && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Lưu trữ trên Supabase</span>}
+                        </div>
+                        
+                        <div className="space-y-3">
+                            {uploadedExams.map(exam => (
+                                <div key={exam.id} className="bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:shadow-md transition">
+                                    <div>
+                                        <div className="font-bold text-gray-800 text-lg">{exam.name}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex gap-3">
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded font-mono">Cấp {exam.level}</span>
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded font-mono">{exam.questions.length} câu</span>
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded font-mono">{Math.floor(exam.time_limit/60)} phút</span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleDeleteExam(exam.id)}
+                                        className="w-10 h-10 flex items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition"
+                                        title="Xóa đề"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ))}
+                            {uploadedExams.length === 0 && (
+                                <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                    <div className="text-4xl mb-2">📭</div>
+                                    Chưa có đề thi nào được tải lên cho phần {selectedExamMode === Mode.VISUAL ? 'Nhìn Tính' : selectedExamMode === Mode.LISTENING ? 'Nghe Tính' : 'Flash'}.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
         )}
 
         {activeTab === 'rules' && (

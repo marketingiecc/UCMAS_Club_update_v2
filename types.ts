@@ -66,6 +66,22 @@ export interface DBExamRule {
   created_at: string;
 }
 
+// DB Entity: Custom Uploaded Exam
+export interface CustomExam {
+  id: string;
+  name: string;
+  description?: string;
+  mode: Mode;
+  level: number;
+  time_limit: number; // seconds
+  questions: Question[]; // Full Question objects with id and correctAnswer
+  is_public: boolean;
+  status: 'active' | 'disabled' | 'draft';
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 // DB Entity: Attempt
 export interface DBAttempt {
   id: string;
