@@ -55,9 +55,14 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
                       >
                           {/* Question Detail */}
                           <div className="mb-3">
-                              <span className="text-xs font-bold text-gray-400 uppercase mb-1 block">Câu {idx + 1}</span>
-                              <div className="text-gray-800 font-medium font-mono tracking-wide">
-                                  {q.operands.join(' ')}
+                              <span className="text-xs font-bold text-gray-400 uppercase mb-2 block">Câu {idx + 1}</span>
+                              <div className="flex justify-center bg-gray-50 rounded-lg py-2">
+                                <div className="text-gray-800 font-bold font-mono text-lg tracking-widest flex flex-col items-end">
+                                    {q.operands.map((op, i) => (
+                                        <div key={i}>{op}</div>
+                                    ))}
+                                    <div className="w-full h-px bg-gray-400 mt-1"></div>
+                                </div>
                               </div>
                           </div>
 
