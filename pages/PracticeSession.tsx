@@ -183,16 +183,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   };
 
   // --- Running Logic ---
+  
+  // 1. Timer Countdown
   useEffect(() => {
     if (status === 'running' && timeLeft > 0) {
       timerRef.current = window.setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            submitExam();
-            return 0;
-          }
-          return prev - 1;
-        });
+        // Simple decrement, do not check for finish here to avoid stale closure
+        setTimeLeft((prev) => prev - 1);
       }, 1000);
     }
     return () => {
@@ -218,9 +215,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           if (currentMode === Mode.FLASH) {
             runFlashSequence(currentQIndex);
           }
-          // For Listening, we usually wait for user click or auto-play. 
-          // To keep it simple and consistent with previous UX, Listening is manual trigger 
-          // but we could make it auto. Let's keep manual button for Listening to allow preparation.
       }
     }
   }, [currentQIndex, status]);
@@ -308,6 +302,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           answers
       );
   };
+
+  // 2. Watcher for Timeout (Must be placed after submitExam is defined)
+  // This ensures we always access the latest `answers` state when time runs out
+  useEffect(() => {
+    if (status === 'running' && timeLeft <= 0) {
+        submitExam();
+    }
+  }, [timeLeft, status]);
 
   // --- Disable Logic ---
   const isInputDisabled = (currentMode === Mode.FLASH && isFlashing) || 
