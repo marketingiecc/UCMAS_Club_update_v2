@@ -30,7 +30,7 @@ const AdminContestPage: React.FC = () => {
 
   const handleEdit = (c: Contest) => {
       setSelectedContest(c);
-      setFormData({ ...c }); // Clone data to avoid direct reference mutation
+      setFormData({ ...c }); 
       setIsEditing(true);
       setUploadStatus({});
       loadCodes(c.id);
@@ -63,17 +63,23 @@ const AdminContestPage: React.FC = () => {
       
       setIsSaving(true);
       try {
-          const { data, error } = await backend.upsertContest(formData);
+          // Double check the status matches exact constraint values
+          const payload = {
+              ...formData,
+              status: formData.status?.toLowerCase() as 'draft' | 'open' | 'closed'
+          };
+
+          const { data, error } = await backend.upsertContest(payload);
           if (error) {
               alert("Lỗi khi lưu: " + error);
           } else {
               alert("Lưu thông tin thành công!");
               setIsEditing(false);
               setSelectedContest(null);
-              await loadContests(); // Refresh the list
+              await loadContests(); 
           }
-      } catch (err) {
-          alert("Đã xảy ra lỗi không mong muốn.");
+      } catch (err: any) {
+          alert("Đã xảy ra lỗi không mong muốn: " + err.message);
       } finally {
           setIsSaving(false);
       }
@@ -135,9 +141,6 @@ const AdminContestPage: React.FC = () => {
                                 </div>
                             </div>
                         ))}
-                        {contests.length === 0 && (
-                            <div className="text-center py-20 text-gray-400 italic text-sm">Chưa có cuộc thi nào</div>
-                        )}
                     </div>
                 </div>
 
@@ -248,7 +251,7 @@ const AdminContestPage: React.FC = () => {
                                                 disabled={isSaving}
                                                 className={`w-full ${isSaving ? 'bg-gray-400' : 'bg-gray-800 hover:bg-black'} text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-[0.98]`}
                                             >
-                                                {isSaving ? '⏳ Đang lưu...' : '💾 Lưu thay đổi'}
+                                                {isSaving ? '⏳ ĐANG LƯU...' : '💾 Lưu thay đổi'}
                                             </button>
                                         </div>
                                     </div>
@@ -292,9 +295,6 @@ const AdminContestPage: React.FC = () => {
                                                             </td>
                                                         </tr>
                                                     ))}
-                                                    {codes.length === 0 && (
-                                                        <tr><td colSpan={3} className="p-10 text-center text-gray-400 italic">Chưa có mã tham gia nào</td></tr>
-                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -335,9 +335,6 @@ const AdminContestPage: React.FC = () => {
                                                             </td>
                                                         </tr>
                                                     ))}
-                                                    {registrations.length === 0 && (
-                                                        <tr><td colSpan={3} className="p-10 text-center text-gray-400 italic">Chưa có thí sinh đăng ký tự do</td></tr>
-                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
