@@ -2,8 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
 import { UserProfile, AttemptResult, Mode, DBExamRule, CustomExam } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 const AdminPage: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'reports' | 'users' | 'attempts' | 'rules' | 'exams'>('reports');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [attempts, setAttempts] = useState<AttemptResult[]>([]);
@@ -129,14 +131,13 @@ const AdminPage: React.FC = () => {
       }
   };
 
-  // --- Exam Upload Logic ---
   const downloadSampleJson = () => {
       const sampleTitle = selectedExamMode === Mode.VISUAL ? 'Nhìn Tính' 
                         : selectedExamMode === Mode.LISTENING ? 'Nghe Tính' 
                         : 'Flash';
       
       const sample = {
-          "name": `Đề mẫu ${sampleTitle} Cấp 1`,
+          "name": `Bài mẫu ${sampleTitle} Cấp 1`,
           "level": 1,
           "timeLimit": 300,
           "questions": [
@@ -152,7 +153,7 @@ const AdminPage: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `mau_de_${selectedExamMode}.json`;
+      link.download = `mau_bai_tap_${selectedExamMode}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -186,7 +187,7 @@ const AdminPage: React.FC = () => {
               });
 
               if (result.success) {
-                  setUploadStatus('✅ Tải lên Database thành công!');
+                  setUploadStatus('✅ Tải bài luyện tập lên thành công!');
                   loadCustomExams(selectedExamMode);
               } else {
                   setUploadStatus('❌ Lỗi: ' + result.error);
@@ -203,7 +204,7 @@ const AdminPage: React.FC = () => {
   };
 
   const handleDeleteExam = async (id: string) => {
-      if (window.confirm('Bạn có chắc chắn muốn xóa đề này khỏi hệ thống?')) {
+      if (window.confirm('Bạn có chắc chắn muốn xóa bài luyện tập này khỏi hệ thống?')) {
           await backend.deleteCustomExam(id);
           loadCustomExams(selectedExamMode);
       }
@@ -211,10 +212,16 @@ const AdminPage: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
-      {/* Sidebar */}
       <div className="w-full md:w-64 bg-white rounded-2xl shadow-sm p-6 h-fit border border-gray-100">
         <h2 className="font-black text-ucmas-red mb-8 px-2 tracking-tight">QUẢN TRỊ VIÊN</h2>
         <nav className="space-y-2">
+            <button
+                onClick={() => navigate('/admin/contests')}
+                className={`w-full text-left px-4 py-3 rounded-xl font-bold transition text-gray-700 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 mb-4`}
+            >
+              🏆 Quản lý Cuộc Thi
+            </button>
+
            <button
               onClick={() => setActiveTab('reports')}
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'reports' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
@@ -231,26 +238,24 @@ const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('attempts')}
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'attempts' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              📊 Kết Quả Thi
+              📊 Kết Quả Luyện Tập
             </button>
             <button
               onClick={() => setActiveTab('exams')}
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'exams' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              📚 Kho đề thi
+              📚 Kho Bài Luyện Tập
             </button>
             <button
               onClick={() => setActiveTab('rules')}
               className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'rules' ? 'bg-ucmas-blue text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              ⚙️ Cấu hình Đề
+              ⚙️ Cấu Hình Bài Tập
             </button>
         </nav>
       </div>
 
-      {/* Content */}
       <div className="flex-grow bg-white rounded-2xl shadow-sm p-8 border border-gray-100 min-h-[500px]">
-        
         {activeTab === 'reports' && (
             <div>
                 <div className="flex justify-between items-center mb-8">
@@ -280,7 +285,7 @@ const AdminPage: React.FC = () => {
                                 <div className="text-4xl font-black text-gray-800">{reportData.active_students}</div>
                             </div>
                             <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100">
-                                <div className="text-purple-600 text-xs font-bold uppercase mb-2">Tổng lượt làm bài</div>
+                                <div className="text-purple-600 text-xs font-bold uppercase mb-2">Tổng lượt luyện tập</div>
                                 <div className="text-4xl font-black text-gray-800">{reportData.total_attempts}</div>
                             </div>
                         </div>
@@ -288,7 +293,7 @@ const AdminPage: React.FC = () => {
                         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
                             <h4 className="font-bold text-gray-800 mb-6 flex items-center gap-2">
                                 🏆 Top Học Sinh Chăm Chỉ 
-                                <span className="text-xs font-normal text-gray-400 ml-2">(Theo số bài tập hoàn thành)</span>
+                                <span className="text-xs font-normal text-gray-400 ml-2">(Theo số bài luyện tập hoàn thành)</span>
                             </h4>
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -381,7 +386,7 @@ const AdminPage: React.FC = () => {
                 <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10">
                     <tr>
                     <th className="p-4">User ID</th>
-                    <th className="p-4">Bài tập</th>
+                    <th className="p-4">Phần luyện tập</th>
                     <th className="p-4">Điểm</th>
                     <th className="p-4">Ngày giờ</th>
                     </tr>
@@ -403,8 +408,8 @@ const AdminPage: React.FC = () => {
 
         {activeTab === 'exams' && (
             <div>
-                 <h3 className="text-2xl font-bold mb-2 text-gray-800">Quản lý Kho Đề Thi</h3>
-                 <p className="text-gray-500 mb-8 text-sm">Chọn phân hệ bên dưới để tải đề thi tương ứng</p>
+                 <h3 className="text-2xl font-bold mb-2 text-gray-800">Quản lý Kho Bài Luyện Tập</h3>
+                 <p className="text-gray-500 mb-8 text-sm">Chọn phân hệ bên dưới để tải bài luyện tập hàng ngày cho học sinh</p>
                  
                  <div className="flex gap-2 mb-8 border-b border-gray-100 pb-4">
                     {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
@@ -423,17 +428,15 @@ const AdminPage: React.FC = () => {
                          <div className="flex justify-between items-start mb-4">
                              <div>
                                  <h4 className="font-bold text-gray-800 text-lg">
-                                     📤 Tải lên đề mới
+                                     📤 Tải bài tập mới
                                  </h4>
-                                 <p className="text-xs text-gray-500 mt-1">
-                                     File .json định dạng chuẩn
-                                 </p>
+                                 <p className="text-xs text-gray-500 mt-1">File .json</p>
                              </div>
                              <button 
                                 onClick={downloadSampleJson}
                                 className="text-xs font-bold text-ucmas-blue hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg transition border border-blue-100 flex items-center gap-1"
                              >
-                                <span>⬇️</span> Tải file mẫu
+                                <span>⬇️</span> Tải mẫu
                              </button>
                          </div>
 
@@ -445,7 +448,7 @@ const AdminPage: React.FC = () => {
                                      <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">📂</div>
                                  )}
                                  <p className="mb-1 text-sm text-gray-600 font-medium">
-                                     {isUploading ? 'Đang xử lý...' : 'Nhấn để chọn file đề thi'}
+                                     {isUploading ? 'Đang xử lý...' : 'Chọn file bài luyện tập'}
                                  </p>
                                  <p className="text-xs text-gray-400">JSON (Max 2MB)</p>
                              </div>
@@ -457,7 +460,6 @@ const AdminPage: React.FC = () => {
                                 className="hidden" 
                              />
                          </label>
-
                          {uploadStatus && (
                              <div className={`mt-4 text-sm font-bold animate-fade-in p-3 rounded-lg text-center ${uploadStatus.includes('thành công') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                  {uploadStatus}
@@ -467,10 +469,8 @@ const AdminPage: React.FC = () => {
 
                     <div className="lg:col-span-2">
                         <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-gray-700">Danh sách đề đã tải lên ({uploadedExams.length})</h4>
-                            {uploadedExams.length > 0 && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Lưu trữ trên Supabase</span>}
+                            <h4 className="font-bold text-gray-700">Danh sách bài đã tải lên ({uploadedExams.length})</h4>
                         </div>
-                        
                         <div className="space-y-3">
                             {uploadedExams.map(exam => (
                                 <div key={exam.id} className="bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:shadow-md transition">
@@ -485,18 +485,12 @@ const AdminPage: React.FC = () => {
                                     <button 
                                         onClick={() => handleDeleteExam(exam.id)}
                                         className="w-10 h-10 flex items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition"
-                                        title="Xóa đề"
+                                        title="Xóa bài tập"
                                     >
                                         ✕
                                     </button>
                                 </div>
                             ))}
-                            {uploadedExams.length === 0 && (
-                                <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                    <div className="text-4xl mb-2">📭</div>
-                                    Chưa có đề thi nào được tải lên cho phần {selectedExamMode === Mode.VISUAL ? 'Nhìn Tính' : selectedExamMode === Mode.LISTENING ? 'Nghe Tính' : 'Flash'}.
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -506,7 +500,7 @@ const AdminPage: React.FC = () => {
         {activeTab === 'rules' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2">
-                    <h3 className="text-2xl font-bold mb-6 text-gray-800">Cấu hình Quy tắc Sinh đề (JSON)</h3>
+                    <h3 className="text-2xl font-bold mb-6 text-gray-800">Cấu Hình Quy Tắc Bài Tập (JSON)</h3>
                     
                     <div className="flex gap-2 mb-4">
                         {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
@@ -522,7 +516,7 @@ const AdminPage: React.FC = () => {
 
                     <div className="bg-gray-900 rounded-xl p-4 shadow-inner">
                         <div className="flex justify-between items-center mb-2">
-                            <span className="text-gray-400 text-xs font-mono">config.json</span>
+                            <span className="text-gray-400 text-xs font-mono">config_rules.json</span>
                             <span className={`text-xs font-bold ${ruleSaveStatus.includes('thành công') ? 'text-green-400' : 'text-red-400'}`}>{ruleSaveStatus}</span>
                         </div>
                         <textarea 
@@ -537,34 +531,8 @@ const AdminPage: React.FC = () => {
                             onClick={handleSaveRule}
                             className="bg-ucmas-red text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 shadow-md transition flex items-center gap-2"
                          >
-                            💾 Lưu phiên bản mới
+                            💾 Lưu cấu hình mới
                          </button>
-                    </div>
-                </div>
-
-                <div>
-                    <h4 className="font-bold text-gray-700 mb-4">Lịch sử phiên bản</h4>
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                        {ruleHistory.map((rule) => (
-                            <div key={rule.id} className="bg-white border border-gray-200 p-3 rounded-xl shadow-sm hover:bg-gray-50 transition">
-                                <div className="flex justify-between items-start">
-                                    <div className="font-bold text-sm text-gray-800">{rule.version_name}</div>
-                                    <div className="text-[10px] text-gray-400">{new Date(rule.created_at).toLocaleString('vi-VN')}</div>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1 truncate font-mono">
-                                    {JSON.stringify(rule.rules_json).substring(0, 50)}...
-                                </div>
-                                <button 
-                                    onClick={() => setCurrentRuleJson(JSON.stringify(rule.rules_json, null, 2))}
-                                    className="text-xs text-ucmas-blue font-bold mt-2 hover:underline"
-                                >
-                                    Mở phiên bản này
-                                </button>
-                            </div>
-                        ))}
-                        {ruleHistory.length === 0 && (
-                            <p className="text-sm text-gray-400 italic">Chưa có lịch sử cập nhật.</p>
-                        )}
                     </div>
                 </div>
             </div>

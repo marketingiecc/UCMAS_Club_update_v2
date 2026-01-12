@@ -9,7 +9,11 @@ import PracticeSession from './pages/PracticeSession';
 import ActivatePage from './pages/ActivatePage';
 import HistoryPage from './pages/HistoryPage';
 import AdminPage from './pages/AdminPage';
-import ConfirmEmailPage from './pages/ConfirmEmailPage'; // Import new page
+import AdminContestPage from './pages/AdminContestPage';
+import ContestListPage from './pages/ContestListPage';
+import ContestLobbyPage from './pages/ContestLobbyPage';
+import ContestExamPage from './pages/ContestExamPage';
+import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import { backend } from './services/mockBackend';
 import { UserProfile } from './types';
 
@@ -57,7 +61,15 @@ const App: React.FC = () => {
                 <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
                 <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
                 <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
+                
+                {/* Contest Routes */}
+                <Route path="/contests" element={user ? <ContestListPage /> : <Navigate to="/login" />} />
+                <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
+                <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
+
+                {/* Admin Routes */}
                 <Route path="/admin" element={user && user.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
+                <Route path="/admin/contests" element={user && user.role === 'admin' ? <AdminContestPage /> : <Navigate to="/dashboard" />} />
                 
                 </Routes>
             </Layout>

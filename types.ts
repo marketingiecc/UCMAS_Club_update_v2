@@ -7,7 +7,6 @@ export enum Mode {
 
 export type UserRole = 'user' | 'admin';
 
-// Interface for UI logic (Aggregated data)
 export interface UserProfile {
   id: string;
   email: string;
@@ -15,29 +14,8 @@ export interface UserProfile {
   student_code?: string;
   role: UserRole;
   created_at: string;
-  // Derived from Entitlements
-  license_expiry?: string; // ISO Date of the latest expiry
+  license_expiry?: string; 
   allowed_modes: Mode[];
-}
-
-// DB Entity: Profile
-export interface DBProfile {
-  id: string;
-  full_name: string;
-  student_code?: string;
-  role: UserRole;
-  created_at: string;
-  updated_at: string;
-}
-
-// DB Entity: Entitlement
-export interface DBEntitlement {
-  id: string;
-  user_id: string;
-  scope: Record<string, boolean>; // e.g. { nhin_tinh: true }
-  starts_at: string;
-  expires_at: string;
-  created_at: string;
 }
 
 export interface Question {
@@ -46,35 +24,78 @@ export interface Question {
   correctAnswer: number;
 }
 
-export interface ExamConfig {
-  mode: Mode;
-  level: number;
-  numQuestions: number;
-  timeLimit: number; // seconds
-  flashSpeed?: number; // ms
-  numOperandsRange: [number, number];
-  digitRange: [number, number];
+export interface Contest {
+  id: string;
+  name: string;
+  start_at: string; 
+  duration_minutes: number;
+  lobby_open_minutes: number;
+  enable_nhin_tinh: boolean;
+  enable_nghe_tinh: boolean;
+  enable_flash: boolean;
+  status: 'draft' | 'open' | 'closed';
+  created_by?: string;
+  created_at?: string;
 }
 
-// DB Entity: Exam Rules (JSON Config)
-export interface DBExamRule {
+export interface ContestRegistration {
   id: string;
+  contest_id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  registered_at: string;
+  is_approved: boolean;
+}
+
+export interface ContestSession {
+  id: string;
+  contest_id: string;
+  user_id: string;
+  status: 'joined' | 'in_lobby' | 'in_progress' | 'submitted' | 'expired';
+  joined_at: string;
+  total_score?: number;
+}
+
+export interface ContestExam {
+  contest_id: string;
   mode: Mode;
-  version_name: string;
-  rules_json: any; // Specific config overrides per level
-  created_by: string;
+  exam_name: string;
+  time_limit_seconds?: number | null;
+  questions: Question[];
+  config?: any;
+}
+
+export interface ContestAccessCode {
+  id: string;
+  contest_id: string;
+  code: string;
+  code_type: 'single_use' | 'shared';
+  max_uses: number;
+  uses_count: number;
+  status: 'active' | 'disabled' | 'used';
   created_at: string;
 }
 
-// DB Entity: Custom Uploaded Exam
+export interface ContestSectionAttempt {
+  session_id: string;
+  mode: Mode;
+  score_correct: number;
+  score_total: number;
+  score_wrong: number;
+  score_skipped: number;
+  duration_seconds: number;
+  finished_at: string;
+}
+
 export interface CustomExam {
   id: string;
   name: string;
   description?: string;
   mode: Mode;
   level: number;
-  time_limit: number; // seconds
-  questions: Question[]; // Full Question objects with id and correctAnswer
+  time_limit: number;
+  questions: Question[];
   is_public: boolean;
   status: 'active' | 'disabled' | 'draft';
   created_by: string;
@@ -82,14 +103,13 @@ export interface CustomExam {
   updated_at?: string;
 }
 
-// DB Entity: Attempt
-export interface DBAttempt {
+export interface AttemptResult {
   id: string;
   user_id: string;
   mode: Mode;
   level: number;
-  settings: any; // JSONB: speed, config used
-  exam_data: any; // JSONB: generated questions
+  settings: any;
+  exam_data: any;
   started_at: string;
   finished_at?: string;
   score_correct: number;
@@ -100,7 +120,24 @@ export interface DBAttempt {
   created_at: string;
 }
 
-// DB Entity: Answer
+export interface DBExamRule {
+  id: string;
+  mode: Mode;
+  version_name: string;
+  rules_json: any;
+  created_by: string;
+  created_at: string;
+}
+
+export interface DBEntitlement {
+  id: string;
+  user_id: string;
+  scope: Record<string, boolean>;
+  starts_at: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface DBAnswer {
   id?: string;
   attempt_id: string;
@@ -110,20 +147,12 @@ export interface DBAnswer {
   answered_at: string;
 }
 
-// Legacy type for UI compatibility (history view)
-export interface AttemptResult extends DBAttempt {
-  details?: {
-    question_no: number;
-    user_answer: string | null;
-    correct_answer: number;
-    is_correct: boolean;
-  }[];
-}
-
-export interface ActivationCode {
-  code: string;
-  duration_days: number;
-  scope: Record<string, boolean>;
-  status: 'active' | 'disabled';
-  expires_at?: string;
+export interface ExamConfig {
+  mode: Mode;
+  level: number;
+  numQuestions: number;
+  timeLimit: number;
+  flashSpeed?: number;
+  numOperandsRange: [number, number];
+  digitRange: [number, number];
 }

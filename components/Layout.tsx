@@ -21,6 +21,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   };
 
   const isActive = (path: string) => location.pathname === path ? "text-ucmas-blue font-bold border-b-2 border-ucmas-blue" : "text-gray-600 hover:text-ucmas-blue";
+  const isContestActive = () => location.pathname.startsWith('/contests') ? "text-ucmas-blue font-bold border-b-2 border-ucmas-blue" : "text-gray-600 hover:text-ucmas-blue";
+
 
   // Calculate days remaining
   const getDaysLeft = () => {
@@ -51,6 +53,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                {user && (
                  <>
                    <Link to="/dashboard" className={`text-sm font-medium transition-colors ${isActive('/dashboard')}`}>Luyện tập</Link>
+                   <Link to="/contests" className={`text-sm font-medium transition-colors ${isContestActive()}`}>Cuộc thi 🏆</Link>
                    <Link to="/history" className={`text-sm font-medium transition-colors ${isActive('/history')}`}>Lịch sử</Link>
                    <Link to="/activate" className={`text-sm font-medium transition-colors ${isActive('/activate')}`}>Kích hoạt</Link>
                  </>
