@@ -19,6 +19,30 @@ import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import AdminContestPage from './pages/AdminContestPage';
 
+const AuthCallbackHandler: React.FC = () => {
+    const navigate = useNavigate();
+    useEffect(() => {
+        // Check if the hash contains Supabase auth tokens
+        const hash = window.location.hash;
+        // Supabase puts access_token, refresh_token, etc. in the hash for OAuth/MagicLink/Recovery
+        const isAuthCallback = hash.includes('access_token') || hash.includes('type=recovery') || hash.includes('error_description');
+
+        if (!isAuthCallback) {
+            // If not an auth callback and no route matched, redirect to home
+            navigate('/', { replace: true });
+        }
+        // If it IS an auth callback, we stay here rendering "Processing..."
+        // The onAuthStateChange listener in AppContent will handle the event and navigation.
+    }, [navigate]);
+
+    return (
+        <div className="h-screen flex items-center justify-center flex-col gap-4">
+             <div className="w-12 h-12 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin"></div>
+             <div className="text-ucmas-blue font-bold">Đang xử lý thông tin...</div>
+        </div>
+    );
+};
+
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,23 +50,20 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-        try {
-            const u = await backend.getCurrentUser();
-            setUser(u);
-        } catch (e) {
-            console.error("Auth init failed", e);
-        } finally {
-            setLoading(false);
-        }
+        const u = await backend.getCurrentUser();
+        setUser(u);
+        setLoading(false);
     };
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log("Auth Event:", event);
         if (event === 'SIGNED_IN' && session?.user) {
              const u = await backend.fetchProfile(session.user.id);
              setUser(u);
         } else if (event === 'SIGNED_OUT') {
              setUser(null);
+             navigate('/login');
         } else if (event === 'PASSWORD_RECOVERY') {
              // Handle password recovery event by redirecting to reset page
              navigate('/auth/resetpass', { replace: true });
@@ -85,7 +106,8 @@ const AppContent: React.FC = () => {
         <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
 
-        <Route path="*" element={<Navigate to="/" />} />
+        {/* Catch-all for 404 and Auth Callbacks */}
+        <Route path="*" element={<AuthCallbackHandler />} />
       </Routes>
     </Layout>
   );

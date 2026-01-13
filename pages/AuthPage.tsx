@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
@@ -31,7 +30,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
   useEffect(() => {
     if (location.pathname === '/register') setMode('register');
     else if (location.pathname === '/login') setMode('login');
-    // keep 'forgot' if currently set manually
     
     setNotification(null);
 
@@ -79,11 +77,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
               type: res.success ? 'success' : 'error', 
               message: res.message 
           });
-          
-          if (res.success && res.isDemo) {
-             setTimeout(() => navigate('/auth/resetpass'), 2000);
-          }
-          
           setLoading(false);
           return;
       }
@@ -105,6 +98,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
         setNotification({ type: 'error', message: res.error });
       } else if (res.user) {
         setUser(res.user);
+        navigate('/dashboard');
       }
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || "Đã xảy ra lỗi không mong muốn." });

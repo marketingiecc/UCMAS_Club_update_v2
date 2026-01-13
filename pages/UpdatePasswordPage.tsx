@@ -1,10 +1,7 @@
-
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { backend } from '../services/mockBackend';
+import { supabase } from '../services/mockBackend';
 
 const UpdatePasswordPage: React.FC = () => {
-  const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -14,15 +11,17 @@ const UpdatePasswordPage: React.FC = () => {
     setLoading(true);
     setMessage(null);
 
-    const { success, message } = await backend.updateUserPassword(password);
+    // STRICT: Direct Supabase call
+    const { error } = await supabase.auth.updateUser({ password });
 
-    if (success) {
+    if (!error) {
         setMessage({ type: 'success', text: 'Đổi mật khẩu thành công! Đang chuyển hướng...' });
         setTimeout(() => {
-            navigate('/login');
+            // STRICT: Use hash redirect
+            window.location.hash = '#/login';
         }, 2000);
     } else {
-        setMessage({ type: 'error', text: message || 'Đã có lỗi xảy ra.' });
+        setMessage({ type: 'error', text: error.message });
         setLoading(false);
     }
   };

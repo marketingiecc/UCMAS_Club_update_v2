@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
 import { Mode, UserProfile, Contest, ContestExam, ContestSession, Question, ContestRegistration, ContestAccessCode, CustomExam } from '../types';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-const supabaseKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = SUPABASE_URL;
+const supabaseKey = SUPABASE_ANON_KEY;
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
@@ -20,7 +21,7 @@ export const backend = {
         const profile = await backend.fetchProfile(data.user.id);
         return { user: profile };
     }
-    return { error: 'Login failed' };
+    return { error: 'Đăng nhập thất bại.' };
   },
 
   register: async (email: string, password: string, fullName: string) => {
@@ -30,26 +31,29 @@ export const backend = {
         options: { data: { full_name: fullName } }
     });
     if (error) return { error: error.message };
-    // ensure_profile trigger should handle profile creation in DB
     return { user: data.user };
   },
 
   registerAdmin: async (email: string, password: string, fullName: string) => {
-    // In a real app, this should be protected or done via invites.
-    // Here we just sign up, assuming the user manually sets role in DB or via trigger logic if implemented.
-    // However, the AdminLoginPage handled the secret key check client-side (insecure but existing logic).
     return await backend.register(email, password, fullName);
   },
 
   sendPasswordResetEmail: async (email: string) => {
-    // Supabase sẽ tự động gắn token vào fragment (#access_token=...).
-    // Client Supabase sẽ bắt fragment này và bắn sự kiện PASSWORD_RECOVERY trong App.tsx.
-    // Không gắn path (/#/auth/update-password) vào đây để tránh lỗi 404 hoặc double hash.
-    const redirectTo = window.location.origin; // Chỉ dùng origin, App.tsx sẽ handle routing
-      
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    // STRICT: Use window.location.origin for redirection base
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { 
+      redirectTo: window.location.origin 
+    });
+    
     if (error) return { success: false, message: error.message };
     return { success: true, message: 'Link khôi phục đã được gửi vào email của bạn.' };
+  },
+
+  updateUserPassword: async (password: string) => {
+    // STRICT: No try/catch swallowing, direct Supabase call
+    const { error } = await supabase.auth.updateUser({ password });
+    
+    if (error) return { success: false, message: error.message };
+    return { success: true };
   },
 
   // Users & Profiles
@@ -60,7 +64,8 @@ export const backend = {
   },
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
-    const { data } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
+    const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
+    if (error) console.error("Fetch profile error:", error);
     if (data) {
         return {
             id: data.id || userId,
@@ -91,7 +96,6 @@ export const backend = {
   },
 
   adminActivateUser: async (userId: string, months: number) => {
-      // Direct entitlement insert for admin override
       const startsAt = new Date().toISOString();
       const expiresAt = new Date();
       expiresAt.setMonth(expiresAt.getMonth() + months);
@@ -292,16 +296,13 @@ export const backend = {
   },
 
   registerForContest: async (contestId: string) => {
-      // For now, assume this creates a session with 'pending' status or similar if needed. 
-      // But based on DB, `join_contest` uses a code. 
-      // If direct registration (button click), we might need to insert into contest_sessions directly.
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { ok: false, message: 'Not logged in' };
 
       const { error } = await supabase.from('contest_sessions').insert({
           contest_id: contestId,
           user_id: user.id,
-          status: 'joined', // or 'pending_approval' if logic requires
+          status: 'joined', 
           joined_at: new Date().toISOString()
       });
       if (error) return { ok: false, message: error.message };
@@ -310,20 +311,18 @@ export const backend = {
 
   getMyRegistrations: async (userId: string): Promise<ContestRegistration[]> => {
       const { data } = await supabase.from('contest_sessions').select('*, contests(name)').eq('user_id', userId);
-      // Map to ContestRegistration type
       return (data || []).map(s => ({
           id: s.id,
           contest_id: s.contest_id,
           user_id: s.user_id,
-          full_name: '', // Need join with profiles if needed
+          full_name: '', 
           email: '',
           registered_at: s.joined_at,
-          is_approved: s.status !== 'pending' // simplified logic
+          is_approved: s.status !== 'pending'
       }));
   },
 
   getContestRegistrations: async (contestId: string) => {
-      // Need user details
       const { data } = await supabase.from('contest_sessions').select('*, profiles(full_name, email)').eq('contest_id', contestId);
       return (data || []).map(s => ({
           id: s.id,
@@ -332,12 +331,11 @@ export const backend = {
           full_name: (s.profiles as any)?.full_name || 'Unknown',
           email: (s.profiles as any)?.email || '',
           registered_at: s.joined_at,
-          is_approved: true // Assume auto-approved for now unless logic changes
+          is_approved: true
       }));
   },
 
   approveRegistration: async (reg: ContestRegistration) => {
-      // Update status
       const { error } = await supabase.from('contest_sessions').update({ status: 'joined' }).eq('id', reg.id);
       return !error;
   },
@@ -386,11 +384,9 @@ export const backend = {
   },
 
   getReportData: async (range: 'day'|'week'|'month') => {
-      // Mocking or simple queries
       const { count: users } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
       const { count: attempts } = await supabase.from('attempts').select('*', { count: 'exact', head: true });
       
-      // Top students mock
       const { data } = await supabase.from('user_profile_aggregated').select('*').limit(5);
       const top = (data || []).map(u => ({ ...u, attempts_count: Math.floor(Math.random() * 20) }));
       
