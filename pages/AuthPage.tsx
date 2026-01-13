@@ -168,7 +168,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
                     <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Mật khẩu</label>
                     <input 
                     type="password" 
-                    required={mode !== 'forgot'}
+                    required
                     className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ucmas-blue focus:border-transparent outline-none transition bg-gray-50 focus:bg-white"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
