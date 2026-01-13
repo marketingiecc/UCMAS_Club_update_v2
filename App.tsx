@@ -26,9 +26,14 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-        const u = await backend.getCurrentUser();
-        setUser(u);
-        setLoading(false);
+        try {
+            const u = await backend.getCurrentUser();
+            setUser(u);
+        } catch (e) {
+            console.error("Auth init failed", e);
+        } finally {
+            setLoading(false);
+        }
     };
     initAuth();
 

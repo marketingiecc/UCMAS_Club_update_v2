@@ -2,8 +2,30 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
 import { Mode, UserProfile, Contest, ContestExam, ContestSession, Question, ContestRegistration, ContestAccessCode, CustomExam } from '../types';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-const supabaseKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
+// Helper to safely access environment variables across different build environments
+const getEnv = (key: string) => {
+  // Check import.meta.env (Vite)
+  try {
+    if ((import.meta as any)?.env?.[key]) {
+      return (import.meta as any).env[key];
+    }
+  } catch (e) {}
+
+  // Check process.env (Webpack/Node)
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env?.[key]) {
+      // @ts-ignore
+      return process.env[key];
+    }
+  } catch (e) {}
+  
+  return '';
+};
+
+// Use placeholders if env vars are missing to prevent createClient from throwing an error and crashing the app
+const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://placeholder.supabase.co';
+const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'placeholder';
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
