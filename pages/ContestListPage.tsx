@@ -79,43 +79,38 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
 
                         {uiStatus === 'open' && (
                           <div className="flex gap-2 mt-auto">
-                             {/* State 1: Not Registered - RED Button */}
-                             {!isRegistered && (
+                             {/* Left Button: Status/Registration Action */}
+                             {!isRegistered ? (
                                  <button 
                                     onClick={(e) => handleRegister(c.id, e)} 
                                     className="flex-1 py-3 bg-ucmas-red text-white font-black text-xs rounded-xl uppercase hover:bg-red-700 transition shadow-md"
                                  >
                                     ĐĂNG KÝ NGAY
                                  </button>
-                             )}
-
-                             {/* State 2: Registered but Pending - GREEN Button */}
-                             {isRegistered && !isApproved && (
+                             ) : !isApproved ? (
                                  <button 
                                     disabled 
                                     className="flex-1 py-3 bg-ucmas-green text-white font-black text-xs rounded-xl uppercase cursor-default opacity-90 shadow-md"
                                  >
                                     CHỜ KÍCH HOẠT
                                  </button>
+                             ) : (
+                                 <button 
+                                    disabled 
+                                    className="flex-1 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase cursor-default opacity-90 shadow-md"
+                                 >
+                                    ĐÃ KÍCH HOẠT
+                                 </button>
                              )}
 
-                             {/* State 3: Approved - BLUE Button + Enter Button */}
-                             {isRegistered && isApproved && (
-                                 <>
-                                    <button 
-                                        disabled 
-                                        className="flex-1 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase cursor-default opacity-90 shadow-md"
-                                    >
-                                        ĐÃ KÍCH HOẠT
-                                    </button>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/contests/${c.id}`); }}
-                                        className="px-6 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase hover:bg-blue-700 transition shadow-lg border-l border-blue-400"
-                                    >
-                                        VÀO THI ➜
-                                    </button>
-                                 </>
-                             )}
+                             {/* Right Button: Enter Contest (Available for all open contests) */}
+                             {/* Allows users to enter code if not registered/approved, or enter lobby if approved */}
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); navigate(`/contests/${c.id}`); }}
+                                className="px-5 py-3 bg-white border-2 border-ucmas-blue text-ucmas-blue font-black text-xs rounded-xl uppercase hover:bg-blue-50 transition shadow-md whitespace-nowrap"
+                             >
+                                VÀO THI ➜
+                             </button>
                           </div>
                         )}
                         {uiStatus === 'closed' && (
