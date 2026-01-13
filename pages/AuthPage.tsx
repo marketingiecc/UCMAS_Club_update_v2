@@ -13,11 +13,14 @@ interface Notification {
   message: string;
 }
 
+type AuthMode = 'login' | 'register' | 'forgot';
+
 const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [isRegister, setIsRegister] = useState(location.pathname === '/register');
+  const [mode, setMode] = useState<AuthMode>('login');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -26,7 +29,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
 
   // Sync state with URL changes and handle Confirm Email params
   useEffect(() => {
-    setIsRegister(location.pathname === '/register');
+    if (location.pathname === '/register') setMode('register');
+    else if (location.pathname === '/login') setMode('login');
+    // keep 'forgot' if currently set manually
+    
     setNotification(null);
 
     // Handle Email Confirmation Result
@@ -54,12 +60,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
     }
   }, [location.pathname, location.search]);
 
-  const toggleMode = () => {
-    if (isRegister) {
-      navigate('/login');
-    } else {
-      navigate('/register');
-    }
+  const switchMode = (newMode: AuthMode) => {
+      setMode(newMode);
+      setNotification(null);
+      if (newMode === 'login') navigate('/login');
+      else if (newMode === 'register') navigate('/register');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,8 +73,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
     setLoading(true);
 
     try {
+      if (mode === 'forgot') {
+          const res = await backend.sendPasswordResetEmail(email);
+          setNotification({ 
+              type: res.success ? 'success' : 'error', 
+              message: res.message 
+          });
+          setLoading(false);
+          return;
+      }
+
       let res;
-      if (isRegister) {
+      if (mode === 'register') {
           if (!fullName.trim()) {
               setNotification({ type: 'error', message: "Vui lòng nhập họ và tên." });
               setLoading(false);
@@ -77,6 +92,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
           }
           res = await backend.register(email, password, fullName);
       } else {
+          // Login
           res = await backend.login(email, password);
       }
 
@@ -102,10 +118,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
                  className="h-20 mx-auto mb-6 object-contain"
             />
             <h2 className="text-3xl font-black text-ucmas-blue mb-2">
-                {isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập'}
+                {mode === 'register' ? 'Tạo Tài Khoản' : mode === 'forgot' ? 'Khôi Phục Mật Khẩu' : 'Đăng Nhập'}
             </h2>
             <p className="text-gray-500 text-sm">
-                {isRegister ? 'Đăng ký để bắt đầu luyện tập' : 'Chào mừng trở lại UCMAS Club'}
+                {mode === 'register' ? 'Đăng ký để bắt đầu luyện tập' : mode === 'forgot' ? 'Nhập email để đặt lại mật khẩu' : 'Chào mừng trở lại UCMAS Club'}
             </p>
         </div>
         
@@ -121,12 +137,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-            {isRegister && (
+            {mode === 'register' && (
                 <div className="animate-fade-in">
                     <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Họ và tên</label>
                     <input 
                     type="text" 
-                    required={isRegister}
+                    required={mode === 'register'}
                     className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ucmas-blue focus:border-transparent outline-none transition bg-gray-50 focus:bg-white"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -147,34 +163,52 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
                 />
             </div>
 
-            <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Mật khẩu</label>
-                <input 
-                type="password" 
-                required 
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ucmas-blue focus:border-transparent outline-none transition bg-gray-50 focus:bg-white"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                />
-            </div>
+            {mode !== 'forgot' && (
+                <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Mật khẩu</label>
+                    <input 
+                    type="password" 
+                    required={mode !== 'forgot'}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-ucmas-blue focus:border-transparent outline-none transition bg-gray-50 focus:bg-white"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    />
+                    {mode === 'login' && (
+                        <div className="flex justify-end mt-2">
+                             <button type="button" onClick={() => switchMode('forgot')} className="text-xs text-ucmas-blue hover:underline">
+                                 Quên mật khẩu?
+                             </button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-ucmas-blue to-blue-600 text-white py-3 rounded-lg font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-ucmas-blue to-blue-600 text-white py-3 rounded-lg font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-70 disabled:cursor-not-allowed uppercase text-sm tracking-wide"
             >
-                {loading ? 'Đang xử lý...' : (isRegister ? 'Đăng Ký Ngay' : 'Đăng Nhập')}
+                {loading ? 'Đang xử lý...' : (mode === 'register' ? 'Đăng Ký Ngay' : mode === 'forgot' ? 'Gửi Link Khôi Phục' : 'Đăng Nhập')}
             </button>
         </form>
 
-        <div className="mt-6 text-center">
-            <button 
-                onClick={toggleMode}
-                className="text-sm font-medium text-ucmas-blue hover:underline"
-            >
-                {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký ngay'}
-            </button>
+        <div className="mt-6 text-center pt-4 border-t border-gray-100">
+            {mode === 'login' ? (
+                <button 
+                    onClick={() => switchMode('register')}
+                    className="text-sm font-medium text-ucmas-blue hover:underline"
+                >
+                    Chưa có tài khoản? Đăng ký ngay
+                </button>
+            ) : (
+                <button 
+                    onClick={() => switchMode('login')}
+                    className="text-sm font-medium text-ucmas-blue hover:underline"
+                >
+                    {mode === 'forgot' ? '← Quay lại Đăng Nhập' : 'Đã có tài khoản? Đăng nhập'}
+                </button>
+            )}
         </div>
       </div>
     </div>

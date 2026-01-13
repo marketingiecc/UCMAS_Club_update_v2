@@ -39,13 +39,32 @@ class BackendService {
   }
 
   async register(email: string, password: string, fullName: string): Promise<{ user: UserProfile | null; error: string | null }> {
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName, role: 'user' } } });
-    if (error) return { user: null, error: error.message };
+    // Supabase sign up
+    const { data, error } = await supabase.auth.signUp({ 
+        email, 
+        password, 
+        options: { data: { full_name: fullName, role: 'user' } } 
+    });
+    
+    // Catch "User already registered" explicitly
+    if (error) {
+        if (error.message.includes('already registered') || error.status === 422 || error.status === 400) {
+            return { user: null, error: "Email này đã tồn tại. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu." };
+        }
+        return { user: null, error: error.message };
+    }
+    
+    // Edge case: Supabase might return success for existing user if email confirmation is on, 
+    // but identities array will be empty or user won't have a new session.
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+        return { user: null, error: "Email này đã được đăng ký. Vui lòng đăng nhập." };
+    }
+
     if (data.user && data.session) {
         const profile = await this._ensureAndFetchProfile(data.user.id, email);
         if (profile) return { user: profile, error: null };
     }
-    return { user: null, error: "Đăng ký thành công! Vui lòng xác thực email." };
+    return { user: null, error: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực." };
   }
 
   async login(email: string, password: string): Promise<{ user: UserProfile | null; error: string | null }> {
@@ -56,6 +75,25 @@ class BackendService {
         if (profile) return { user: profile, error: null };
     }
     return { user: null, error: "Đăng nhập thất bại." };
+  }
+
+  async sendPasswordResetEmail(email: string): Promise<{ success: boolean; message: string }> {
+      // QUAN TRỌNG: Chỉ redirect về origin (ví dụ: localhost:5173). 
+      // Supabase sẽ tự động gắn token vào fragment (#access_token=...).
+      // Client Supabase sẽ bắt fragment này và bắn sự kiện PASSWORD_RECOVERY trong App.tsx.
+      // Không gắn path (/#/auth/update-password) vào đây để tránh lỗi 404 hoặc double hash.
+      const redirectTo = window.location.origin;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      
+      if (error) return { success: false, message: error.message };
+      return { success: true, message: "Link khôi phục mật khẩu đã được gửi đến email của bạn." };
+  }
+
+  async updateUserPassword(password: string): Promise<{ success: boolean; message: string }> {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) return { success: false, message: error.message };
+      return { success: true, message: "Cập nhật mật khẩu thành công!" };
   }
 
   async logout() { await supabase.auth.signOut(); }

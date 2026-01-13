@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
@@ -14,8 +14,25 @@ import ContestListPage from './pages/ContestListPage';
 import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import ConfirmEmailPage from './pages/ConfirmEmailPage';
-import { backend } from './services/mockBackend';
+import UpdatePasswordPage from './pages/UpdatePasswordPage';
+import { backend, supabase } from './services/mockBackend';
 import { UserProfile } from './types';
+
+// Component to handle global auth events
+const AuthEventHandler = () => {
+    const navigate = useNavigate();
+    useEffect(() => {
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            // When user clicks the email link, Supabase restores the session
+            // and emits PASSWORD_RECOVERY
+            if (event === 'PASSWORD_RECOVERY') {
+                navigate('/auth/update-password', { replace: true });
+            }
+        });
+        return () => { authListener.subscription.unsubscribe(); };
+    }, [navigate]);
+    return null;
+};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -45,6 +62,7 @@ const App: React.FC = () => {
 
   return (
     <Router>
+      <AuthEventHandler />
       <Routes>
         <Route path="*" element={
             <Layout user={user} setUser={setUser}>
@@ -55,6 +73,8 @@ const App: React.FC = () => {
                 <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
                 <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
                 <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
+                {/* Note: Update Password is public accessible because the user is technically logged in via the recovery link */}
+                <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />

@@ -64,7 +64,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                   const isApproved = myReg?.is_approved;
 
                   return (
-                    <div key={c.id} onClick={() => { if(isApproved) navigate(`/contests/${c.id}`); }} className={`bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-all relative group ${isApproved ? 'cursor-pointer' : 'cursor-default'}`}>
+                    <div key={c.id} onClick={() => { if(isApproved) navigate(`/contests/${c.id}`); }} className={`bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-all relative group flex flex-col ${isApproved ? 'cursor-pointer' : 'cursor-default'}`}>
                         <div className={`absolute top-6 right-6 text-[10px] font-black uppercase px-3 py-1 rounded-full ${uiStatus === 'open' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                             {uiStatus === 'open' ? 'Đang mở' : 'Đã kết thúc'}
                         </div>
@@ -114,7 +114,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                           </div>
                         )}
                         {uiStatus === 'closed' && (
-                            <div className="w-full py-3 bg-gray-100 text-gray-400 text-center font-black text-xs rounded-xl uppercase">Cuộc thi đã kết thúc</div>
+                            <div className="w-full py-3 bg-gray-100 text-gray-400 text-center font-black text-xs rounded-xl uppercase mt-auto">Cuộc thi đã kết thúc</div>
                         )}
                     </div>
                   );
