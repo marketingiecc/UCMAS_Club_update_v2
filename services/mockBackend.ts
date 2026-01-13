@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
 import { Mode, UserProfile, Contest, ContestExam, ContestSession, Question, ContestRegistration, ContestAccessCode, CustomExam } from '../types';
@@ -64,34 +65,102 @@ export const backend = {
   },
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
-    const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
-    if (error) console.error("Fetch profile error:", error);
-    if (data) {
-        return {
-            id: data.id || userId,
-            email: data.email || '',
-            full_name: data.full_name || '',
-            role: (data.role as any) || 'user',
-            created_at: data.created_at || new Date().toISOString(),
-            license_expiry: data.license_expiry || undefined,
-            allowed_modes: (data.allowed_modes as Mode[]) || [],
-            student_code: data.student_code || undefined
-        };
+    try {
+        // Attempt 1: Try Aggregated View
+        const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
+        
+        if (!error && data) {
+            return {
+                id: data.id || userId,
+                email: data.email || '',
+                full_name: data.full_name || '',
+                role: (data.role as any) || 'user',
+                created_at: data.created_at || new Date().toISOString(),
+                license_expiry: data.license_expiry || undefined,
+                allowed_modes: (data.allowed_modes as Mode[]) || [],
+                student_code: data.student_code || undefined
+            };
+        }
+
+        // Attempt 2: Fallback to manual table queries if view fails (e.g. Permission Denied)
+        if (error && error.code !== 'PGRST116') {
+             console.warn("Fetch profile view warning (falling back):", error.message);
+        }
+
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        
+        if (profile) {
+             // Fetch active entitlements
+             const now = new Date().toISOString();
+             const { data: entitlements } = await supabase
+                .from('entitlements')
+                .select('*')
+                .eq('user_id', userId)
+                .gt('expires_at', now);
+             
+             const modes = new Set<Mode>();
+             let maxExpiry = profile.license_expiry;
+
+             if (entitlements) {
+                 entitlements.forEach((e: any) => {
+                     const scope = e.scope; // jsonb
+                     if (scope?.nhin_tinh) modes.add(Mode.VISUAL);
+                     if (scope?.nghe_tinh) modes.add(Mode.LISTENING);
+                     if (scope?.flash) modes.add(Mode.FLASH);
+                     
+                     if (e.expires_at) {
+                         if (!maxExpiry || new Date(e.expires_at) > new Date(maxExpiry)) {
+                             maxExpiry = e.expires_at;
+                         }
+                     }
+                 });
+             }
+
+             return {
+                 id: profile.id,
+                 email: profile.email || '',
+                 full_name: profile.full_name || '',
+                 role: (profile.role as any) || 'user',
+                 created_at: profile.created_at || new Date().toISOString(),
+                 license_expiry: maxExpiry,
+                 allowed_modes: Array.from(modes),
+                 student_code: profile.student_code
+             };
+        }
+    } catch (e) {
+        console.error("Fetch profile exception:", e);
     }
     return null;
   },
 
   getAllUsers: async (): Promise<UserProfile[]> => {
-      const { data } = await supabase.from('user_profile_aggregated').select('*');
-      return (data || []).map(u => ({
-          id: u.id!,
-          email: u.email!,
-          full_name: u.full_name!,
-          role: (u.role as any) || 'user',
-          created_at: u.created_at!,
-          license_expiry: u.license_expiry || undefined,
-          allowed_modes: (u.allowed_modes as Mode[]) || [],
-          student_code: u.student_code || undefined
+      // Try view first
+      const { data, error } = await supabase.from('user_profile_aggregated').select('*');
+      
+      if (!error && data) {
+        return data.map(u => ({
+            id: u.id!,
+            email: u.email!,
+            full_name: u.full_name!,
+            role: (u.role as any) || 'user',
+            created_at: u.created_at!,
+            license_expiry: u.license_expiry || undefined,
+            allowed_modes: (u.allowed_modes as Mode[]) || [],
+            student_code: u.student_code || undefined
+        }));
+      }
+
+      // Fallback: Just return profiles (simplification for admin list if view fails)
+      const { data: profiles } = await supabase.from('profiles').select('*');
+      return (profiles || []).map(p => ({
+          id: p.id,
+          email: p.email || '',
+          full_name: p.full_name || '',
+          role: (p.role as any) || 'user',
+          created_at: p.created_at || new Date().toISOString(),
+          license_expiry: p.license_expiry || undefined,
+          allowed_modes: [], // Expensive to compute for all users in fallback
+          student_code: p.student_code || undefined
       }));
   },
 

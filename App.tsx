@@ -22,17 +22,18 @@ import AdminContestPage from './pages/AdminContestPage';
 const AuthCallbackHandler: React.FC = () => {
     const navigate = useNavigate();
     useEffect(() => {
-        // Check if the hash contains Supabase auth tokens
         const hash = window.location.hash;
-        // Supabase puts access_token, refresh_token, etc. in the hash for OAuth/MagicLink/Recovery
         const isAuthCallback = hash.includes('access_token') || hash.includes('type=recovery') || hash.includes('error_description');
 
+        if (hash.includes('type=recovery')) {
+             // Actively redirect to reset password page if recovery type is detected
+             navigate('/auth/resetpass', { replace: true });
+             return;
+        }
+
         if (!isAuthCallback) {
-            // If not an auth callback and no route matched, redirect to home
             navigate('/', { replace: true });
         }
-        // If it IS an auth callback, we stay here rendering "Processing..."
-        // The onAuthStateChange listener in AppContent will handle the event and navigation.
     }, [navigate]);
 
     return (
@@ -50,10 +51,14 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-        // Initial check: if we are already logged in from persistence
-        const u = await backend.getCurrentUser();
-        setUser(u);
-        setLoading(false);
+        try {
+            const u = await backend.getCurrentUser();
+            setUser(u);
+        } catch (error) {
+            console.error("Auth initialization failed:", error);
+        } finally {
+            setLoading(false);
+        }
     };
     initAuth();
 
@@ -61,7 +66,6 @@ const AppContent: React.FC = () => {
         console.log("Auth Event:", event);
         
         if (event === 'PASSWORD_RECOVERY') {
-             // Priority: Recovery event
              navigate('/auth/resetpass', { replace: true });
              return;
         }
@@ -70,8 +74,6 @@ const AppContent: React.FC = () => {
              const u = await backend.fetchProfile(session.user.id);
              setUser(u);
 
-             // Fallback: Check hash for recovery param if event was just SIGNED_IN
-             // This covers cases where PASSWORD_RECOVERY might be swallowed or ordered differently
              const hash = window.location.hash;
              if (hash && hash.includes('type=recovery')) {
                 navigate('/auth/resetpass', { replace: true });
