@@ -63,7 +63,7 @@ const App: React.FC = () => {
                 <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
                 
                 {/* Contest Routes */}
-                <Route path="/contests" element={user ? <ContestListPage /> : <Navigate to="/login" />} />
+                <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />
                 <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
                 <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
 

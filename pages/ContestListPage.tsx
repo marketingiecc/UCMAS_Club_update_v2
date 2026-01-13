@@ -2,24 +2,40 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
-import { Contest } from '../types';
+import { Contest, ContestRegistration, UserProfile } from '../types';
 
-const ContestListPage: React.FC = () => {
+interface ContestListPageProps {
+  user: UserProfile;
+}
+
+const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   const navigate = useNavigate();
   const [contests, setContests] = useState<Contest[]>([]);
+  const [registrations, setRegistrations] = useState<ContestRegistration[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    backend.getPublishedContests().then(data => {
-        setContests(data);
+    // Tải các cuộc thi đã công bố và danh sách đăng ký của user
+    Promise.all([
+        backend.getPublishedContests(),
+        backend.getMyRegistrations(user.id)
+    ]).then(([contestData, regData]) => {
+        setContests(contestData);
+        setRegistrations(regData);
         setLoading(false);
     });
-  }, []);
+  }, [user.id]);
 
   const handleRegister = async (contestId: string, e: React.MouseEvent) => {
       e.stopPropagation();
       const res = await backend.registerForContest(contestId);
-      alert(res.message);
+      if (res.ok) {
+          // Refresh registrations to update UI
+          const newRegs = await backend.getMyRegistrations(user.id);
+          setRegistrations(newRegs);
+      } else {
+          alert(res.message);
+      }
   };
 
   return (
@@ -38,31 +54,76 @@ const ContestListPage: React.FC = () => {
           </div>
       ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {contests.map(c => (
-                  <div key={c.id} onClick={() => navigate(`/contests/${c.id}`)} className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-all cursor-pointer relative group">
-                      <div className={`absolute top-6 right-6 text-[10px] font-black uppercase px-3 py-1 rounded-full ${c.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {c.status === 'open' ? 'Đang mở' : 'Đã kết thúc'}
-                      </div>
-                      <h3 className="text-2xl font-black text-gray-800 mb-2 leading-tight pr-12">{c.name}</h3>
-                      <p className="text-sm text-gray-400 font-medium mb-6">📅 {new Date(c.start_at).toLocaleString('vi-VN')}</p>
-                      
-                      <div className="flex gap-2 mb-8">
-                          {c.enable_nhin_tinh && <span className="bg-blue-50 text-ucmas-blue text-[10px] font-black px-2 py-1 rounded uppercase">Nhìn Tính</span>}
-                          {c.enable_nghe_tinh && <span className="bg-red-50 text-ucmas-red text-[10px] font-black px-2 py-1 rounded uppercase">Nghe Tính</span>}
-                          {c.enable_flash && <span className="bg-green-50 text-ucmas-green text-[10px] font-black px-2 py-1 rounded uppercase">Flash</span>}
-                      </div>
+              {contests.map(c => {
+                  const dbStatus = String(c.status || 'draft').toLowerCase().trim();
+                  const uiStatus = dbStatus === 'published' ? 'open' : dbStatus === 'archived' ? 'closed' : 'draft';
+                  
+                  // Check user registration status
+                  const myReg = registrations.find(r => r.contest_id === c.id);
+                  const isRegistered = !!myReg;
+                  const isApproved = myReg?.is_approved;
 
-                      {c.status === 'open' && (
-                        <div className="flex gap-2">
-                           <button onClick={(e) => handleRegister(c.id, e)} className="flex-1 py-3 bg-gray-800 text-white font-black text-xs rounded-xl uppercase hover:bg-black transition">Đăng ký ngay</button>
-                           <button className="px-6 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase hover:bg-blue-700 transition shadow-lg">Vào thi ➜</button>
+                  return (
+                    <div key={c.id} onClick={() => { if(isApproved) navigate(`/contests/${c.id}`); }} className={`bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-all relative group ${isApproved ? 'cursor-pointer' : 'cursor-default'}`}>
+                        <div className={`absolute top-6 right-6 text-[10px] font-black uppercase px-3 py-1 rounded-full ${uiStatus === 'open' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {uiStatus === 'open' ? 'Đang mở' : 'Đã kết thúc'}
                         </div>
-                      )}
-                      {c.status === 'closed' && (
-                          <div className="w-full py-3 bg-gray-100 text-gray-400 text-center font-black text-xs rounded-xl uppercase">Cuộc thi đã kết thúc</div>
-                      )}
-                  </div>
-              ))}
+                        <h3 className="text-2xl font-black text-gray-800 mb-2 leading-tight pr-12">{c.name}</h3>
+                        <p className="text-sm text-gray-400 font-medium mb-6">📅 {new Date(c.start_at).toLocaleString('vi-VN')}</p>
+                        
+                        <div className="flex gap-2 mb-8">
+                            {c.enable_nhin_tinh && <span className="bg-blue-50 text-ucmas-blue text-[10px] font-black px-2 py-1 rounded uppercase">Nhìn Tính</span>}
+                            {c.enable_nghe_tinh && <span className="bg-red-50 text-ucmas-red text-[10px] font-black px-2 py-1 rounded uppercase">Nghe Tính</span>}
+                            {c.enable_flash && <span className="bg-green-50 text-ucmas-green text-[10px] font-black px-2 py-1 rounded uppercase">Flash</span>}
+                        </div>
+
+                        {uiStatus === 'open' && (
+                          <div className="flex gap-2 mt-auto">
+                             {/* State 1: Not Registered - RED Button */}
+                             {!isRegistered && (
+                                 <button 
+                                    onClick={(e) => handleRegister(c.id, e)} 
+                                    className="flex-1 py-3 bg-ucmas-red text-white font-black text-xs rounded-xl uppercase hover:bg-red-700 transition shadow-md"
+                                 >
+                                    ĐĂNG KÝ NGAY
+                                 </button>
+                             )}
+
+                             {/* State 2: Registered but Pending - GREEN Button */}
+                             {isRegistered && !isApproved && (
+                                 <button 
+                                    disabled 
+                                    className="flex-1 py-3 bg-ucmas-green text-white font-black text-xs rounded-xl uppercase cursor-default opacity-90 shadow-md"
+                                 >
+                                    CHỜ KÍCH HOẠT
+                                 </button>
+                             )}
+
+                             {/* State 3: Approved - BLUE Button + Enter Button */}
+                             {isRegistered && isApproved && (
+                                 <>
+                                    <button 
+                                        disabled 
+                                        className="flex-1 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase cursor-default opacity-90 shadow-md"
+                                    >
+                                        ĐÃ KÍCH HOẠT
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/contests/${c.id}`); }}
+                                        className="px-6 py-3 bg-ucmas-blue text-white font-black text-xs rounded-xl uppercase hover:bg-blue-700 transition shadow-lg border-l border-blue-400"
+                                    >
+                                        VÀO THI ➜
+                                    </button>
+                                 </>
+                             )}
+                          </div>
+                        )}
+                        {uiStatus === 'closed' && (
+                            <div className="w-full py-3 bg-gray-100 text-gray-400 text-center font-black text-xs rounded-xl uppercase">Cuộc thi đã kết thúc</div>
+                        )}
+                    </div>
+                  );
+              })}
           </div>
       )}
     </div>

@@ -28,7 +28,20 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
   // Flash/Audio State
   const [flashNumber, setFlashNumber] = useState<number | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  
   const timerRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+      // Cleanup audio on unmount
+      return () => {
+          if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current = null;
+          }
+      };
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -103,32 +116,83 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
     return () => { if(timerRef.current) clearInterval(timerRef.current); };
   }, [status]);
 
-  // Flash Logic (If Mode is Flash)
+  // Auto Run Sequences based on Mode
   useEffect(() => {
-      if (status === 'running' && currentMode === Mode.FLASH && questions.length > 0) {
-          runFlashSequence(currentQIndex);
+      if (status === 'running' && questions.length > 0) {
+          if (currentMode === Mode.FLASH) {
+              runFlashSequence(currentQIndex);
+          } else if (currentMode === Mode.LISTENING) {
+              playAudioSequence(currentQIndex);
+          }
       }
   }, [currentQIndex, status]);
 
   const runFlashSequence = async (qIndex: number) => {
       setIsFlashing(true);
       const q = questions[qIndex];
-      // Default speed 1s or from config
-      const speed = 1000; 
+      
+      // Get display speed from specific column OR config OR fallback
+      const displaySpeed = exam?.display_seconds_per_number || exam?.config?.display_speed || 1.0;
+      const interval = displaySpeed * 1000; 
       
       await new Promise(r => setTimeout(r, 500));
       for (const num of q.operands) {
           setFlashNumber(num);
-          await new Promise(r => setTimeout(r, speed));
+          await new Promise(r => setTimeout(r, interval));
           setFlashNumber(null);
           await new Promise(r => setTimeout(r, 200));
       }
       setIsFlashing(false);
   };
 
+  const getSpeechRate = (secondsPerItem: number) => {
+      // Calculate rate for TTS to match the approximate desired duration per number.
+      // Normal speech (rate 1.0) roughly takes 0.6-0.9s per short number in VN.
+      // We adjust rate: Higher secondsPerItem -> Slower rate.
+      
+      // Base assumption: rate 1.0 ~= 0.8s per number
+      // rate = 0.8 / secondsPerItem
+      const rate = 0.9 / secondsPerItem;
+      return Math.min(Math.max(rate, 0.5), 2.5); // Clamp between 0.5x and 2.5x
+  };
+
+  const playAudioSequence = (qIndex: number) => {
+      setIsPlayingAudio(true);
+      if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+      }
+
+      const q = questions[qIndex];
+      
+      // Get read speed from specific column OR config OR fallback
+      const readSpeed = exam?.read_seconds_per_number || exam?.config?.read_speed || 2.0;
+      
+      const text = q.operands.join(', ');
+      // Default to Vietnamese for contests
+      const lang = 'vi'; 
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(text)}`;
+      
+      const audio = new Audio(url);
+      audio.playbackRate = getSpeechRate(readSpeed);
+      
+      audio.onended = () => setIsPlayingAudio(false);
+      audio.onerror = () => {
+          setIsPlayingAudio(false);
+          console.error("Audio error");
+      };
+
+      audioRef.current = audio;
+      audio.play().catch(e => {
+          console.error("Auto-play blocked", e);
+          setIsPlayingAudio(false);
+      });
+  };
+
   const submitExam = async (auto: boolean = false) => {
       if (status === 'submitted') return;
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioRef.current) audioRef.current.pause();
       
       setStatus('submitted');
       if (!session) return;
@@ -185,8 +249,18 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                 )}
                  {currentMode === Mode.LISTENING && (
                     <div className="text-center">
-                         <div className="text-8xl mb-4">🎧</div>
-                         <p className="text-gray-500">Nghe đọc số...</p>
+                         <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-6 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
+                             🎧
+                         </div>
+                         <p className="text-gray-500 font-bold">{isPlayingAudio ? 'Đang đọc số...' : 'Đã đọc xong'}</p>
+                         {!isPlayingAudio && (
+                             <button 
+                                onClick={() => playAudioSequence(currentQIndex)}
+                                className="mt-4 text-xs font-bold text-ucmas-blue underline"
+                             >
+                                 Nghe lại (Nếu chưa rõ)
+                             </button>
+                         )}
                     </div>
                 )}
             </div>
@@ -201,12 +275,15 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                 <input 
                     type="number" 
                     autoFocus
-                    disabled={isFlashing}
+                    disabled={isFlashing} // Disable input while flashing
                     value={answers[currentQIndex] || ''}
                     onChange={e => setAnswers({...answers, [currentQIndex]: e.target.value})}
                     onKeyDown={e => {
                         if (e.key === 'Enter') {
-                            if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1);
+                            if (currentQIndex < questions.length - 1) {
+                                setCurrentQIndex(p => p+1);
+                                if (audioRef.current) audioRef.current.pause();
+                            }
                         }
                     }}
                     className="w-full text-center text-4xl font-bold p-4 border-2 border-ucmas-blue rounded-2xl mb-6 outline-none focus:ring-4 focus:ring-blue-100"
@@ -215,14 +292,20 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                 <div className="flex gap-2 mb-6">
                     <button 
                         disabled={currentQIndex === 0}
-                        onClick={() => setCurrentQIndex(p => p-1)}
+                        onClick={() => {
+                            setCurrentQIndex(p => p-1);
+                            if (audioRef.current) audioRef.current.pause();
+                        }}
                         className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200"
                     >
                         ← Trước
                     </button>
                     <button 
                         disabled={currentQIndex === questions.length - 1}
-                        onClick={() => setCurrentQIndex(p => p+1)}
+                        onClick={() => {
+                            setCurrentQIndex(p => p+1);
+                            if (audioRef.current) audioRef.current.pause();
+                        }}
                         className="flex-1 py-3 bg-ucmas-blue text-white rounded-xl font-bold hover:bg-blue-700"
                     >
                         Sau →
@@ -234,7 +317,10 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                         {questions.map((_, i) => (
                             <div 
                                 key={i} 
-                                onClick={() => setCurrentQIndex(i)}
+                                onClick={() => {
+                                    setCurrentQIndex(i);
+                                    if (audioRef.current) audioRef.current.pause();
+                                }}
                                 className={`h-8 rounded flex items-center justify-center text-xs font-bold cursor-pointer ${
                                     currentQIndex === i ? 'bg-ucmas-blue text-white' : 
                                     answers[i] ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'

@@ -33,7 +33,7 @@ export interface Contest {
   enable_nhin_tinh: boolean;
   enable_nghe_tinh: boolean;
   enable_flash: boolean;
-  status: 'draft' | 'open' | 'closed';
+  status: 'draft' | 'published' | 'archived'; // Updated based on DB constraints
   created_by?: string;
   created_at?: string;
 }
@@ -63,7 +63,16 @@ export interface ContestExam {
   exam_name: string;
   time_limit_seconds?: number | null;
   questions: Question[];
-  config?: any;
+  // New specific speed columns from DB
+  read_seconds_per_number?: number;
+  display_seconds_per_number?: number;
+  
+  config?: {
+      speed?: number; // Legacy generic speed
+      display_speed?: number; // Seconds per item (Flash)
+      read_speed?: number;    // Seconds per item (Listening)
+      [key: string]: any;
+  };
 }
 
 export interface ContestAccessCode {

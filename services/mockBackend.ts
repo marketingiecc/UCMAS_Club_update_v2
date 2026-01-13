@@ -65,14 +65,12 @@ class BackendService {
     return this._ensureAndFetchProfile(session.user.id, session.user.email || '');
   }
 
-  // Added missing fetchProfile for AdminLoginPage
   async fetchProfile(userId: string): Promise<UserProfile | null> {
     const { data: profileData } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (!profileData) return null;
     return this._ensureAndFetchProfile(userId, profileData.email || '');
   }
 
-  // Added missing registerAdmin for AdminLoginPage
   async registerAdmin(email: string, password: string, fullName: string): Promise<{ user: UserProfile | null; error: string | null }> {
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName, role: 'admin' } } });
     if (error) return { user: null, error: error.message };
@@ -93,7 +91,6 @@ class BackendService {
     } catch (e: any) { return { success: false, message: e.message }; }
   }
 
-  // Added missing adminActivateUser for AdminPage
   async adminActivateUser(userId: string, months: number): Promise<{ success: boolean; error?: string; expiresAt?: string }> {
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + months);
@@ -122,13 +119,11 @@ class BackendService {
     await supabase.from('answers').insert(answersData);
   }
 
-  // Added missing getUserHistory for HistoryPage
   async getUserHistory(userId: string): Promise<AttemptResult[]> {
     const { data } = await supabase.from('attempts').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     return (data || []) as AttemptResult[];
   }
 
-  // Added missing getAttemptAnswers for HistoryPage
   async getAttemptAnswers(attemptId: string): Promise<Record<number, string>> {
     const { data } = await supabase.from('answers').select('*').eq('attempt_id', attemptId);
     const result: Record<number, string> = {};
@@ -152,8 +147,26 @@ class BackendService {
       return { data: data as Contest, error: error?.message || null };
   }
 
-  async uploadContestExam(contestId: string, mode: Mode, questions: any[]): Promise<{ success: boolean, error?: string }> {
-      const { error } = await supabase.from('contest_exams').upsert({ contest_id: contestId, mode: mode, questions }, { onConflict: 'contest_id, mode' });
+  async uploadContestExam(contestId: string, mode: Mode, questions: any[], config: any = {}): Promise<{ success: boolean, error?: string }> {
+      const payload: any = { 
+          contest_id: contestId, 
+          mode: mode, 
+          questions: questions,
+          config: config,
+          exam_name: config.name || `Đề ${mode} (${questions.length} câu)`
+      };
+
+      if (mode === Mode.FLASH) {
+          payload.display_seconds_per_number = config.display_speed;
+          if(!payload.config.display_speed) payload.config.display_speed = 1.0; 
+      }
+      
+      if (mode === Mode.LISTENING) {
+          payload.read_seconds_per_number = config.read_speed;
+          if(!payload.config.read_speed) payload.config.read_speed = 2.0;
+      }
+
+      const { error } = await supabase.from('contest_exams').upsert(payload, { onConflict: 'contest_id, mode' });
       return { success: !error, error: error?.message };
   }
 
@@ -167,12 +180,12 @@ class BackendService {
   }
   
   async getContestCodes(contestId: string): Promise<ContestAccessCode[]> {
-      const { data } = await supabase.from('contest_access_codes').select('*').eq('contest_id', contestId);
+      const { data } = await supabase.from('contest_access_codes').select('*').eq('contest_id', contestId).order('created_at', { ascending: false });
       return (data || []) as ContestAccessCode[];
   }
 
   async getPublishedContests(): Promise<Contest[]> {
-      const { data } = await supabase.from('contests').select('*').in('status', ['open', 'closed']).order('start_at', { ascending: true });
+      const { data } = await supabase.from('contests').select('*').in('status', ['published', 'archived']).order('start_at', { ascending: true });
       return (data || []) as Contest[];
   }
 
@@ -189,6 +202,11 @@ class BackendService {
 
   async getContestRegistrations(contestId: string): Promise<ContestRegistration[]> {
       const { data } = await supabase.from('contest_registrations').select('*').eq('contest_id', contestId).order('registered_at', { ascending: false });
+      return (data || []) as ContestRegistration[];
+  }
+
+  async getMyRegistrations(userId: string): Promise<ContestRegistration[]> {
+      const { data } = await supabase.from('contest_registrations').select('*').eq('user_id', userId);
       return (data || []) as ContestRegistration[];
   }
 
@@ -240,13 +258,11 @@ class BackendService {
     return data as DBExamRule;
   }
 
-  // Added missing getExamRuleHistory for AdminPage
   async getExamRuleHistory(mode: Mode): Promise<DBExamRule[]> {
     const { data } = await supabase.from('exam_rules').select('*').eq('mode', mode).order('created_at', { ascending: false });
     return (data || []) as DBExamRule[];
   }
 
-  // Added missing saveExamRule for AdminPage
   async saveExamRule(mode: Mode, rulesJson: any): Promise<{ success: boolean; error?: string }> {
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from('exam_rules').insert({
@@ -267,7 +283,6 @@ class BackendService {
       return (data || []) as CustomExam[];
   }
 
-  // Added missing uploadCustomExam for AdminPage
   async uploadCustomExam(examData: Partial<CustomExam>): Promise<{ success: boolean; error?: string }> {
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from('custom_exams').insert({
@@ -279,7 +294,6 @@ class BackendService {
     return { success: true };
   }
 
-  // Added missing deleteCustomExam for AdminPage
   async deleteCustomExam(id: string): Promise<{ success: boolean }> {
     const { error } = await supabase.from('custom_exams').delete().eq('id', id);
     return { success: !error };
