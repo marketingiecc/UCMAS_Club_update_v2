@@ -36,24 +36,32 @@ export const backend = {
   },
 
   login: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    if (data.user) {
-        const profile = await backend.fetchProfile(data.user.id);
-        return { user: profile };
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return { error: error.message };
+        if (data.user) {
+            const profile = await backend.fetchProfile(data.user.id);
+            return { user: profile };
+        }
+        return { error: 'Login failed' };
+    } catch (e) {
+        return { error: 'Lỗi kết nối đến server.' };
     }
-    return { error: 'Login failed' };
   },
 
   register: async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: { data: { full_name: fullName } }
-    });
-    if (error) return { error: error.message };
-    // ensure_profile trigger should handle profile creation in DB
-    return { user: data.user };
+    try {
+        const { data, error } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: { data: { full_name: fullName } }
+        });
+        if (error) return { error: error.message };
+        // ensure_profile trigger should handle profile creation in DB
+        return { user: data.user };
+    } catch (e) {
+        return { error: 'Lỗi kết nối đến server.' };
+    }
   },
 
   registerAdmin: async (email: string, password: string, fullName: string) => {
@@ -64,21 +72,33 @@ export const backend = {
   },
 
   sendPasswordResetEmail: async (email: string) => {
-    // Supabase sẽ tự động gắn token vào fragment (#access_token=...).
-    // Client Supabase sẽ bắt fragment này và bắn sự kiện PASSWORD_RECOVERY trong App.tsx.
-    // Không gắn path (/#/auth/update-password) vào đây để tránh lỗi 404 hoặc double hash.
+    // Mock behavior for demo/placeholder environment to avoid "Failed to fetch"
+    if (supabaseUrl.includes('placeholder')) {
+        await new Promise(resolve => setTimeout(resolve, 800)); // Simulate network delay
+        return { success: true, message: '(Demo) Link khôi phục đã được gửi vào email.' };
+    }
+
     const redirectTo = window.location.origin; // Chỉ dùng origin, App.tsx sẽ handle routing
       
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-    if (error) return { success: false, message: error.message };
-    return { success: true, message: 'Link khôi phục đã được gửi vào email của bạn.' };
+    try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) return { success: false, message: error.message };
+        return { success: true, message: 'Link khôi phục đã được gửi vào email của bạn.' };
+    } catch (e: any) {
+        // Handle network errors gracefully
+        return { success: false, message: 'Lỗi kết nối: ' + (e.message || 'Không thể gửi yêu cầu.') };
+    }
   },
 
   // Users & Profiles
   getCurrentUser: async (): Promise<UserProfile | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return null;
-    return await backend.fetchProfile(session.user.id);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return null;
+        return await backend.fetchProfile(session.user.id);
+    } catch (e) {
+        return null;
+    }
   },
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
