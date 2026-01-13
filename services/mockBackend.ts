@@ -45,7 +45,7 @@ export const backend = {
         }
         return { error: 'Login failed' };
     } catch (e) {
-        return { error: 'Lỗi kết nối đến server.' };
+        return { error: 'Lỗi kết nối đến server. Vui lòng kiểm tra mạng.' };
     }
   },
 
@@ -73,20 +73,40 @@ export const backend = {
 
   sendPasswordResetEmail: async (email: string) => {
     // Mock behavior for demo/placeholder environment to avoid "Failed to fetch"
-    if (supabaseUrl.includes('placeholder')) {
-        await new Promise(resolve => setTimeout(resolve, 800)); // Simulate network delay
-        return { success: true, message: '(Demo) Link khôi phục đã được gửi vào email.' };
+    const isDemo = supabaseUrl.includes('placeholder');
+    if (isDemo) {
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+        return { 
+            success: true, 
+            message: '(Demo) Giả lập: Đang chuyển đến trang đặt mật khẩu...',
+            isDemo: true 
+        };
     }
 
-    const redirectTo = window.location.origin; // Chỉ dùng origin, App.tsx sẽ handle routing
+    const redirectTo = window.location.origin + '/#/auth/resetpass'; 
       
     try {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
         if (error) return { success: false, message: error.message };
         return { success: true, message: 'Link khôi phục đã được gửi vào email của bạn.' };
     } catch (e: any) {
-        // Handle network errors gracefully
         return { success: false, message: 'Lỗi kết nối: ' + (e.message || 'Không thể gửi yêu cầu.') };
+    }
+  },
+
+  updateUserPassword: async (password: string) => {
+    // Mock behavior for demo
+    if (supabaseUrl.includes('placeholder')) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return { success: true, message: 'Cập nhật thành công (Demo)' };
+    }
+
+    try {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) return { success: false, message: error.message };
+        return { success: true };
+    } catch (e: any) {
+         return { success: false, message: 'Lỗi kết nối: ' + e.message };
     }
   },
 

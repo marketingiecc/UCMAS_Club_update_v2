@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/mockBackend';
+import { backend } from '../services/mockBackend';
 
 const UpdatePasswordPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,15 +14,15 @@ const UpdatePasswordPage: React.FC = () => {
     setLoading(true);
     setMessage(null);
 
-    const { error } = await supabase.auth.updateUser({ password });
+    const { success, message } = await backend.updateUserPassword(password);
 
-    if (!error) {
+    if (success) {
         setMessage({ type: 'success', text: 'Đổi mật khẩu thành công! Đang chuyển hướng...' });
         setTimeout(() => {
             navigate('/login');
         }, 2000);
     } else {
-        setMessage({ type: 'error', text: error.message });
+        setMessage({ type: 'error', text: message || 'Đã có lỗi xảy ra.' });
         setLoading(false);
     }
   };

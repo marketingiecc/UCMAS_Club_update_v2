@@ -74,11 +74,16 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
 
     try {
       if (mode === 'forgot') {
-          const res = await backend.sendPasswordResetEmail(email);
+          const res: any = await backend.sendPasswordResetEmail(email);
           setNotification({ 
               type: res.success ? 'success' : 'error', 
               message: res.message 
           });
+          
+          if (res.success && res.isDemo) {
+             setTimeout(() => navigate('/auth/resetpass'), 2000);
+          }
+          
           setLoading(false);
           return;
       }
