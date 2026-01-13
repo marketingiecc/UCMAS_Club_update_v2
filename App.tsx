@@ -50,6 +50,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
+        // Initial check: if we are already logged in from persistence
         const u = await backend.getCurrentUser();
         setUser(u);
         setLoading(false);
@@ -58,15 +59,26 @@ const AppContent: React.FC = () => {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log("Auth Event:", event);
+        
+        if (event === 'PASSWORD_RECOVERY') {
+             // Priority: Recovery event
+             navigate('/auth/resetpass', { replace: true });
+             return;
+        }
+
         if (event === 'SIGNED_IN' && session?.user) {
              const u = await backend.fetchProfile(session.user.id);
              setUser(u);
+
+             // Fallback: Check hash for recovery param if event was just SIGNED_IN
+             // This covers cases where PASSWORD_RECOVERY might be swallowed or ordered differently
+             const hash = window.location.hash;
+             if (hash && hash.includes('type=recovery')) {
+                navigate('/auth/resetpass', { replace: true });
+             }
         } else if (event === 'SIGNED_OUT') {
              setUser(null);
              navigate('/login');
-        } else if (event === 'PASSWORD_RECOVERY') {
-             // Handle password recovery event by redirecting to reset page
-             navigate('/auth/resetpass', { replace: true });
         }
     });
 
