@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
@@ -20,9 +21,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       digits: 1,
       operands: 5,
       speed: 1.0,
-      allowNegative: true,
-      count: 10,
-      hideTemp: false
+      count: 10
   });
 
   useEffect(() => {
@@ -140,7 +139,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                           
                           {/* ROWS SELECTION */}
                           <div className="space-y-4">
-                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ PHÉP TÍNH (ROWS)</label>
+                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ DÒNG (ROWS)</label>
                               <div className="grid grid-cols-6 gap-3">
                                   {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20].map(r => (
                                       <button 
@@ -167,14 +166,14 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                               </div>
                               <input 
                                 type="range" 
-                                min="5" max="50" step="1" 
+                                min="1" max="20" step="1" 
                                 value={practiceConfig.count} 
                                 onChange={e => setPracticeConfig({...practiceConfig, count: parseInt(e.target.value)})} 
                                 className="w-full accent-ucmas-blue cursor-pointer h-3 bg-gray-200 rounded-lg appearance-none" 
                               />
                               <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1">
-                                <span>5</span>
-                                <span>50</span>
+                                <span>1</span>
+                                <span>20</span>
                               </div>
                           </div>
 
@@ -198,17 +197,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                                   </div>
                               </div>
                           )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <button onClick={() => setPracticeConfig({...practiceConfig, allowNegative: !practiceConfig.allowNegative})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.allowNegative ? 'border-red-100 bg-red-50 text-red-700' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
-                              <span className="text-xs font-black uppercase">Số âm</span>
-                              <span className="text-lg">{practiceConfig.allowNegative ? '✅' : '❌'}</span>
-                          </button>
-                          <button onClick={() => setPracticeConfig({...practiceConfig, hideTemp: !practiceConfig.hideTemp})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.hideTemp ? 'border-blue-100 bg-blue-50 text-ucmas-blue' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
-                              <span className="text-xs font-black uppercase">Ẩn KQ tạm</span>
-                              <span className="text-lg">{practiceConfig.hideTemp ? '✅' : '❌'}</span>
-                          </button>
                       </div>
 
                       <button onClick={startCustomPractice} className="group w-full relative h-24 bg-gradient-to-br from-ucmas-red to-red-600 text-white rounded-[2rem] font-black text-2xl shadow-xl hover:shadow-2xl transition-all overflow-hidden active:scale-95">
