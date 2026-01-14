@@ -22,9 +22,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       operands: 5,
       speed: 1.0,
       allowNegative: true,
-      count: 10,
-      hideTempResult: false,
-      soundEffects: true
+      count: 10
   });
 
   useEffect(() => {
@@ -50,59 +48,10 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   };
 
   const startCustomPractice = () => {
-      // Chuyển sang trang làm bài thi (PracticeSession) với state cấu hình chi tiết
+      // Chuyển hướng đến trang luyện tập với các tham số tùy chỉnh qua state hoặc query
       navigate(`/practice/${practiceMode}`, { 
-          state: { customConfig: { 
-              ...practiceConfig,
-              level: 1, 
-              numQuestions: practiceConfig.count,
-              timeLimit: 300,
-              numOperandsRange: [practiceConfig.operands, practiceConfig.operands],
-              digitRange: [Math.pow(10, practiceConfig.digits - 1), Math.pow(10, practiceConfig.digits) - 1],
-              flashSpeed: practiceConfig.speed * 1000
-          } } 
+          state: { customConfig: practiceConfig } 
       });
-  };
-
-  const handleUploadPracticeExam = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-          try {
-              const json = JSON.parse(event.target?.result as string);
-              if (!json.questions || !Array.isArray(json.questions)) {
-                  throw new Error("File không đúng định dạng đề thi (thiếu questions).");
-              }
-              
-              let digits = 1, operands = 3;
-              if (json.code) {
-                  const match = json.code.match(/(\d+)D(\d+)R/);
-                  if (match) {
-                      digits = parseInt(match[1]);
-                      operands = parseInt(match[2]);
-                  }
-              }
-
-              navigate(`/practice/${practiceMode}`, { 
-                  state: { 
-                      preloadedQuestions: json.questions,
-                      customConfig: {
-                          mode: practiceMode,
-                          digits,
-                          operands,
-                          speed: json.speed || 1.0,
-                          numQuestions: json.questions.length,
-                          name: json.name || "Đề ôn tập đã tải lên"
-                      }
-                  } 
-              });
-          } catch (err: any) {
-              alert("Lỗi tải đề: " + err.message);
-          }
-      };
-      reader.readAsText(file);
   };
 
   return (
@@ -148,6 +97,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
           ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {contests.map(c => {
+                      const dbStatus = String(c.status || 'draft').toLowerCase().trim();
                       const myReg = registrations.find(r => r.contest_id === c.id);
                       const isApproved = myReg?.is_approved;
 
@@ -190,24 +140,18 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
 
       {/* Tab: Luyện thi (Custom Design) */}
       {activeTab === 'practice' && (
-          <div className="max-w-5xl mx-auto animate-fade-in">
+          <div className="max-w-4xl mx-auto animate-fade-in">
               <div className="bg-white rounded-[3rem] shadow-xl border border-gray-100 overflow-hidden">
-                  <div className="bg-slate-700/10 p-8 flex justify-between items-center border-b border-gray-100">
-                      <div>
-                        <h2 className="text-3xl font-black text-gray-800 uppercase tracking-tight">SÁNG TẠO ĐỀ THI RIÊNG</h2>
-                        <p className="text-gray-400 text-sm mt-1 font-medium">Tự do thiết lập các thông số để vượt qua giới hạn của bản thân.</p>
-                      </div>
-                      <label className="bg-gray-100 hover:bg-gray-200 px-6 py-3 rounded-2xl text-xs font-black text-gray-700 cursor-pointer transition border border-gray-200 flex items-center gap-2 shadow-sm">
-                        📂 Tải đề ôn thi
-                        <input type="file" accept=".json" className="hidden" onChange={handleUploadPracticeExam} />
-                      </label>
+                  <div className="bg-ucmas-blue p-8 text-white">
+                      <h2 className="text-2xl font-black uppercase tracking-tight">Sáng tạo đề thi riêng</h2>
+                      <p className="text-blue-200 text-sm mt-1">Tự do thiết lập các thông số để vượt qua giới hạn của bản thân.</p>
                   </div>
                   
-                  <div className="p-10 grid lg:grid-cols-2 gap-12">
-                      <div className="space-y-8">
+                  <div className="p-10 grid md:grid-cols-2 gap-10">
+                      <div className="space-y-6">
                           <div>
-                              <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4">PHẦN THI LUYỆN TẬP (CHỈ CHỌN 1)</label>
-                              <div className="grid grid-cols-3 gap-3">
+                              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Phần thi luyện tập</label>
+                              <div className="grid grid-cols-3 gap-2">
                                   {[
                                       { id: Mode.VISUAL, label: 'Nhìn', icon: '👁️' },
                                       { id: Mode.LISTENING, label: 'Nghe', icon: '🎧' },
@@ -216,122 +160,103 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                                       <button 
                                           key={m.id}
                                           onClick={() => setPracticeMode(m.id)}
-                                          className={`p-5 rounded-3xl border-2 flex flex-col items-center gap-2 transition-all ${practiceMode === m.id ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-md scale-[1.05]' : 'border-gray-50 text-gray-400 hover:border-gray-200 bg-gray-50/30'}`}
+                                          className={`p-3 rounded-2xl border-2 flex flex-col items-center gap-1 transition ${practiceMode === m.id ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue' : 'border-gray-50 text-gray-400 hover:border-gray-200'}`}
                                       >
-                                          <span className="text-3xl">{m.icon}</span>
-                                          <span className="text-xs font-black uppercase tracking-wider">{m.label}</span>
+                                          <span className="text-xl">{m.icon}</span>
+                                          <span className="text-xs font-bold">{m.label}</span>
                                       </button>
                                   ))}
                               </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-6">
+                          <div className="grid grid-cols-2 gap-4">
                               <div>
-                                  <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3">SỐ CHỮ SỐ (DIGITS)</label>
+                                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Số chữ số (Digits)</label>
                                   <select 
                                       value={practiceConfig.digits}
                                       onChange={e => setPracticeConfig({...practiceConfig, digits: parseInt(e.target.value)})}
-                                      className="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl font-black text-gray-700 focus:outline-none focus:border-ucmas-blue transition appearance-none cursor-pointer"
+                                      className="w-full bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold focus:outline-none focus:ring-2 focus:ring-ucmas-blue transition"
                                   >
-                                      {Array.from({length: 10}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d} chữ số</option>)}
+                                      {[1, 2, 3, 4].map(d => <option key={d} value={d}>{d} chữ số</option>)}
                                   </select>
                               </div>
                               <div>
-                                  <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3">SỐ PHÉP TÍNH (STEPS)</label>
+                                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Số phép tính (Steps)</label>
                                   <select 
                                       value={practiceConfig.operands}
                                       onChange={e => setPracticeConfig({...practiceConfig, operands: parseInt(e.target.value)})}
-                                      className="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl font-black text-gray-700 focus:outline-none focus:border-ucmas-blue transition appearance-none cursor-pointer"
+                                      className="w-full bg-gray-50 border border-gray-100 p-3 rounded-xl font-bold focus:outline-none focus:ring-2 focus:ring-ucmas-blue transition"
                                   >
-                                      {Array.from({length: 50}, (_, i) => i + 1).map(s => <option key={s} value={s}>{s} dòng</option>)}
+                                      {[3, 5, 7, 10, 15, 20].map(s => <option key={s} value={s}>{s} dòng</option>)}
                                   </select>
                               </div>
                           </div>
 
-                          <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
-                              <div className="flex justify-between items-center mb-6">
-                                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest">SỐ LƯỢNG CÂU HỎI</label>
-                                <span className="text-sm font-black text-ucmas-blue bg-white border border-blue-100 px-4 py-1.5 rounded-xl shadow-sm">{practiceConfig.count} câu</span>
-                              </div>
-                              <input 
-                                  type="range" min="1" max="50" step="1" 
-                                  value={practiceConfig.count}
-                                  onChange={e => setPracticeConfig({...practiceConfig, count: parseInt(e.target.value)})}
-                                  className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-ucmas-blue"
-                              />
-                              <div className="flex justify-between text-[10px] text-gray-400 font-black mt-3 uppercase tracking-tighter">
-                                <span>1 CÂU</span>
-                                <span>50 CÂU</span>
+                          <div>
+                              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Số lượng câu hỏi</label>
+                              <div className="flex gap-2">
+                                  {[10, 20, 50, 100].map(c => (
+                                      <button 
+                                          key={c}
+                                          onClick={() => setPracticeConfig({...practiceConfig, count: c})}
+                                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${practiceConfig.count === c ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                      >
+                                          {c} câu
+                                      </button>
+                                  ))}
                               </div>
                           </div>
                       </div>
 
-                      <div className="space-y-8">
+                      <div className="space-y-6">
                           <div>
-                              <div className="flex justify-between items-center mb-6">
-                                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">TỐC ĐỘ HIỂN THỊ (GIÂY/SỐ)</label>
-                                  <span className="text-sm font-black text-ucmas-blue bg-white border border-blue-100 px-4 py-1.5 rounded-xl shadow-sm">{practiceConfig.speed}s</span>
+                              <div className="flex justify-between items-center mb-2">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tốc độ (Giây/Số)</label>
+                                  <span className="text-xs font-black text-ucmas-blue bg-blue-50 px-2 py-1 rounded">{practiceConfig.speed}s</span>
                               </div>
-                              <div className="p-8 bg-gray-50/50 rounded-[2rem] border border-gray-100">
-                                <input 
-                                    type="range" min="0.2" max="3.0" step="0.1" 
-                                    value={practiceConfig.speed}
-                                    onChange={e => setPracticeConfig({...practiceConfig, speed: parseFloat(e.target.value)})}
-                                    className="w-full h-3 bg-white rounded-lg appearance-none cursor-pointer accent-ucmas-blue shadow-inner border border-gray-100"
-                                />
-                                <div className="flex justify-between text-[10px] text-gray-400 font-black mt-4 uppercase tracking-tighter">
-                                    <span>NHANH (0.2S)</span>
-                                    <span className="text-gray-300">TRUNG BÌNH (1.5S)</span>
-                                    <span>CHẬM (3.0S)</span>
-                                </div>
-                              </div>
+                              <input 
+                                  type="range" min="0.2" max="3.0" step="0.1" 
+                                  value={practiceConfig.speed}
+                                  onChange={e => setPracticeConfig({...practiceConfig, speed: parseFloat(e.target.value)})}
+                                  className="w-full accent-ucmas-blue"
+                              />
                           </div>
 
-                          <div className="bg-gray-50/50 p-8 rounded-[2rem] border border-gray-100 space-y-5">
+                          <div className="bg-gray-50 p-6 rounded-3xl space-y-4">
                               <label className="flex items-center justify-between cursor-pointer group">
                                   <span className="text-sm font-bold text-gray-600 group-hover:text-gray-900 transition">Bao gồm số âm (Trừ)</span>
                                   <input 
                                       type="checkbox" 
                                       checked={practiceConfig.allowNegative}
                                       onChange={e => setPracticeConfig({...practiceConfig, allowNegative: e.target.checked})}
-                                      className="w-6 h-6 accent-ucmas-red rounded-lg cursor-pointer"
+                                      className="w-5 h-5 accent-ucmas-red"
                                   />
                               </label>
                               <label className="flex items-center justify-between cursor-pointer group">
                                   <span className="text-sm font-bold text-gray-600 group-hover:text-gray-900 transition">Ẩn kết quả tạm thời</span>
-                                  <input 
-                                      type="checkbox" 
-                                      checked={practiceConfig.hideTempResult}
-                                      onChange={e => setPracticeConfig({...practiceConfig, hideTempResult: e.target.checked})}
-                                      className="w-6 h-6 accent-ucmas-blue rounded-lg cursor-pointer" 
-                                  />
+                                  <input type="checkbox" className="w-5 h-5 accent-ucmas-red" />
                               </label>
                               <label className="flex items-center justify-between cursor-pointer group">
                                   <span className="text-sm font-bold text-gray-600 group-hover:text-gray-900 transition">Âm thanh hiệu ứng</span>
-                                  <input 
-                                      type="checkbox" 
-                                      checked={practiceConfig.soundEffects}
-                                      onChange={e => setPracticeConfig({...practiceConfig, soundEffects: e.target.checked})}
-                                      className="w-6 h-6 accent-ucmas-green rounded-lg cursor-pointer" 
-                                  />
+                                  <input type="checkbox" defaultChecked className="w-5 h-5 accent-ucmas-red" />
                               </label>
                           </div>
 
                           <button 
                               onClick={startCustomPractice}
-                              className="w-full bg-gradient-to-r from-ucmas-red to-red-600 text-white py-6 rounded-[2rem] font-black text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all uppercase tracking-widest active:scale-[0.98] mt-4"
+                              className="w-full bg-ucmas-red text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all uppercase tracking-widest active:scale-95"
                           >
-                              BẮT ĐẦU LUYỆN THI 🚀
+                              Bắt đầu luyện thi 🚀
                           </button>
                       </div>
                   </div>
               </div>
 
-              <div className="mt-10 bg-blue-50/50 p-8 rounded-[3rem] border border-blue-100 flex items-center gap-8 max-w-4xl mx-auto shadow-sm">
-                  <div className="text-5xl drop-shadow-sm">💡</div>
+              <div className="mt-8 bg-blue-50 p-6 rounded-[2rem] border border-blue-100 flex items-center gap-6">
+                  <div className="text-4xl">💡</div>
                   <div>
-                      <h4 className="font-black text-ucmas-blue uppercase text-xs tracking-widest mb-1">Lời khuyên chuyên gia</h4>
-                      <p className="text-gray-500 text-sm font-medium leading-relaxed italic">Luyện tập ở tốc độ <span className="text-ucmas-red font-bold">0.5s - 0.7s</span> là "ngưỡng vàng" để kích thích não bộ phát triển phản xạ tính toán nhanh nhất.</p>
+                      <h4 className="font-black text-ucmas-blue uppercase text-xs tracking-widest">Lời khuyên chuyên gia</h4>
+                      <p className="text-gray-600 text-sm mt-1 font-medium">Luyện tập ở tốc độ <span className="text-ucmas-red font-bold">0.5s - 0.7s</span> là "ngưỡng vàng" để kích thích não bộ phát triển phản xạ tính toán nhanh nhất.</p>
                   </div>
               </div>
           </div>
