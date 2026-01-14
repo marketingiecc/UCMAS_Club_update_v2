@@ -1,113 +1,101 @@
 
 import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
-import { AttemptResult, Question } from '../types';
+import { practiceService } from '../src/features/practice/services/practiceService';
+import { AttemptResult } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 
 const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
+  const [activeTab, setActiveTab] = useState<'contest' | 'practice'>('contest');
   const [history, setHistory] = useState<AttemptResult[]>([]);
-  const [selectedAttempt, setSelectedAttempt] = useState<AttemptResult | null>(null);
+  const [pHistory, setPHistory] = useState<any[]>([]);
+  const [selectedAttempt, setSelectedAttempt] = useState<any | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    backend.getUserHistory(userId).then(setHistory);
-  }, [userId]);
+    setLoading(true);
+    if (activeTab === 'contest') {
+        backend.getUserHistory(userId).then(data => {
+            setHistory(data);
+            setLoading(false);
+        });
+    } else {
+        practiceService.getPracticeHistory(userId).then(data => {
+            setPHistory(data);
+            setLoading(false);
+        });
+    }
+  }, [userId, activeTab]);
 
-  const handleViewDetails = async (attempt: AttemptResult) => {
-      setIsLoadingDetails(true);
-      try {
-          const answers = await backend.getAttemptAnswers(attempt.id);
+  const handleViewDetails = async (h: any) => {
+      if (activeTab === 'contest') {
+          const answers = await backend.getAttemptAnswers(h.id);
           setSelectedAnswers(answers);
-          setSelectedAttempt(attempt);
-      } catch (error) {
-          console.error("Failed to load attempt details", error);
-          alert("Không thể tải chi tiết bài thi.");
-      } finally {
-          setIsLoadingDetails(false);
+          setSelectedAttempt(h);
+      } else {
+          // Luyện tập có thể không lưu answers chi tiết trong bảng cũ, 
+          // nhưng ta vẫn hiển thị thông tin snapshot nếu có
+          setSelectedAttempt(h);
       }
   };
 
-  if (history.length === 0) {
-    return (
-      <div className="text-center py-20 bg-white rounded-xl shadow-sm border border-gray-100 mt-8 max-w-4xl mx-auto">
-        <div className="text-6xl mb-4 text-gray-200">📜</div>
-        <h3 className="text-xl font-bold text-gray-700">Chưa có lịch sử</h3>
-        <p className="text-gray-500 mt-2">Hãy hoàn thành một bài luyện tập để xem kết quả tại đây.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-        
-        {/* Detail Modal */}
         {selectedAttempt && (
             <ResultDetailModal 
                 isOpen={!!selectedAttempt}
                 onClose={() => setSelectedAttempt(null)}
                 questions={selectedAttempt.exam_data?.questions || []}
                 userAnswers={selectedAnswers}
-                title={`Kết quả: ${selectedAttempt.mode === 'nhin_tinh' ? 'Nhìn Tính' : selectedAttempt.mode === 'nghe_tinh' ? 'Nghe Tính' : 'Flash'} - Cấp ${selectedAttempt.level}`}
+                title={`Kết quả: ${selectedAttempt.mode} - ${activeTab === 'contest' ? 'Cuộc thi' : 'Luyện tập'}`}
             />
         )}
 
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-8 border-b border-gray-100">
-            <h2 className="text-2xl font-black text-gray-800">Lịch Sử Luyện Tập</h2>
-            <p className="text-sm text-gray-500 mt-1">Nhấn vào từng dòng để xem lại chi tiết bài làm</p>
+        <div className="text-center mb-10">
+            <h2 className="text-3xl font-black text-gray-800 uppercase tracking-tight mb-8">Lịch sử kết quả</h2>
+            <div className="flex justify-center p-1.5 bg-gray-100 rounded-full inline-flex shadow-inner">
+                <button onClick={() => setActiveTab('contest')} className={`px-8 py-3 rounded-full text-xs font-black uppercase transition-all ${activeTab === 'contest' ? 'bg-white text-ucmas-blue shadow-md' : 'text-gray-400'}`}>🏁 Kết quả Cuộc thi</button>
+                <button onClick={() => setActiveTab('practice')} className={`px-8 py-3 rounded-full text-xs font-black uppercase transition-all ${activeTab === 'practice' ? 'bg-white text-ucmas-blue shadow-md' : 'text-gray-400'}`}>📚 Lịch sử Luyện thi</button>
+            </div>
         </div>
-        <div className="overflow-x-auto">
+
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
             <table className="w-full text-left">
-            <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold tracking-wider">
-                <tr>
-                <th className="px-8 py-4">Thời gian</th>
-                <th className="px-8 py-4">Bài tập</th>
-                <th className="px-8 py-4">Cấp độ</th>
-                <th className="px-8 py-4">Điểm số</th>
-                <th className="px-8 py-4">Thời lượng</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-                {history.map((h) => (
-                <tr 
-                    key={h.id} 
-                    onClick={() => handleViewDetails(h)}
-                    className="hover:bg-blue-50 transition cursor-pointer group"
-                >
-                    <td className="px-8 py-5 text-sm text-gray-600 font-mono group-hover:text-ucmas-blue transition-colors">
-                    {new Date(h.created_at).toLocaleString('vi-VN')}
-                    </td>
-                    <td className="px-8 py-5">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm ${
-                        h.mode === 'flash' ? 'bg-green-100 text-green-700' : 
-                        h.mode === 'nghe_tinh' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
-                        {h.mode === 'nhin_tinh' ? 'Nhìn Tính' : h.mode === 'nghe_tinh' ? 'Nghe Tính' : 'Flash'}
-                    </span>
-                    </td>
-                    <td className="px-8 py-5 text-sm font-bold text-gray-700">Cấp {h.level}</td>
-                    <td className="px-8 py-5">
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-black text-ucmas-blue">{h.score_correct}</span> 
-                        <span className="text-xs text-gray-400 font-medium">/{h.score_total}</span>
-                    </div>
-                    </td>
-                    <td className="px-8 py-5 text-sm text-gray-500 font-mono">
-                    {Math.floor(h.duration_seconds / 60)}:{(h.duration_seconds % 60).toString().padStart(2, '0')}
-                    </td>
-                </tr>
-                ))}
-            </tbody>
+                <thead className="bg-gray-50 text-gray-400 uppercase text-[10px] font-black tracking-widest">
+                    <tr>
+                        <th className="px-10 py-5">Ngày thực hiện</th>
+                        <th className="px-10 py-5">Phần thi</th>
+                        <th className="px-10 py-5">Điểm số</th>
+                        <th className="px-10 py-5">Loại hình</th>
+                        <th className="px-10 py-5 text-right">Chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                    {loading ? (
+                        <tr><td colSpan={5} className="p-20 text-center text-gray-400 italic">Đang tải lịch sử...</td></tr>
+                    ) : (activeTab === 'contest' ? history : pHistory).length === 0 ? (
+                        <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold uppercase text-xs">Chưa có dữ liệu</td></tr>
+                    ) : (activeTab === 'contest' ? history : pHistory).map(h => (
+                        <tr key={h.id} className="hover:bg-gray-50 transition group">
+                            <td className="px-10 py-6 text-sm font-mono text-gray-600">{new Date(h.created_at).toLocaleString('vi-VN')}</td>
+                            <td className="px-10 py-6 font-bold uppercase text-xs text-gray-800">{h.mode}</td>
+                            <td className="px-10 py-6 font-black text-lg text-ucmas-blue">
+                                {h.score_correct || 0}<span className="text-xs text-gray-400 font-medium">/{h.score_total || 0}</span>
+                            </td>
+                            <td className="px-10 py-6">
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${activeTab === 'contest' ? 'bg-blue-50 text-ucmas-blue' : h.is_custom_creative ? 'bg-red-50 text-ucmas-red' : 'bg-green-50 text-green-700'}`}>
+                                    {activeTab === 'contest' ? 'Thi đấu' : h.is_custom_creative ? 'Sáng tạo' : h.practice_exams?.name || 'Giao đề'}
+                                </span>
+                            </td>
+                            <td className="px-10 py-6 text-right">
+                                <button onClick={() => handleViewDetails(h)} className="text-gray-300 group-hover:text-ucmas-blue transition-colors text-xl">➝</button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
             </table>
         </div>
-        </div>
-        
-        {isLoadingDetails && (
-            <div className="fixed inset-0 bg-white bg-opacity-50 z-50 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ucmas-blue"></div>
-            </div>
-        )}
     </div>
   );
 };

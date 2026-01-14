@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase, backend } from './services/mockBackend';
@@ -7,6 +8,7 @@ import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import PracticeSession from './pages/PracticeSession';
+import PracticeSessionExam from './pages/PracticeSession_exam';
 import ActivatePage from './pages/ActivatePage';
 import HistoryPage from './pages/HistoryPage';
 import AdminPage from './pages/AdminPage';
@@ -18,6 +20,7 @@ import ContestListPage from './pages/ContestListPage';
 import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import AdminContestPage from './pages/AdminContestPage';
+import AdminPracticeManager from './pages/AdminPracticeManager';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -39,7 +42,6 @@ const AppContent: React.FC = () => {
         } else if (event === 'SIGNED_OUT') {
              setUser(null);
         } else if (event === 'PASSWORD_RECOVERY') {
-             // Handle password recovery event by redirecting to reset page
              navigate('/auth/resetpass', { replace: true });
         }
     });
@@ -56,26 +58,22 @@ const AppContent: React.FC = () => {
       <Routes>
         <Route path="/" element={<HomePage user={user} />} />
         
-        {/* Auth Routes */}
         <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
         <Route path="/auth/resetpass" element={<UpdatePasswordPage />} />
-        
-        {/* Admin Login */}
         <Route path="/admin/login" element={<AdminLoginPage />} />
 
-        {/* Protected Routes */}
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
         <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
+        <Route path="/practice-exam/:mode" element={user ? <PracticeSessionExam user={user} /> : <Navigate to="/login" />} />
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
         <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
         
-        {/* Admin Dashboard */}
         <Route path="/admin" element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/contests" element={user?.role === 'admin' ? <AdminContestPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/practice" element={user?.role === 'admin' ? <AdminPracticeManager /> : <Navigate to="/dashboard" />} />
 
-        {/* Contests */}
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
