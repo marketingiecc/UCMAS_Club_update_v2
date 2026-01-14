@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { practiceService } from '../src/features/practice/services/practiceService';
@@ -15,7 +16,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const location = useLocation();
   const currentMode = mode as Mode;
 
-  // Lấy config từ state (được truyền từ ContestListPage)
+  // Lấy config từ state
   const navState = location.state as { 
     customConfig?: any, 
     examId?: string, 
@@ -29,8 +30,9 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [timeLeft, setTimeLeft] = useState(600);
   
   // Flash & Audio states
-  const [flashNumber, setFlashNumber] = useState<number | null>(null);
+  const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   
@@ -46,7 +48,6 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
   useEffect(() => {
     if (!navState) {
-        // Nếu không có state (truy cập trực tiếp URL), quay về danh sách
         navigate('/contests');
         return;
     }
@@ -55,14 +56,12 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     if (navState.predefinedQuestions && navState.predefinedQuestions.length > 0) {
         finalQuestions = navState.predefinedQuestions;
     } else {
-        // Tự sinh đề dựa trên config sáng tạo
         const config = navState.customConfig;
         finalQuestions = generateExam({
             mode: currentMode,
-            level: config.digits || 1, // Fallback level
+            level: config.digits || 1,
             numQuestions: config.numQuestions || 10,
             timeLimit: 600,
-            // Đảm bảo truyền đúng range
             numOperandsRange: Array.isArray(config.numOperandsRange) ? config.numOperandsRange : [config.operands, config.operands],
             digitRange: Array.isArray(config.digitRange) ? config.digitRange : [1, 9],
             flashSpeed: config.flashSpeed || 1000
@@ -70,11 +69,10 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     }
     
     setQuestions(finalQuestions);
-    setTimeLeft(600); // Mặc định 10 phút
+    setTimeLeft(600);
     setStatus('running');
   }, [navState, currentMode, navigate]);
 
-  // Timer logic
   useEffect(() => {
     if (status === 'running' && timeLeft > 0) {
       timerRef.current = window.setInterval(() => setTimeLeft(prev => {
@@ -91,6 +89,13 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   // Trigger Flash/Audio khi chuyển câu
   useEffect(() => {
     if (status === 'running') {
+        // Reset local states
+        setFlashNumber(null);
+        setFlashOverlay(null);
+        setIsFlashing(false);
+        setIsPlayingAudio(false);
+        if (audioRef.current) audioRef.current.pause();
+
         if (currentMode === Mode.FLASH) runFlashSequence(currentQIndex);
         if (currentMode === Mode.LISTENING) playAudio(currentQIndex);
     }
@@ -107,36 +112,65 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     if (isFlashing) return;
     setIsFlashing(true);
     
-    // Ưu tiên flashSpeed (ms) nếu có, nếu không thì dùng speed (s) * 1000
     const configSpeed = navState?.customConfig?.flashSpeed || (navState?.customConfig?.speed ? navState.customConfig.speed * 1000 : 1000);
     const q = questions[idx];
     
-    await new Promise(r => setTimeout(r, 500)); // Delay start
+    // 1. Countdown
+    const countdowns = ['3', '2', '1', 'Bắt đầu'];
+    for (const count of countdowns) {
+        setFlashOverlay(count);
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    setFlashOverlay(null);
+
+    // 2. Numbers
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, configSpeed));
       setFlashNumber(null);
-      await new Promise(r => setTimeout(r, 150)); // Gap between numbers
+      await new Promise(r => setTimeout(r, 150));
     }
+
+    // 3. Equals
+    setFlashNumber('=');
     setIsFlashing(false);
   };
 
-  const playAudio = (idx: number) => {
+  const playSingleAudio = (text: string, rate: number): Promise<void> => {
+    return new Promise((resolve) => {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
+        const audio = new Audio(url);
+        audio.playbackRate = rate;
+        audioRef.current = audio;
+        
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
+    });
+  };
+
+  const playAudio = async (idx: number) => {
       if (isPlayingAudio) return;
       setIsPlayingAudio(true);
       const q = questions[idx];
       const speed = navState?.customConfig?.speed || 1.0;
+      
+      const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
+
+      // 1. "Chuẩn bị"
+      await playSingleAudio("Chuẩn bị", 1.2);
+      
+      // 2. Numbers
+      await new Promise(r => setTimeout(r, 300));
       const text = q.operands.join(', ');
-      // Sử dụng Google TTS API
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
-      const audio = new Audio(url);
-      
-      // Tốc độ đọc: 0.9 / speed (ước lượng)
-      audio.playbackRate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-      
-      audio.onended = () => setIsPlayingAudio(false);
-      audioRef.current = audio;
-      audio.play().catch(() => setIsPlayingAudio(false));
+      await playSingleAudio(text, rate);
+
+      // 3. "Bằng"
+      await new Promise(r => setTimeout(r, 300));
+      await playSingleAudio("Bằng", 1.2);
+
+      setIsPlayingAudio(false);
+      audioRef.current = null;
   };
 
   const submitExam = async () => {
@@ -163,6 +197,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   if (status === 'setup') return <div className="h-screen flex items-center justify-center font-black text-gray-400 uppercase tracking-widest">Đang khởi tạo...</div>;
 
   if (status === 'finished') {
+    // ... (Result UI code - no changes needed)
     const correctCount = questions.filter((q, i) => parseInt(answers[i]) === q.correctAnswer).length;
     const percentage = Math.round((correctCount / questions.length) * 100);
     return (
@@ -199,7 +234,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                 <h3 className="mt-4 text-gray-400 font-bold uppercase text-xs tracking-widest">{theme.title} - {navState?.customConfig?.name || 'Bài tập'}</h3>
             </div>
 
-            <div className="min-h-[250px] flex items-center justify-center mb-20">
+            <div className="min-h-[250px] flex items-center justify-center mb-20 relative overflow-hidden">
                 {currentMode === Mode.VISUAL && (
                    <div className="text-center animate-fade-in">
                       {questions[currentQIndex]?.operands.map((num, i) => (
@@ -210,8 +245,16 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                    </div>
                 )}
                 {currentMode === Mode.FLASH && (
-                    <div className="text-[160px] font-black text-ucmas-blue leading-none tracking-tighter transition-all">
-                       {flashNumber || <span className="text-gray-100">...</span>}
+                    <div className="text-center w-full h-full flex items-center justify-center">
+                        {flashOverlay ? (
+                            <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
+                                <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
+                            </div>
+                        ) : (
+                            <div className="text-[160px] font-black text-ucmas-blue leading-none tracking-tighter transition-all">
+                               {flashNumber || <span className="text-gray-100">...</span>}
+                            </div>
+                        )}
                     </div>
                 )}
                 {currentMode === Mode.LISTENING && (
@@ -237,13 +280,23 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
             </div>
             
             <div className="mt-16 flex justify-between items-center px-10">
-                <button onClick={() => setCurrentQIndex(p => Math.max(0, p-1))} className="text-gray-400 font-black uppercase text-xs hover:text-gray-800 transition">← Trước</button>
+                <button 
+                    disabled={isFlashing || isPlayingAudio}
+                    onClick={() => setCurrentQIndex(p => Math.max(0, p-1))} 
+                    className="text-gray-400 font-black uppercase text-xs hover:text-gray-800 transition disabled:opacity-50"
+                >
+                    ← Trước
+                </button>
                 <div className="flex gap-2">
                     {questions.map((_, i) => (
                         <div key={i} className={`w-2.5 h-2.5 rounded-full transition-all ${currentQIndex === i ? 'bg-ucmas-blue w-8' : answers[i] ? 'bg-blue-200' : 'bg-gray-100'}`}></div>
                     ))}
                 </div>
-                <button onClick={() => { if(currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1); else submitExam(); }} className="text-ucmas-blue font-black uppercase text-xs hover:scale-105 transition">
+                <button 
+                    disabled={isFlashing || isPlayingAudio}
+                    onClick={() => { if(currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1); else submitExam(); }} 
+                    className="text-ucmas-blue font-black uppercase text-xs hover:scale-105 transition disabled:opacity-50"
+                >
                     {currentQIndex < questions.length - 1 ? 'Tiếp ➜' : 'Nộp bài 🏁'}
                 </button>
             </div>

@@ -22,19 +22,21 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [timeLeft, setTimeLeft] = useState(0); // Seconds remaining for CONTEST TOTAL
+  const [timeLeft, setTimeLeft] = useState(0); 
   const [status, setStatus] = useState<'ready' | 'running' | 'submitted' | 'error'>('ready');
 
   // Flash/Audio State
-  const [flashNumber, setFlashNumber] = useState<number | null>(null);
+  const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
+
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-      // Cleanup audio on unmount
       return () => {
           if (audioRef.current) {
               audioRef.current.pause();
@@ -47,7 +49,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
     const init = async () => {
         if(!contestId) return;
         
-        // 1. Check Contest & Session
         const { data: c } = await supabase.from('contests').select('*').eq('id', contestId).single();
         const s = await backend.getMyContestSession(contestId);
         
@@ -57,7 +58,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
             return;
         }
 
-        // 2. Check if already attempted this section
         const attempt = await backend.getContestSectionAttempt(s.id, currentMode);
         if (attempt) {
             alert('Bạn đã hoàn thành phần thi này rồi!');
@@ -65,7 +65,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
             return;
         }
 
-        // 3. Load Exam
         const ex = await backend.getContestExam(contestId, currentMode);
         if (!ex) {
             alert('Đề thi chưa được tải lên.');
@@ -78,7 +77,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
         setExam(ex);
         setQuestions(ex.questions);
 
-        // Calculate Time Remaining (Based on Contest End Time)
         const now = new Date().getTime();
         const start = new Date(c.start_at).getTime();
         const end = start + c.duration_minutes * 60000;
@@ -92,21 +90,20 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
 
         setTimeLeft(remainingSeconds);
         setLoading(false);
-        setStatus('running'); // Auto start
+        setStatus('running'); 
     };
     init();
 
     return () => { if(timerRef.current) clearInterval(timerRef.current); };
   }, [contestId, currentMode]);
 
-  // Timer Countdown
   useEffect(() => {
     if (status === 'running' && timeLeft > 0) {
         timerRef.current = window.setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(timerRef.current!);
-                    submitExam(true); // Auto submit
+                    submitExam(true);
                     return 0;
                 }
                 return prev - 1;
@@ -116,9 +113,14 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
     return () => { if(timerRef.current) clearInterval(timerRef.current); };
   }, [status]);
 
-  // Auto Run Sequences based on Mode
   useEffect(() => {
       if (status === 'running' && questions.length > 0) {
+          // Reset states when question index changes
+          setFlashNumber(null);
+          setFlashOverlay(null);
+          setIsFlashing(false);
+          setIsPlayingAudio(false);
+
           if (currentMode === Mode.FLASH) {
               runFlashSequence(currentQIndex);
           } else if (currentMode === Mode.LISTENING) {
@@ -127,36 +129,60 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       }
   }, [currentQIndex, status]);
 
+  // Focus Input
+  useEffect(() => {
+      if (!isFlashing && !isPlayingAudio && inputRef.current) {
+          inputRef.current.focus();
+      }
+  }, [isFlashing, isPlayingAudio, currentQIndex]);
+
   const runFlashSequence = async (qIndex: number) => {
       setIsFlashing(true);
       const q = questions[qIndex];
-      
-      // Get display speed from specific column OR config OR fallback
       const displaySpeed = exam?.display_seconds_per_number || exam?.config?.display_speed || 1.0;
       const interval = displaySpeed * 1000; 
-      
-      await new Promise(r => setTimeout(r, 500));
+
+      // 1. Countdown
+      const countdowns = ['3', '2', '1', 'Bắt đầu'];
+      for (const count of countdowns) {
+          setFlashOverlay(count);
+          await new Promise(r => setTimeout(r, 1000));
+      }
+      setFlashOverlay(null);
+
+      // 2. Numbers
       for (const num of q.operands) {
           setFlashNumber(num);
           await new Promise(r => setTimeout(r, interval));
           setFlashNumber(null);
           await new Promise(r => setTimeout(r, 200));
       }
+
+      // 3. Equals
+      setFlashNumber('=');
       setIsFlashing(false);
   };
 
   const getSpeechRate = (secondsPerItem: number) => {
-      // Calculate rate for TTS to match the approximate desired duration per number.
-      // Normal speech (rate 1.0) roughly takes 0.6-0.9s per short number in VN.
-      // We adjust rate: Higher secondsPerItem -> Slower rate.
-      
-      // Base assumption: rate 1.0 ~= 0.8s per number
-      // rate = 0.8 / secondsPerItem
       const rate = 0.9 / secondsPerItem;
-      return Math.min(Math.max(rate, 0.5), 2.5); // Clamp between 0.5x and 2.5x
+      return Math.min(Math.max(rate, 0.5), 2.5);
   };
 
-  const playAudioSequence = (qIndex: number) => {
+  const playSingleAudio = (text: string, rate: number): Promise<void> => {
+    return new Promise((resolve) => {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
+        const audio = new Audio(url);
+        audio.playbackRate = rate;
+        audioRef.current = audio;
+        
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        
+        audio.play().catch(() => resolve());
+    });
+  };
+
+  const playAudioSequence = async (qIndex: number) => {
       setIsPlayingAudio(true);
       if (audioRef.current) {
           audioRef.current.pause();
@@ -164,29 +190,22 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       }
 
       const q = questions[qIndex];
-      
-      // Get read speed from specific column OR config OR fallback
       const readSpeed = exam?.read_seconds_per_number || exam?.config?.read_speed || 2.0;
+      const rate = getSpeechRate(readSpeed);
       
+      // 1. "Chuẩn bị"
+      await playSingleAudio("Chuẩn bị", 1.2);
+      
+      // 2. Numbers
+      await new Promise(r => setTimeout(r, 300));
       const text = q.operands.join(', ');
-      // Default to Vietnamese for contests
-      const lang = 'vi'; 
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(text)}`;
-      
-      const audio = new Audio(url);
-      audio.playbackRate = getSpeechRate(readSpeed);
-      
-      audio.onended = () => setIsPlayingAudio(false);
-      audio.onerror = () => {
-          setIsPlayingAudio(false);
-          console.error("Audio error");
-      };
+      await playSingleAudio(text, rate);
 
-      audioRef.current = audio;
-      audio.play().catch(e => {
-          console.error("Auto-play blocked", e);
-          setIsPlayingAudio(false);
-      });
+      // 3. "Bằng"
+      await new Promise(r => setTimeout(r, 300));
+      await playSingleAudio("Bằng", 1.2);
+
+      setIsPlayingAudio(false);
   };
 
   const submitExam = async (auto: boolean = false) => {
@@ -197,7 +216,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       setStatus('submitted');
       if (!session) return;
 
-      // Duration taken (approx)
       const duration = contest!.duration_minutes * 60 - timeLeft;
 
       await backend.submitContestSection(session.id, currentMode, questions, answers, duration);
@@ -226,7 +244,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
         <div className="flex-grow flex flex-col md:flex-row max-w-7xl mx-auto w-full p-4 gap-6">
             
             {/* Question Area */}
-            <div className="flex-1 bg-white rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center p-10 min-h-[500px]">
+            <div className="flex-1 bg-white rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center p-10 min-h-[500px] relative overflow-hidden">
                 {currentMode === Mode.VISUAL && (
                     <div className="text-center">
                         <div className="text-gray-400 text-sm mb-4">Câu {currentQIndex + 1}</div>
@@ -240,11 +258,18 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                     </div>
                 )}
                 {currentMode === Mode.FLASH && (
-                    <div className="text-center">
-                         <div className="text-gray-400 text-sm mb-4">Câu {currentQIndex + 1}</div>
-                         <div className="text-[150px] font-black text-ucmas-green">
-                             {isFlashing ? flashNumber : 'Checking...'}
-                         </div>
+                    <div className="text-center w-full h-full flex items-center justify-center">
+                         {flashOverlay ? (
+                            <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
+                                <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
+                            </div>
+                         ) : isFlashing ? (
+                            <div className="text-[150px] font-black text-ucmas-green leading-none tracking-tighter">
+                                {flashNumber}
+                            </div>
+                         ) : (
+                            <div className="text-gray-400 font-medium">Đang chuẩn bị...</div>
+                         )}
                     </div>
                 )}
                  {currentMode === Mode.LISTENING && (
@@ -258,7 +283,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                                 onClick={() => playAudioSequence(currentQIndex)}
                                 className="mt-4 text-xs font-bold text-ucmas-blue underline"
                              >
-                                 Nghe lại (Nếu chưa rõ)
+                                 Nghe lại
                              </button>
                          )}
                     </div>
@@ -273,40 +298,40 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                 </div>
 
                 <input 
+                    ref={inputRef}
                     type="number" 
                     autoFocus
-                    disabled={isFlashing} // Disable input while flashing
+                    disabled={isFlashing || isPlayingAudio}
                     value={answers[currentQIndex] || ''}
                     onChange={e => setAnswers({...answers, [currentQIndex]: e.target.value})}
                     onKeyDown={e => {
                         if (e.key === 'Enter') {
                             if (currentQIndex < questions.length - 1) {
                                 setCurrentQIndex(p => p+1);
-                                if (audioRef.current) audioRef.current.pause();
+                            } else {
+                                if(window.confirm('Nộp bài ngay?')) submitExam();
                             }
                         }
                     }}
-                    className="w-full text-center text-4xl font-bold p-4 border-2 border-ucmas-blue rounded-2xl mb-6 outline-none focus:ring-4 focus:ring-blue-100"
+                    className="w-full text-center text-4xl font-bold p-4 border-2 border-ucmas-blue rounded-2xl mb-6 outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
                 />
 
                 <div className="flex gap-2 mb-6">
                     <button 
-                        disabled={currentQIndex === 0}
+                        disabled={currentQIndex === 0 || isFlashing || isPlayingAudio}
                         onClick={() => {
                             setCurrentQIndex(p => p-1);
-                            if (audioRef.current) audioRef.current.pause();
                         }}
-                        className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200"
+                        className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200 disabled:opacity-50"
                     >
                         ← Trước
                     </button>
                     <button 
-                        disabled={currentQIndex === questions.length - 1}
+                        disabled={currentQIndex === questions.length - 1 || isFlashing || isPlayingAudio}
                         onClick={() => {
                             setCurrentQIndex(p => p+1);
-                            if (audioRef.current) audioRef.current.pause();
                         }}
-                        className="flex-1 py-3 bg-ucmas-blue text-white rounded-xl font-bold hover:bg-blue-700"
+                        className="flex-1 py-3 bg-ucmas-blue text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50"
                     >
                         Sau →
                     </button>
@@ -317,11 +342,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                         {questions.map((_, i) => (
                             <div 
                                 key={i} 
-                                onClick={() => {
-                                    setCurrentQIndex(i);
-                                    if (audioRef.current) audioRef.current.pause();
-                                }}
-                                className={`h-8 rounded flex items-center justify-center text-xs font-bold cursor-pointer ${
+                                className={`h-8 rounded flex items-center justify-center text-xs font-bold ${
                                     currentQIndex === i ? 'bg-ucmas-blue text-white' : 
                                     answers[i] ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
                                 }`}
@@ -332,7 +353,8 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                     </div>
                     <button 
                         onClick={() => { if(window.confirm('Nộp bài ngay?')) submitExam(); }}
-                        className="w-full py-4 bg-ucmas-red text-white font-bold rounded-xl hover:bg-red-700 shadow-lg"
+                        disabled={isFlashing || isPlayingAudio}
+                        className="w-full py-4 bg-ucmas-red text-white font-bold rounded-xl hover:bg-red-700 shadow-lg disabled:opacity-50"
                     >
                         NỘP BÀI 🏁
                     </button>

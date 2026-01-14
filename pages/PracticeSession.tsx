@@ -62,8 +62,12 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(0);
-  const [flashNumber, setFlashNumber] = useState<number | null>(null);
+  
+  // Flash States
+  const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [flashOverlay, setFlashOverlay] = useState<string | null>(null); // State cho đếm ngược
+
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -86,12 +90,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           }
       };
   }, []);
-
-  useEffect(() => {
-      if (audioRef.current && isPlayingAudio) {
-          audioRef.current.playbackRate = getSpeechRate(speed);
-      }
-  }, [speed, isPlayingAudio]);
 
   useEffect(() => {
       if (sourceType === 'bank') {
@@ -150,6 +148,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         setAnswers({});
         setPlayCounts({});
         setFlashNumber(null);
+        setFlashOverlay(null);
     } catch (e) {
         console.error("Failed to start", e);
         alert("Có lỗi khi tạo bài luyện tập. Vui lòng thử lại.");
@@ -197,6 +196,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   useEffect(() => {
     if (status === 'running') {
       setIsPlayingAudio(false);
+      setFlashOverlay(null);
       if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
@@ -215,19 +215,43 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     setPlayCounts(prev => ({...prev, [qIndex]: (prev[qIndex] || 0) + 1}));
     setIsFlashing(true);
     
-    const q = questions[qIndex];
-    await new Promise(r => setTimeout(r, 500));
+    // --- 1. Countdown Sequence (Blue bg, White text) ---
+    const countdowns = ['3', '2', '1', 'Bắt đầu'];
+    for (const count of countdowns) {
+        setFlashOverlay(count);
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    setFlashOverlay(null); // Tắt overlay, hiện số
 
+    // --- 2. Number Sequence ---
+    const q = questions[qIndex];
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, speed * 1000));
       setFlashNumber(null);
       await new Promise(r => setTimeout(r, 200)); 
     }
+
+    // --- 3. End with Equals Sign ---
+    setFlashNumber('=');
     setIsFlashing(false);
   };
 
-  const playAudio = () => {
+  const playSingleAudio = (text: string, rate: number): Promise<void> => {
+      return new Promise((resolve) => {
+          const url = getGoogleTTSUrl(text, selectedLang);
+          const audio = new Audio(url);
+          audio.playbackRate = rate;
+          audioRef.current = audio;
+          
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve(); // Bỏ qua lỗi để chạy tiếp
+          
+          audio.play().catch(() => resolve());
+      });
+  };
+
+  const playAudio = async () => {
     if (isPlayingAudio) return;
     if (!canPlay(currentQIndex)) return;
 
@@ -235,22 +259,22 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     setIsPlayingAudio(true);
     
     const q = questions[currentQIndex];
-    const text = q.operands.join(', ');
-    const url = getGoogleTTSUrl(text, selectedLang);
-    
-    const audio = new Audio(url);
-    audio.playbackRate = getSpeechRate(speed);
-    
-    audio.onended = () => setIsPlayingAudio(false);
-    audio.onerror = (e) => {
-        setIsPlayingAudio(false);
-        alert("Lỗi tải giọng đọc Google.");
-    };
+    const rate = getSpeechRate(speed);
 
-    audioRef.current = audio;
-    audio.play().catch(e => {
-        setIsPlayingAudio(false);
-    });
+    // 1. Đọc "Chuẩn bị"
+    await playSingleAudio("Chuẩn bị", 1.2);
+    
+    // 2. Đọc dãy số (nghỉ 1 chút)
+    await new Promise(r => setTimeout(r, 300));
+    const text = q.operands.join(', ');
+    await playSingleAudio(text, rate);
+
+    // 3. Đọc "Bằng"
+    await new Promise(r => setTimeout(r, 300));
+    await playSingleAudio("Bằng", 1.2);
+
+    setIsPlayingAudio(false);
+    audioRef.current = null;
   };
 
   const submitExam = async () => {
@@ -304,6 +328,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   }, [isInputDisabled]);
 
   if (status === 'setup') {
+    // ... (Keep existing setup UI)
     return (
       <div className="min-h-[80vh] flex items-center justify-center py-12">
         <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md border border-gray-100 relative overflow-hidden">
@@ -440,6 +465,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   }
 
   if (status === 'finished') {
+     // ... (Keep existing results UI)
     const correctCount = questions.filter((q, i) => parseInt(answers[i]) === q.correctAnswer).length;
     const percentage = Math.round((correctCount / questions.length) * 100);
 
@@ -501,6 +527,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
+        {/* Left Sidebar */}
         <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit shrink-0">
            <div className="flex items-center gap-3 mb-6">
               <div className={`w-10 h-10 rounded-full ${theme.bg} text-white flex items-center justify-center shadow-md`}>{theme.icon}</div>
@@ -551,6 +578,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
            </div>
         </div>
 
+        {/* Main Content */}
         <div className="flex-1 flex flex-col">
             <div className="lg:hidden flex justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                <span className="font-bold text-gray-700">Câu {currentQIndex + 1}/{questions.length}</span>
@@ -564,6 +592,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                 </div>
                 
                 <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
+                    
+                    {/* VISUAL MODE DISPLAY */}
                     {currentMode === Mode.VISUAL && (
                        <div className="bg-gray-50 p-12 rounded-[2.5rem] min-w-[300px] text-center shadow-inner border border-gray-100">
                           {currentQ.operands.map((num, i) => (
@@ -574,9 +604,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                        </div>
                     )}
 
+                    {/* FLASH MODE DISPLAY */}
                     {currentMode === Mode.FLASH && (
-                        <div className="text-center">
-                            {isFlashing ? (
+                        <div className="text-center w-full h-full flex items-center justify-center">
+                            {flashOverlay ? (
+                                <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
+                                    <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
+                                </div>
+                            ) : isFlashing ? (
                                 <div className="text-[180px] font-black text-ucmas-blue leading-none tracking-tighter animate-pulse">
                                    {flashNumber}
                                 </div>
@@ -589,13 +624,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                        ▶
                                     </div>
                                     <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
-                                        {canPlay(currentQIndex) ? 'Xem lại (Tối đa 2 lần)' : 'Hết lượt xem'}
+                                        {canPlay(currentQIndex) ? 'Bắt đầu (Tối đa 2 lần)' : 'Hết lượt xem'}
                                     </p>
                                 </div>
                             )}
                         </div>
                     )}
 
+                    {/* LISTENING MODE DISPLAY */}
                     {currentMode === Mode.LISTENING && (
                         <div className="text-center">
                             <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-10 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
@@ -612,6 +648,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     )}
                 </div>
 
+                {/* Input Area */}
                 <div className="w-full lg:w-[400px] border-t lg:border-t-0 lg:border-l border-gray-100 p-10 flex flex-col justify-center bg-gray-50/50 z-10">
                     <div className="text-center mb-8">
                          <h3 className="text-gray-400 font-black uppercase text-xs tracking-widest mb-2">Nhập đáp án</h3>
@@ -632,7 +669,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                   if (answers[currentQIndex] === undefined) setAnswers(prev => ({...prev, [currentQIndex]: ''}));
                                   if (currentQIndex < questions.length - 1) {
                                       setCurrentQIndex(p => p+1);
+                                      // Reset states
                                       setIsFlashing(false);
+                                      setFlashOverlay(null); 
                                       setIsPlayingAudio(false);
                                       if(audioRef.current) audioRef.current.pause();
                                   }
