@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { practiceService } from '../src/features/practice/services/practiceService';
@@ -16,6 +15,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const location = useLocation();
   const currentMode = mode as Mode;
 
+  // Lấy config từ state (được truyền từ ContestListPage)
   const navState = location.state as { 
     customConfig?: any, 
     examId?: string, 
@@ -27,6 +27,8 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(600);
+  
+  // Flash & Audio states
   const [flashNumber, setFlashNumber] = useState<number | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -44,6 +46,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
   useEffect(() => {
     if (!navState) {
+        // Nếu không có state (truy cập trực tiếp URL), quay về danh sách
         navigate('/contests');
         return;
     }
@@ -52,23 +55,26 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     if (navState.predefinedQuestions && navState.predefinedQuestions.length > 0) {
         finalQuestions = navState.predefinedQuestions;
     } else {
+        // Tự sinh đề dựa trên config sáng tạo
         const config = navState.customConfig;
         finalQuestions = generateExam({
             mode: currentMode,
-            level: config.digits || 1,
+            level: config.digits || 1, // Fallback level
             numQuestions: config.numQuestions || 10,
             timeLimit: 600,
-            numOperandsRange: config.numOperandsRange || [config.operands, config.operands],
-            digitRange: config.digitRange || [1, 9],
+            // Đảm bảo truyền đúng range
+            numOperandsRange: Array.isArray(config.numOperandsRange) ? config.numOperandsRange : [config.operands, config.operands],
+            digitRange: Array.isArray(config.digitRange) ? config.digitRange : [1, 9],
             flashSpeed: config.flashSpeed || 1000
         });
     }
     
     setQuestions(finalQuestions);
-    setTimeLeft(600);
+    setTimeLeft(600); // Mặc định 10 phút
     setStatus('running');
   }, [navState, currentMode, navigate]);
 
+  // Timer logic
   useEffect(() => {
     if (status === 'running' && timeLeft > 0) {
       timerRef.current = window.setInterval(() => setTimeLeft(prev => {
@@ -82,6 +88,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [status]);
 
+  // Trigger Flash/Audio khi chuyển câu
   useEffect(() => {
     if (status === 'running') {
         if (currentMode === Mode.FLASH) runFlashSequence(currentQIndex);
@@ -89,17 +96,27 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     }
   }, [currentQIndex, status]);
 
+  // Focus input
+  useEffect(() => {
+      if (!isFlashing && !isPlayingAudio && inputRef.current) {
+          inputRef.current.focus();
+      }
+  }, [isFlashing, isPlayingAudio, currentQIndex]);
+
   const runFlashSequence = async (idx: number) => {
     if (isFlashing) return;
     setIsFlashing(true);
+    
     // Ưu tiên flashSpeed (ms) nếu có, nếu không thì dùng speed (s) * 1000
     const configSpeed = navState?.customConfig?.flashSpeed || (navState?.customConfig?.speed ? navState.customConfig.speed * 1000 : 1000);
     const q = questions[idx];
+    
+    await new Promise(r => setTimeout(r, 500)); // Delay start
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, configSpeed));
       setFlashNumber(null);
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 150)); // Gap between numbers
     }
     setIsFlashing(false);
   };
@@ -110,9 +127,13 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       const q = questions[idx];
       const speed = navState?.customConfig?.speed || 1.0;
       const text = q.operands.join(', ');
+      // Sử dụng Google TTS API
       const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
       const audio = new Audio(url);
+      
+      // Tốc độ đọc: 0.9 / speed (ước lượng)
       audio.playbackRate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
+      
       audio.onended = () => setIsPlayingAudio(false);
       audioRef.current = audio;
       audio.play().catch(() => setIsPlayingAudio(false));
@@ -175,7 +196,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
             
             <div className="text-center mb-16">
                 <span className="bg-blue-50 text-ucmas-blue px-4 py-1.5 rounded-full font-black text-[10px] uppercase tracking-widest border border-blue-100">Câu {currentQIndex + 1} / {questions.length}</span>
-                <h3 className="mt-4 text-gray-400 font-bold uppercase text-xs tracking-widest">{theme.title}</h3>
+                <h3 className="mt-4 text-gray-400 font-bold uppercase text-xs tracking-widest">{theme.title} - {navState?.customConfig?.name || 'Bài tập'}</h3>
             </div>
 
             <div className="min-h-[250px] flex items-center justify-center mb-20">

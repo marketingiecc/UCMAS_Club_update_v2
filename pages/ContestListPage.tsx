@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
@@ -41,6 +40,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   }, [user.id]);
 
   const startCustomPractice = () => {
+      // Chuyển hướng sang trang PracticeSession_exam với config tùy chỉnh
       navigate(`/practice-exam/${practiceMode}`, { 
           state: { 
             customConfig: {
@@ -49,7 +49,8 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
               isCreative: true,
               digitRange: [Math.pow(10, practiceConfig.digits - 1), Math.pow(10, practiceConfig.digits) - 1],
               numOperandsRange: [practiceConfig.operands, practiceConfig.operands],
-              flashSpeed: practiceConfig.speed * 1000,
+              // Chuyển đổi speed (giây) sang ms cho Flash
+              flashSpeed: practiceConfig.speed * 1000, 
               speed: practiceConfig.speed,
               name: 'Bài luyện tập sáng tạo'
             } 
@@ -96,6 +97,129 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
         </div>
       </div>
 
+      {activeTab === 'practice' && (
+          <div className="max-w-5xl mx-auto animate-fade-in bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
+              <div className="bg-ucmas-blue p-10 text-white flex justify-between items-center relative overflow-hidden">
+                  <div className="relative z-10">
+                    <h2 className="text-3xl font-black uppercase tracking-tight">SÁNG TẠO ĐỀ THI RIÊNG</h2>
+                    <p className="text-blue-200 text-sm mt-1 font-medium opacity-80">Thiết lập thông số để rèn luyện phản xạ theo ý muốn</p>
+                  </div>
+                  <span className="text-9xl absolute -right-4 -bottom-8 opacity-10 select-none">🧮</span>
+              </div>
+              <div className="p-10 lg:p-14 grid lg:grid-cols-2 gap-16">
+                  {/* Left Column: Settings */}
+                  <div className="space-y-12">
+                      <div>
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">Chế độ luyện tập</label>
+                          <div className="grid grid-cols-3 gap-4">
+                              {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
+                                  <button key={m} onClick={() => setPracticeMode(m)} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-2 transition-all ${practiceMode === m ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-lg scale-105' : 'border-gray-50 text-gray-300 hover:bg-gray-50'}`}>
+                                      <span className="text-3xl">{m === Mode.VISUAL ? '👁️' : m === Mode.LISTENING ? '🎧' : '⚡'}</span>
+                                      <span className="text-[10px] font-black uppercase tracking-tighter">{m === Mode.VISUAL ? 'Nhìn' : m === Mode.LISTENING ? 'Nghe' : 'Flash'}</span>
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      
+                      <div className="space-y-8">
+                          {/* DIGITS SELECTION */}
+                          <div className="space-y-4">
+                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ CHỮ SỐ (DIGITS)</label>
+                              <div className="flex flex-wrap gap-3">
+                                  {[1, 2, 3, 4, 5, 6, 7, 8].map(d => (
+                                      <button 
+                                        key={d} 
+                                        onClick={() => setPracticeConfig({...practiceConfig, digits: d})} 
+                                        className={`w-12 h-12 rounded-2xl font-black text-lg transition-all shadow-sm ${practiceConfig.digits === d ? 'bg-ucmas-blue text-white shadow-ucmas-blue/30 shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                      >
+                                        {d}
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                          
+                          {/* ROWS SELECTION */}
+                          <div className="space-y-4">
+                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ PHÉP TÍNH (ROWS)</label>
+                              <div className="grid grid-cols-6 gap-3">
+                                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20].map(r => (
+                                      <button 
+                                        key={r} 
+                                        onClick={() => setPracticeConfig({...practiceConfig, operands: r})} 
+                                        className={`h-12 rounded-2xl font-bold text-sm transition-all shadow-sm ${practiceConfig.operands === r ? 'bg-ucmas-blue text-white shadow-ucmas-blue/30 shadow-lg' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                      >
+                                        {r}
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Right Column: Sliders & Action */}
+                  <div className="space-y-12">
+                      <div className="space-y-8 bg-gray-50/50 p-8 rounded-[2.5rem] border border-gray-100 shadow-inner">
+                          {/* COUNT SLIDER */}
+                          <div className="space-y-6">
+                              <div className="flex justify-between items-center px-1">
+                                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">SỐ LƯỢNG CÂU HỎI</label>
+                                  <span className="text-sm font-black text-ucmas-blue bg-white px-4 py-1.5 rounded-xl shadow-sm border border-gray-100">{practiceConfig.count} câu</span>
+                              </div>
+                              <input 
+                                type="range" 
+                                min="5" max="50" step="1" 
+                                value={practiceConfig.count} 
+                                onChange={e => setPracticeConfig({...practiceConfig, count: parseInt(e.target.value)})} 
+                                className="w-full accent-ucmas-blue cursor-pointer h-3 bg-gray-200 rounded-lg appearance-none" 
+                              />
+                              <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1">
+                                <span>5</span>
+                                <span>50</span>
+                              </div>
+                          </div>
+
+                          {/* SPEED SLIDER (Only for Listening/Flash) */}
+                          {(practiceMode === Mode.LISTENING || practiceMode === Mode.FLASH) && (
+                              <div className="space-y-6 pt-6 border-t border-gray-200">
+                                  <div className="flex justify-between items-center px-1">
+                                      <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">TỐC ĐỘ (GIÂY/SỐ)</label>
+                                      <span className="text-sm font-black text-ucmas-red bg-white px-4 py-1.5 rounded-xl shadow-sm border border-gray-100">{practiceConfig.speed}s</span>
+                                  </div>
+                                  <input 
+                                    type="range" 
+                                    min="0.2" max="3.0" step="0.1" 
+                                    value={practiceConfig.speed} 
+                                    onChange={e => setPracticeConfig({...practiceConfig, speed: parseFloat(e.target.value)})} 
+                                    className="w-full accent-ucmas-red cursor-pointer h-3 bg-gray-200 rounded-lg appearance-none" 
+                                  />
+                                   <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1">
+                                    <span>0.2s (Siêu nhanh)</span>
+                                    <span>3.0s (Chậm)</span>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                          <button onClick={() => setPracticeConfig({...practiceConfig, allowNegative: !practiceConfig.allowNegative})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.allowNegative ? 'border-red-100 bg-red-50 text-red-700' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
+                              <span className="text-xs font-black uppercase">Số âm</span>
+                              <span className="text-lg">{practiceConfig.allowNegative ? '✅' : '❌'}</span>
+                          </button>
+                          <button onClick={() => setPracticeConfig({...practiceConfig, hideTemp: !practiceConfig.hideTemp})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.hideTemp ? 'border-blue-100 bg-blue-50 text-ucmas-blue' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
+                              <span className="text-xs font-black uppercase">Ẩn KQ tạm</span>
+                              <span className="text-lg">{practiceConfig.hideTemp ? '✅' : '❌'}</span>
+                          </button>
+                      </div>
+
+                      <button onClick={startCustomPractice} className="group w-full relative h-24 bg-gradient-to-br from-ucmas-red to-red-600 text-white rounded-[2rem] font-black text-2xl shadow-xl hover:shadow-2xl transition-all overflow-hidden active:scale-95">
+                          <span className="relative z-10 flex items-center justify-center gap-3 uppercase tracking-widest">BẮT ĐẦU NGAY 🚀</span>
+                          <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {activeTab === 'contests' && (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
             {contests.length === 0 ? (
@@ -135,91 +259,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
           </div>
       )}
 
-      {activeTab === 'practice' && (
-          <div className="max-w-5xl mx-auto animate-fade-in bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
-              <div className="bg-ucmas-blue p-10 text-white flex justify-between items-center relative overflow-hidden">
-                  <div className="relative z-10">
-                    <h2 className="text-3xl font-black uppercase tracking-tight">SÁNG TẠO ĐỀ THI RIÊNG</h2>
-                    <p className="text-blue-200 text-sm mt-1 font-medium opacity-80">Thiết lập thông số để rèn luyện phản xạ theo ý muốn</p>
-                  </div>
-                  <span className="text-9xl absolute -right-4 -bottom-8 opacity-10 select-none">🧮</span>
-              </div>
-              <div className="p-10 lg:p-14 grid lg:grid-cols-2 gap-16">
-                  <div className="space-y-12">
-                      <div>
-                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">Chế độ luyện tập</label>
-                          <div className="grid grid-cols-3 gap-4">
-                              {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
-                                  <button key={m} onClick={() => setPracticeMode(m)} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-2 transition-all ${practiceMode === m ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-lg scale-105' : 'border-gray-50 text-gray-300 hover:bg-gray-50'}`}>
-                                      <span className="text-3xl">{m === Mode.VISUAL ? '👁️' : m === Mode.LISTENING ? '🎧' : '⚡'}</span>
-                                      <span className="text-[10px] font-black uppercase tracking-tighter">{m === Mode.VISUAL ? 'Nhìn' : m === Mode.LISTENING ? 'Nghe' : 'Flash'}</span>
-                                  </button>
-                              ))}
-                          </div>
-                      </div>
-                      
-                      <div className="space-y-8">
-                          <div className="space-y-4">
-                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ CHỮ SỐ (DIGITS)</label>
-                              <div className="flex flex-wrap gap-2">
-                                  {[1, 2, 3, 4, 5, 6, 7, 8].map(d => (
-                                      <button key={d} onClick={() => setPracticeConfig({...practiceConfig, digits: d})} className={`w-10 h-10 rounded-xl font-bold text-sm transition-all ${practiceConfig.digits === d ? 'bg-ucmas-blue text-white shadow-md scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>{d}</button>
-                                  ))}
-                              </div>
-                          </div>
-                          
-                          <div className="space-y-4">
-                              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ PHÉP TÍNH (ROWS)</label>
-                              <div className="grid grid-cols-6 gap-2">
-                                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20].map(r => (
-                                      <button key={r} onClick={() => setPracticeConfig({...practiceConfig, operands: r})} className={`py-3 rounded-xl font-bold text-xs transition-all ${practiceConfig.operands === r ? 'bg-ucmas-blue text-white shadow-md' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>{r}</button>
-                                  ))}
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="space-y-12">
-                      <div className="space-y-8 bg-gray-50/50 p-8 rounded-[2.5rem] border border-gray-100 shadow-inner">
-                          <div className="space-y-4">
-                              <div className="flex justify-between items-center px-1">
-                                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">SỐ LƯỢNG CÂU HỎI</label>
-                                  <span className="text-sm font-black text-ucmas-blue bg-white px-3 py-1 rounded-full shadow-sm">{practiceConfig.count} câu</span>
-                              </div>
-                              <input type="range" min="5" max="50" step="1" value={practiceConfig.count} onChange={e => setPracticeConfig({...practiceConfig, count: parseInt(e.target.value)})} className="w-full accent-ucmas-blue cursor-pointer h-2 bg-gray-200 rounded-lg appearance-none" />
-                          </div>
-
-                          {(practiceMode === Mode.LISTENING || practiceMode === Mode.FLASH) && (
-                              <div className="space-y-4 pt-4 border-t border-gray-100">
-                                  <div className="flex justify-between items-center px-1">
-                                      <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">TỐC ĐỘ (GIÂY/SỐ)</label>
-                                      <span className="text-sm font-black text-ucmas-red bg-white px-3 py-1 rounded-full shadow-sm">{practiceConfig.speed}s</span>
-                                  </div>
-                                  <input type="range" min="0.2" max="3.0" step="0.1" value={practiceConfig.speed} onChange={e => setPracticeConfig({...practiceConfig, speed: parseFloat(e.target.value)})} className="w-full accent-ucmas-red cursor-pointer h-2 bg-gray-200 rounded-lg appearance-none" />
-                              </div>
-                          )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <button onClick={() => setPracticeConfig({...practiceConfig, allowNegative: !practiceConfig.allowNegative})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.allowNegative ? 'border-red-100 bg-red-50 text-red-700' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
-                              <span className="text-xs font-black uppercase">Số âm</span>
-                              <span className="text-lg">{practiceConfig.allowNegative ? '✅' : '❌'}</span>
-                          </button>
-                          <button onClick={() => setPracticeConfig({...practiceConfig, hideTemp: !practiceConfig.hideTemp})} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${practiceConfig.hideTemp ? 'border-blue-100 bg-blue-50 text-ucmas-blue' : 'border-gray-50 bg-gray-50 text-gray-400'}`}>
-                              <span className="text-xs font-black uppercase">Ẩn KQ tạm</span>
-                              <span className="text-lg">{practiceConfig.hideTemp ? '✅' : '❌'}</span>
-                          </button>
-                      </div>
-
-                      <button onClick={startCustomPractice} className="group w-full relative h-20 bg-gradient-to-br from-ucmas-red to-red-600 text-white rounded-[2rem] font-black text-2xl shadow-xl hover:shadow-2xl transition-all overflow-hidden active:scale-95">
-                          <span className="relative z-10 flex items-center justify-center gap-3 uppercase tracking-widest">BẮT ĐẦU NGAY 🚀</span>
-                          <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-      
       {activeTab === 'tips' && (
           <div className="grid md:grid-cols-2 gap-8 animate-fade-in max-w-5xl mx-auto">
               {[

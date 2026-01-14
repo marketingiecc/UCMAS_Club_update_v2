@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import PracticeSession from './pages/PracticeSession';
+import PracticeSessionExam from './pages/PracticeSession_exam';
 import ActivatePage from './pages/ActivatePage';
 import HistoryPage from './pages/HistoryPage';
 import AdminPage from './pages/AdminPage';
@@ -18,31 +19,7 @@ import ContestListPage from './pages/ContestListPage';
 import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import AdminContestPage from './pages/AdminContestPage';
-
-const AuthCallbackHandler: React.FC = () => {
-    const navigate = useNavigate();
-    useEffect(() => {
-        const hash = window.location.hash;
-        const isAuthCallback = hash.includes('access_token') || hash.includes('type=recovery') || hash.includes('error_description');
-
-        if (hash.includes('type=recovery')) {
-             // Actively redirect to reset password page if recovery type is detected
-             navigate('/auth/resetpass', { replace: true });
-             return;
-        }
-
-        if (!isAuthCallback) {
-            navigate('/', { replace: true });
-        }
-    }, [navigate]);
-
-    return (
-        <div className="h-screen flex items-center justify-center flex-col gap-4">
-             <div className="w-12 h-12 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin"></div>
-             <div className="text-ucmas-blue font-bold">Đang xử lý thông tin...</div>
-        </div>
-    );
-};
+import AdminPracticeManager from './pages/AdminPracticeManager';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -51,36 +28,20 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-        try {
-            const u = await backend.getCurrentUser();
-            setUser(u);
-        } catch (error) {
-            console.error("Auth initialization failed:", error);
-        } finally {
-            setLoading(false);
-        }
+        const u = await backend.getCurrentUser();
+        setUser(u);
+        setLoading(false);
     };
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log("Auth Event:", event);
-        
-        if (event === 'PASSWORD_RECOVERY') {
-             navigate('/auth/resetpass', { replace: true });
-             return;
-        }
-
         if (event === 'SIGNED_IN' && session?.user) {
              const u = await backend.fetchProfile(session.user.id);
              setUser(u);
-
-             const hash = window.location.hash;
-             if (hash && hash.includes('type=recovery')) {
-                navigate('/auth/resetpass', { replace: true });
-             }
         } else if (event === 'SIGNED_OUT') {
              setUser(null);
-             navigate('/login');
+        } else if (event === 'PASSWORD_RECOVERY') {
+             navigate('/auth/resetpass', { replace: true });
         }
     });
 
@@ -96,32 +57,31 @@ const AppContent: React.FC = () => {
       <Routes>
         <Route path="/" element={<HomePage user={user} />} />
         
-        {/* Auth Routes */}
         <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
         <Route path="/auth/resetpass" element={<UpdatePasswordPage />} />
-        
-        {/* Admin Login */}
         <Route path="/admin/login" element={<AdminLoginPage />} />
 
-        {/* Protected Routes */}
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
         <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
+        
+        {/* NEW ROUTES */}
+        <Route path="/practice-exam/:mode" element={user ? <PracticeSessionExam user={user} /> : <Navigate to="/login" />} />
+        <Route path="/admin/practice" element={user?.role === 'admin' ? <AdminPracticeManager /> : <Navigate to="/dashboard" />} />
+        
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
         <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
         
-        {/* Admin Dashboard */}
         <Route path="/admin" element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/contests" element={user?.role === 'admin' ? <AdminContestPage /> : <Navigate to="/dashboard" />} />
+        
 
-        {/* Contests */}
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
 
-        {/* Catch-all for 404 and Auth Callbacks */}
-        <Route path="*" element={<AuthCallbackHandler />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>
   );
