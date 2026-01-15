@@ -28,24 +28,23 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Safety timeout: Chỉ tắt loading nếu quá lâu, KHÔNG reload trang để tránh mất data
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.warn("Auth initialization timed out. Forcing UI render.");
-        setLoading(false);
-      }
-    }, 8000); // Tăng lên 8s cho mạng chậm
+    // Safety timeout: Tự động tắt loading sau 5s nếu mạng quá chậm hoặc lỗi
+    const safetyTimer = setTimeout(() => {
+        if (loading) {
+            console.warn("Auth timeout - forcing UI render");
+            setLoading(false);
+        }
+    }, 5000);
 
     const initAuth = async () => {
         try {
-          const u = await backend.getCurrentUser();
-          setUser(u);
-        } catch (e) {
-          console.error("Auth init error:", e);
-          // Không set user null ở đây để tránh flash giao diện login nếu chỉ là lỗi mạng tạm thời
+            const u = await backend.getCurrentUser();
+            setUser(u);
+        } catch (error) {
+            console.error("Auth init failed:", error);
         } finally {
-          setLoading(false);
-          clearTimeout(timeout);
+            setLoading(false);
+            clearTimeout(safetyTimer);
         }
     };
     initAuth();
@@ -53,28 +52,28 @@ const AppContent: React.FC = () => {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {
             if (event === 'SIGNED_IN' && session?.user) {
-                const u = await backend.fetchProfile(session.user.id);
-                setUser(u);
+                 const u = await backend.fetchProfile(session.user.id);
+                 setUser(u);
             } else if (event === 'SIGNED_OUT') {
-                setUser(null);
+                 setUser(null);
             } else if (event === 'PASSWORD_RECOVERY') {
-                navigate('/auth/resetpass', { replace: true });
+                 navigate('/auth/resetpass', { replace: true });
             }
-        } catch (err) {
-            console.error("Auth listener error:", err);
+        } catch (e) {
+            console.error("Auth state change error:", e);
         }
     });
 
     return () => {
         authListener.subscription.unsubscribe();
-        clearTimeout(timeout);
+        clearTimeout(safetyTimer);
     };
   }, [navigate]);
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="w-12 h-12 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-gray-500 font-medium animate-pulse">Đang tải dữ liệu...</p>
+        <div className="w-12 h-12 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Đang tải dữ liệu...</p>
     </div>
   );
 

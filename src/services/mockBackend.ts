@@ -67,7 +67,7 @@ export const backend = {
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
     try {
-        // Attempt 1: Try Aggregated View (Use maybeSingle to prevent '0 rows' exception)
+        // Attempt 1: Try Aggregated View (Use maybeSingle to prevent exception on empty result)
         const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).maybeSingle();
         
         if (!error && data) {
@@ -84,7 +84,9 @@ export const backend = {
         }
 
         // Attempt 2: Fallback to basic profile table
-        if (error) console.warn("View fetch failed, falling back to profiles table:", error.message);
+        if (error && error.code !== 'PGRST116') {
+             console.warn("View fetch warning (falling back):", error.message);
+        }
 
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
         
@@ -98,7 +100,7 @@ export const backend = {
                 .gt('expires_at', now);
              
              const modes = new Set<Mode>();
-             let maxExpiry = (profile as any).license_expiry; // fallback type check
+             let maxExpiry = (profile as any).license_expiry;
 
              if (entitlements) {
                  entitlements.forEach((e: any) => {
