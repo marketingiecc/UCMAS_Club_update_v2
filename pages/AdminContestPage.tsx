@@ -13,7 +13,7 @@ const AdminContestPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Contest>>({
       name: '', 
-      start_at: '', 
+      start_at: new Date().toISOString(), 
       duration_minutes: 60, 
       lobby_open_minutes: 15,
       enable_nhin_tinh: false, 
@@ -23,7 +23,7 @@ const AdminContestPage: React.FC = () => {
   });
 
   const [uploadStatus, setUploadStatus] = useState<Record<string, string>>({});
-  const [examNames, setExamNames] = useState<Record<string, string>>({}); // Lưu tên đề thi hiện tại của từng mode
+  const [examNames, setExamNames] = useState<Record<string, string>>({}); 
   
   const [codes, setCodes] = useState<ContestAccessCode[]>([]);
   const [registrations, setRegistrations] = useState<ContestRegistration[]>([]);
@@ -45,17 +45,13 @@ const AdminContestPage: React.FC = () => {
   const loadExistingExams = async (contestId: string) => {
       const names: Record<string, string> = {};
       const modes = [Mode.VISUAL, Mode.LISTENING, Mode.FLASH];
-      
-      // Kiểm tra song song cho nhanh
       await Promise.all(modes.map(async (m) => {
           try {
               const exam = await backend.getContestExam(contestId, m);
               if (exam) {
                   names[m] = exam.exam_name || 'Đề thi đã tải lên';
               }
-          } catch (e) {
-              // Ignore error if exam not found
-          }
+          } catch (e) {}
       }));
       setExamNames(names);
   };
@@ -68,10 +64,10 @@ const AdminContestPage: React.FC = () => {
       }); 
       setIsEditing(true);
       setUploadStatus({});
-      setExamNames({}); // Reset trước khi load mới
+      setExamNames({});
       loadCodes(c.id);
       loadRegistrations(c.id);
-      loadExistingExams(c.id); // Load tên đề thi đã có
+      loadExistingExams(c.id);
   };
 
   const loadCodes = async (contestId: string) => {
@@ -90,7 +86,6 @@ const AdminContestPage: React.FC = () => {
           alert("Số lượng mã phải từ 1 đến 500");
           return;
       }
-
       setIsGeneratingCodes(true);
       try {
           await backend.generateContestCodes(selectedContest.id, 'shared', codeQuantity);
@@ -100,14 +95,6 @@ const AdminContestPage: React.FC = () => {
           alert("Lỗi khi tạo mã");
       } finally {
           setIsGeneratingCodes(false);
-      }
-  };
-
-  const handleApprove = async (reg: ContestRegistration) => {
-      const ok = await backend.approveRegistration(reg);
-      if (ok) {
-          alert("Kích hoạt thí sinh thành công!");
-          loadRegistrations(selectedContest!.id);
       }
   };
 
@@ -137,7 +124,6 @@ const AdminContestPage: React.FC = () => {
           const { data, error } = await backend.upsertContest(payload);
           
           if (error) {
-              console.error("Supabase Save Error Details:", error);
               alert("Lỗi cơ sở dữ liệu: " + error);
           } else {
               alert("Lưu thông tin thành công!");
@@ -158,34 +144,25 @@ const AdminContestPage: React.FC = () => {
       reader.onload = async (event) => {
           try {
               const json = JSON.parse(event.target?.result as string);
-              // Hỗ trợ cả format mảng trực tiếp hoặc object có key questions
               let questions = [];
               let config: any = {};
               
               if (Array.isArray(json)) {
                   questions = json;
-                  // Defaults for array format if needed
                   if (mode === Mode.FLASH) config.display_speed = 1.0;
                   if (mode === Mode.LISTENING) config.read_speed = 2.0;
               } else {
                   questions = json.questions || [];
                   config = json.config || {};
-                  
-                  // Map root properties to config if they exist
                   if (json.name) config.name = json.name;
-                  
-                  // Support direct keys from JSON root or legacy config
                   if (json.display_speed) config.display_speed = json.display_speed;
                   if (json.read_speed) config.read_speed = json.read_speed;
-                  
-                  // Legacy support for 'speed' field
                   if (json.speed) {
                       if (mode === Mode.FLASH && !config.display_speed) config.display_speed = json.speed;
                       if (mode === Mode.LISTENING && !config.read_speed) config.read_speed = json.speed;
                   }
               }
 
-              // Set defaults if still missing
               if (mode === Mode.FLASH && !config.display_speed) config.display_speed = 1.0;
               if (mode === Mode.LISTENING && !config.read_speed) config.read_speed = 2.0;
               
@@ -196,7 +173,6 @@ const AdminContestPage: React.FC = () => {
               
               if (res.success) {
                   setUploadStatus(prev => ({ ...prev, [mode]: '✅ Đã cập nhật!' }));
-                  // Cập nhật ngay tên đề thi trên UI
                   setExamNames(prev => ({ ...prev, [mode]: examName }));
               } else {
                   setUploadStatus(prev => ({ ...prev, [mode]: '❌ Lỗi lưu!' }));
@@ -207,18 +183,6 @@ const AdminContestPage: React.FC = () => {
   };
 
   const downloadSampleJson = (mode: Mode) => {
-      const isFlash = mode === Mode.FLASH;
-      const isListening = mode === Mode.LISTENING;
-      
-      const config: any = {};
-      if (isFlash) {
-          config.display_speed = 1.0;
-          config.description = "Tốc độ hiển thị (giây/số)";
-      } else if (isListening) {
-          config.read_speed = 2.0;
-          config.description = "Tốc độ đọc (giây/số)";
-      }
-      
       const sample: any = {
           "name": `Đề mẫu ${mode === Mode.VISUAL ? 'Nhìn Tính' : mode === Mode.LISTENING ? 'Nghe Tính' : 'Flash'}`,
           "questions": [
@@ -226,11 +190,8 @@ const AdminContestPage: React.FC = () => {
             { "id": "q2", "operands": [10, 20], "correctAnswer": 30 }
           ]
       };
-
-      // Add speed fields to root or config based on preference
-      if (Object.keys(config).length > 0) {
-          sample.config = config;
-      }
+      if (mode === Mode.FLASH) sample.config = { display_speed: 1.0 };
+      if (mode === Mode.LISTENING) sample.config = { read_speed: 2.0 };
       
       const blob = new Blob([JSON.stringify(sample, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -242,9 +203,29 @@ const AdminContestPage: React.FC = () => {
       document.body.removeChild(link);
   };
 
+  // Custom DateTime Picker Logic
+  const currentDate = formData.start_at ? new Date(formData.start_at) : new Date();
+  
+  const updateDateTime = (part: 'day' | 'month' | 'year' | 'hour' | 'minute', value: number) => {
+      const newDate = new Date(currentDate);
+      if (part === 'day') newDate.setDate(value);
+      if (part === 'month') newDate.setMonth(value - 1);
+      if (part === 'year') newDate.setFullYear(value);
+      if (part === 'hour') newDate.setHours(value);
+      if (part === 'minute') newDate.setMinutes(value);
+      setFormData({ ...formData, start_at: newDate.toISOString() });
+  };
+
+  const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const minutes = [0, 15, 30, 45];
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl auto">
             <div className="flex items-center justify-between mb-6">
                 <button onClick={() => navigate('/admin')} className="text-gray-500 hover:text-gray-800 font-bold flex items-center gap-2 transition">
                     <span className="text-lg">←</span> Quay lại Dashboard
@@ -254,7 +235,7 @@ const AdminContestPage: React.FC = () => {
                     onClick={() => { 
                         setSelectedContest(null); 
                         setFormData({
-                            name: '', start_at: '', duration_minutes: 60, lobby_open_minutes: 15,
+                            name: '', start_at: new Date().toISOString(), duration_minutes: 60, lobby_open_minutes: 15,
                             enable_nhin_tinh: false, enable_nghe_tinh: false, enable_flash: false, status: 'draft' as any
                         });
                         setIsEditing(true); 
@@ -341,19 +322,59 @@ const AdminContestPage: React.FC = () => {
                                                     <option value="archived">🔴 Kết thúc (archived)</option>
                                                 </select>
                                             </div>
-                                            <div className="space-y-1">
+                                            
+                                            {/* Custom Time Picker */}
+                                            <div className="space-y-1 md:col-span-2">
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Thời gian bắt đầu</label>
-                                                <input 
-                                                    type="datetime-local" 
-                                                    className="w-full border-2 border-gray-100 p-3.5 rounded-2xl outline-none focus:border-ucmas-blue transition-colors bg-gray-50 focus:bg-white font-mono" 
-                                                    value={formData.start_at ? new Date(formData.start_at).toISOString().slice(0, 16) : ''} 
-                                                    onChange={e => {
-                                                        try {
-                                                            setFormData({...formData, start_at: new Date(e.target.value).toISOString()});
-                                                        } catch (err) {}
-                                                    }} 
-                                                />
+                                                <div className="grid grid-cols-5 gap-2">
+                                                    <div>
+                                                        <select 
+                                                            className="w-full border-2 border-gray-100 p-3.5 rounded-2xl bg-gray-50 font-bold text-xs"
+                                                            value={currentDate.getDate()}
+                                                            onChange={e => updateDateTime('day', parseInt(e.target.value))}
+                                                        >
+                                                            {days.map(d => <option key={d} value={d}>Ngày {d}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <select 
+                                                            className="w-full border-2 border-gray-100 p-3.5 rounded-2xl bg-gray-50 font-bold text-xs"
+                                                            value={currentDate.getMonth() + 1}
+                                                            onChange={e => updateDateTime('month', parseInt(e.target.value))}
+                                                        >
+                                                            {months.map(m => <option key={m} value={m}>Tháng {m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <select 
+                                                            className="w-full border-2 border-gray-100 p-3.5 rounded-2xl bg-gray-50 font-bold text-xs"
+                                                            value={currentDate.getFullYear()}
+                                                            onChange={e => updateDateTime('year', parseInt(e.target.value))}
+                                                        >
+                                                            {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <select 
+                                                            className="w-full border-2 border-gray-100 p-3.5 rounded-2xl bg-gray-50 font-bold text-xs"
+                                                            value={currentDate.getHours()}
+                                                            onChange={e => updateDateTime('hour', parseInt(e.target.value))}
+                                                        >
+                                                            {hours.map(h => <option key={h} value={h}>{h.toString().padStart(2, '0')} giờ</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <select 
+                                                            className="w-full border-2 border-gray-100 p-3.5 rounded-2xl bg-gray-50 font-bold text-xs"
+                                                            value={currentDate.getMinutes()}
+                                                            onChange={e => updateDateTime('minute', parseInt(e.target.value))}
+                                                        >
+                                                            {minutes.map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')} phút</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
                                             </div>
+
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Thời gian làm bài (phút)</label>
                                                 <input 
@@ -363,11 +384,20 @@ const AdminContestPage: React.FC = () => {
                                                     onChange={e => setFormData({...formData, duration_minutes: parseInt(e.target.value) || 0})} 
                                                 />
                                             </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Vào sảnh trước (phút)</label>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full border-2 border-gray-100 p-3.5 rounded-2xl outline-none focus:border-ucmas-blue transition-colors bg-gray-50 focus:bg-white font-bold" 
+                                                    value={formData.lobby_open_minutes} 
+                                                    onChange={e => setFormData({...formData, lobby_open_minutes: parseInt(e.target.value) || 0})} 
+                                                />
+                                            </div>
                                         </div>
 
                                         <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-6">
                                             <h4 className="font-black text-gray-700 uppercase text-xs tracking-widest border-b border-gray-200 pb-3 flex items-center gap-2">
-                                                📄 Đề thi chi tiết cho các phần
+                                                📄 ĐỀ THI CHI TIẾT CHO CÁC PHẦN
                                             </h4>
                                             
                                             <div className="space-y-4">
@@ -382,13 +412,11 @@ const AdminContestPage: React.FC = () => {
                                                                 <span className="text-xl">{item.icon}</span>
                                                                 <span className={`font-bold ${item.color}`}>{item.label}</span>
                                                             </div>
-                                                            {/* Hiển thị tên file hiện tại nếu có */}
                                                             {examNames[item.m] && (
                                                                 <div className="ml-8 mt-1 text-[10px] text-gray-500 font-medium">
                                                                     📄 {examNames[item.m]}
                                                                 </div>
                                                             )}
-                                                            {/* Anchor Text tải mẫu */}
                                                             <button 
                                                                 onClick={() => downloadSampleJson(item.m)}
                                                                 className="ml-8 mt-1 text-[10px] text-gray-400 underline hover:text-gray-600"
@@ -396,7 +424,6 @@ const AdminContestPage: React.FC = () => {
                                                                 Tải đề mẫu
                                                             </button>
                                                         </div>
-
                                                         <div className="flex items-center gap-3">
                                                             {uploadStatus[item.m] && (
                                                                 <span className="text-[10px] font-black text-ucmas-green uppercase">{uploadStatus[item.m]}</span>
@@ -417,12 +444,7 @@ const AdminContestPage: React.FC = () => {
                                                 disabled={isSaving}
                                                 className={`w-full ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-800 hover:bg-black'} text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-[0.98]`}
                                             >
-                                                {isSaving ? (
-                                                    <>
-                                                        <span className="animate-spin text-xl">⏳</span>
-                                                        ĐANG LƯU...
-                                                    </>
-                                                ) : '💾 Lưu thay đổi'}
+                                                {isSaving ? '⏳ ĐANG LƯU...' : '💾 Lưu cuộc thi'}
                                             </button>
                                         </div>
                                     </div>
@@ -453,7 +475,6 @@ const AdminContestPage: React.FC = () => {
                                                 </button>
                                             </div>
                                         </div>
-                                        
                                         <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                                             <div className="max-h-[400px] overflow-y-auto">
                                                 <table className="w-full text-sm text-left">
@@ -498,7 +519,6 @@ const AdminContestPage: React.FC = () => {
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-black text-gray-800 uppercase text-sm tracking-widest">Duyệt thí sinh tự do đăng ký ({registrations.length})</h4>
                                         </div>
-                                        
                                         <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-gray-50 text-gray-400 font-black uppercase text-[10px] tracking-widest">
@@ -525,7 +545,7 @@ const AdminContestPage: React.FC = () => {
                                                                         <span className="bg-green-50 text-green-600 px-4 py-1.5 rounded-full font-black text-[10px] uppercase">✓ Đã kích hoạt</span>
                                                                     ) : (
                                                                         <button 
-                                                                            onClick={() => handleApprove(r)} 
+                                                                            onClick={() => backend.approveRegistration(r).then(() => loadRegistrations(selectedContest!.id))} 
                                                                             className="bg-ucmas-blue hover:bg-blue-800 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase shadow-md transition active:scale-95"
                                                                         >
                                                                             Kích hoạt ngay

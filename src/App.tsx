@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase, backend } from './services/mockBackend';
@@ -29,19 +28,11 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Khắc phục lỗi đứng màn hình Loading: Tự động refresh nếu init quá lâu (do cache cũ)
+    // Safety timeout: If auth takes more than 5 seconds, stop loading
     const timeout = setTimeout(() => {
       if (loading) {
-        console.warn("Detection of long loading session. Clearing local storage, cookies and refreshing...");
-        localStorage.clear();
-        sessionStorage.clear();
-        // Clear all cookies
-        document.cookie.split(";").forEach((c) => {
-          document.cookie = c
-            .replace(/^ +/, "")
-            .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-        });
-        window.location.reload();
+        console.warn("Auth initialization timed out.");
+        setLoading(false);
       }
     }, 5000);
 
@@ -50,7 +41,7 @@ const AppContent: React.FC = () => {
           const u = await backend.getCurrentUser();
           setUser(u);
         } catch (e) {
-          console.error("Auth init error:", e);
+          console.error("Critical Auth Error:", e);
         } finally {
           setLoading(false);
           clearTimeout(timeout);
@@ -59,13 +50,17 @@ const AppContent: React.FC = () => {
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-             const u = await backend.fetchProfile(session.user.id);
-             setUser(u);
-        } else if (event === 'SIGNED_OUT') {
-             setUser(null);
-        } else if (event === 'PASSWORD_RECOVERY') {
-             navigate('/auth/resetpass', { replace: true });
+        try {
+          if (event === 'SIGNED_IN' && session?.user) {
+               const u = await backend.fetchProfile(session.user.id);
+               setUser(u);
+          } else if (event === 'SIGNED_OUT') {
+               setUser(null);
+          } else if (event === 'PASSWORD_RECOVERY') {
+               navigate('/auth/resetpass', { replace: true });
+          }
+        } catch (err) {
+          console.error("Auth state change error:", err);
         }
     });
 
@@ -97,7 +92,6 @@ const AppContent: React.FC = () => {
         <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
         <Route path="/practice-exam/:mode" element={user ? <PracticeSessionExam user={user} /> : <Navigate to="/login" />} />
         
-        {/* NEW ROUTE FOR MIXED PRACTICE */}
         <Route path="/practice-mixed/:examId" element={user ? <PracticeMixedSession user={user} /> : <Navigate to="/login" />} />
 
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
