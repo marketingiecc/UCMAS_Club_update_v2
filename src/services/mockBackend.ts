@@ -53,14 +53,37 @@ export const backend = {
     return { success: true };
   },
 
+  // System
+  checkConnection: async () => {
+      try {
+          const { count, error } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+          if (error) throw error;
+          return true;
+      } catch (e) {
+          console.error("Supabase Connection Check Failed:", e);
+          return false;
+      }
+  },
+
   // Users & Profiles
   getCurrentUser: async (): Promise<UserProfile | null> => {
     try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session?.user) return null;
-        return await backend.fetchProfile(session.user.id);
+        // Create a timeout promise that rejects after 3 seconds
+        const timeOut = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Auth timeout')), 3000)
+        );
+
+        // Race between getting user and timeout
+        // Using getUser() instead of getSession() for stricter validation on refresh
+        const { data, error } = await Promise.race([
+            supabase.auth.getUser(),
+            timeOut
+        ]) as any;
+
+        if (error || !data?.user) return null;
+        return await backend.fetchProfile(data.user.id);
     } catch (e) {
-        console.error("GetCurrentUser failed:", e);
+        console.warn("GetCurrentUser timed out or failed (forcing logout state):", e);
         return null;
     }
   },

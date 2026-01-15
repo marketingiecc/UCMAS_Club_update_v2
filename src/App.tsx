@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase, backend } from './services/mockBackend';
 import { UserProfile } from './types';
@@ -25,12 +25,16 @@ import PracticeMixedSession from './pages/PracticeMixedSession';
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusText, setStatusText] = useState('Đang khởi động...');
   const navigate = useNavigate();
+  const mounted = useRef(true);
 
   useEffect(() => {
-    // SAFETY: Force stop loading after 8 seconds to prevent infinite hang
+    mounted.current = true;
+
+    // SAFETY: Force stop loading after 8 seconds
     const safetyTimer = setTimeout(() => {
-      if (loading) {
+      if (mounted.current && loading) {
         console.warn("Auth initialization timed out. Forcing UI render.");
         setLoading(false);
       }
@@ -38,23 +42,37 @@ const AppContent: React.FC = () => {
 
     const initAuth = async () => {
         try {
+          setStatusText('Đang kiểm tra kết nối...');
+          // Optional: Verify connection works (helpful for debugging)
+          // await backend.checkConnection(); 
+
+          setStatusText('Đang xác thực...');
           const u = await backend.getCurrentUser();
-          setUser(u);
+          
+          if (mounted.current) {
+             setUser(u);
+          }
         } catch (e) {
           console.error("Critical Auth Init Error:", e);
-          // Don't set user, let it fall back to login
         } finally {
-          setLoading(false);
+          if (mounted.current) {
+             setLoading(false);
+          }
           clearTimeout(safetyTimer);
         }
     };
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted.current) return;
+        
         try {
           if (event === 'SIGNED_IN' && session?.user) {
-               const u = await backend.fetchProfile(session.user.id);
-               setUser(u);
+               // Only fetch if we don't have user yet to avoid double fetch on load
+               if (!user) {
+                   const u = await backend.fetchProfile(session.user.id);
+                   setUser(u);
+               }
           } else if (event === 'SIGNED_OUT') {
                setUser(null);
           } else if (event === 'PASSWORD_RECOVERY') {
@@ -66,6 +84,7 @@ const AppContent: React.FC = () => {
     });
 
     return () => {
+        mounted.current = false;
         authListener.subscription.unsubscribe();
         clearTimeout(safetyTimer);
     };
@@ -74,7 +93,8 @@ const AppContent: React.FC = () => {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="w-12 h-12 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-500 font-medium animate-pulse">Đang tải dữ liệu...</p>
+        <p className="text-gray-500 font-medium animate-pulse">{statusText}</p>
+        <p className="text-xs text-gray-400 mt-2">Vui lòng đợi trong giây lát...</p>
     </div>
   );
 
