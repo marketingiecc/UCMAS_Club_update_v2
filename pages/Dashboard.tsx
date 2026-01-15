@@ -23,7 +23,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     {
       id: Mode.VISUAL,
       title: "Nhìn Tính",
-      subtitle: "200 câu hỏi • 8 phút",
+      subtitle: "1 tỷ câu • Đa cấp độ",
       icon: "👁️",
       colorClass: "bg-ucmas-blue",
       hoverClass: "group-hover:text-ucmas-blue"
@@ -31,7 +31,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     {
       id: Mode.LISTENING,
       title: "Nghe Tính",
-      subtitle: "30 câu hỏi • Nghe đọc số",
+      subtitle: "Đa ngôn ngữ • Đa cấp độ",
       icon: "🎧",
       colorClass: "bg-ucmas-red",
       hoverClass: "group-hover:text-ucmas-red"
@@ -39,7 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     {
       id: Mode.FLASH,
       title: "Flash",
-      subtitle: "30 câu hỏi • Thẻ số nhanh",
+      subtitle: "Nhiều chế độ • Đa cấp độ",
       icon: "⚡",
       colorClass: "bg-ucmas-green",
       hoverClass: "group-hover:text-ucmas-green"
