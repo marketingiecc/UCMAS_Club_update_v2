@@ -1,7 +1,6 @@
 
 import { ExamConfig, Mode, Question } from '../types';
 
-// Default Hardcoded Rules (Fallback)
 const DEFAULT_RULES: Record<Mode, any> = {
     [Mode.VISUAL]: {
         "1": { numQuestions: 10, numOperandsRange: [2, 3], digitRange: [1, 9] },
@@ -16,6 +15,9 @@ const DEFAULT_RULES: Record<Mode, any> = {
         "1": { flashSpeed: 1500, numOperandsRange: [2, 3] },
         "2": { flashSpeed: 1000, numOperandsRange: [3, 5] },
         "default": { flashSpeed: 500, numOperandsRange: [5, 10] }
+    },
+    [Mode.MIXED]: {
+        "default": { numQuestions: 20, numOperandsRange: [3, 5], digitRange: [1, 99], timeLimit: 600 }
     }
 };
 
@@ -30,18 +32,16 @@ export const getExamConfig = (mode: Mode, level: number, customRules?: any): Exa
     digitRange: [1, 9],
   };
 
-  // 1. Determine which ruleset to use (Custom > Default)
   let ruleset = DEFAULT_RULES[mode];
   
   if (customRules && typeof customRules === 'object') {
-     // Check if the customRules structure looks valid (has keys like "1", "2", "default")
      if (customRules[level] || customRules['default']) {
          ruleset = customRules;
      }
   }
 
-  // 2. Apply rules for specific level, or fallback to 'default' key in ruleset
-  const levelConfig = ruleset[level.toString()] || ruleset['default'];
+  // Ensure ruleset exists before accessing properties
+  const levelConfig = ruleset ? (ruleset[level.toString()] || ruleset['default']) : {};
 
   if (levelConfig) {
       return { ...baseConfig, ...levelConfig };
@@ -64,12 +64,11 @@ export const generateExam = (config: ExamConfig): Question[] => {
        let val = Math.floor(Math.random() * (max - min + 1)) + min;
        
        if (j === 0) {
-           // Số đầu tiên luôn dương
            operands.push(val);
            currentSum += val;
        } else {
-           // Random quyết định là phép trừ (khoảng 40% tỉ lệ)
-           // Quy tắc: a+b >= 0. Nếu trừ làm tổng < 0 thì phải cộng.
+           // Quy tắc: Tổng tích lũy a+b, a+b+c... luôn phải dương
+           // Random 40% khả năng là số âm
            const wantSubtract = Math.random() < 0.4;
            
            if (wantSubtract && (currentSum - val >= 0)) {

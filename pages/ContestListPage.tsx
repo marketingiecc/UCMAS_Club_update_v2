@@ -27,19 +27,23 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   useEffect(() => {
     setLoading(true);
     const fetchData = async () => {
-        const [cData, aData] = await Promise.all([
-            backend.getPublishedContests(),
-            practiceService.getAssignedExams()
-        ]);
-        setContests(cData);
-        setAssignedExams(aData);
-        setLoading(false);
+        try {
+          const [cData, aData] = await Promise.all([
+              backend.getPublishedContests(),
+              practiceService.getAssignedExams()
+          ]);
+          setContests(cData);
+          setAssignedExams(aData);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setLoading(false);
+        }
     };
     fetchData();
   }, [user.id]);
 
   const startCustomPractice = () => {
-      // Chuyển hướng sang trang PracticeSession_exam với config tùy chỉnh
       navigate(`/practice-exam/${practiceMode}`, { 
           state: { 
             customConfig: {
@@ -48,7 +52,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
               isCreative: true,
               digitRange: [Math.pow(10, practiceConfig.digits - 1), Math.pow(10, practiceConfig.digits) - 1],
               numOperandsRange: [practiceConfig.operands, practiceConfig.operands],
-              // Chuyển đổi speed (giây) sang ms cho Flash
               flashSpeed: practiceConfig.speed * 1000, 
               speed: practiceConfig.speed,
               name: 'Bài luyện tập sáng tạo'
@@ -58,6 +61,12 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   };
 
   const handleStartAssigned = (ex: any) => {
+      // Check both Mode enum and config flag for backward compatibility
+      if (ex.mode === Mode.MIXED || ex.config?.isMixed) {
+          navigate(`/practice-mixed/${ex.id}`);
+          return;
+      }
+
       navigate(`/practice-exam/${ex.mode}`, {
           state: {
               examId: ex.id,
@@ -106,7 +115,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                   <span className="text-9xl absolute -right-4 -bottom-8 opacity-10 select-none">🧮</span>
               </div>
               <div className="p-10 lg:p-14 grid lg:grid-cols-2 gap-16">
-                  {/* Left Column: Settings */}
                   <div className="space-y-12">
                       <div>
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">Chế độ luyện tập</label>
@@ -121,7 +129,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                       </div>
                       
                       <div className="space-y-8">
-                          {/* DIGITS SELECTION */}
                           <div className="space-y-4">
                               <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ CHỮ SỐ (DIGITS)</label>
                               <div className="flex flex-wrap gap-3">
@@ -137,7 +144,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                               </div>
                           </div>
                           
-                          {/* ROWS SELECTION */}
                           <div className="space-y-4">
                               <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 block">CHỌN SỐ DÒNG (ROWS)</label>
                               <div className="grid grid-cols-6 gap-3">
@@ -155,10 +161,8 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                       </div>
                   </div>
 
-                  {/* Right Column: Sliders & Action */}
                   <div className="space-y-12">
                       <div className="space-y-8 bg-gray-50/50 p-8 rounded-[2.5rem] border border-gray-100 shadow-inner">
-                          {/* COUNT SLIDER */}
                           <div className="space-y-6">
                               <div className="flex justify-between items-center px-1">
                                   <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">SỐ LƯỢNG CÂU HỎI</label>
@@ -177,7 +181,6 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                               </div>
                           </div>
 
-                          {/* SPEED SLIDER (Only for Listening/Flash) */}
                           {(practiceMode === Mode.LISTENING || practiceMode === Mode.FLASH) && (
                               <div className="space-y-6 pt-6 border-t border-gray-200">
                                   <div className="flex justify-between items-center px-1">
@@ -238,8 +241,12 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                       </div>
                       <h4 className="text-xl font-black text-gray-800 mb-6 line-clamp-2">{ex.name}</h4>
                       <div className="flex gap-2 mb-8 mt-auto">
-                         <span className="text-[10px] font-bold bg-blue-50 text-ucmas-blue px-3 py-1 rounded-full uppercase">{ex.mode === 'nhin_tinh' ? '👁️ Nhìn' : ex.mode === 'nghe_tinh' ? '🎧 Nghe' : '⚡ Flash'}</span>
-                         <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase">{ex.config?.digits || 1}D{ex.config?.operands || 5}R</span>
+                         {ex.mode === Mode.MIXED || ex.config?.isMixed ? (
+                             <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-3 py-1 rounded-full uppercase">🧬 Hỗn Hợp</span>
+                         ) : (
+                             <span className="text-[10px] font-bold bg-blue-50 text-ucmas-blue px-3 py-1 rounded-full uppercase">{ex.mode === 'nhin_tinh' ? '👁️ Nhìn' : ex.mode === 'nghe_tinh' ? '🎧 Nghe' : '⚡ Flash'}</span>
+                         )}
+                         <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase">{ex.config?.digits || '?'}D{ex.config?.operands || '?'}R</span>
                       </div>
                       <button onClick={() => handleStartAssigned(ex)} className="w-full bg-gray-50 group-hover:bg-ucmas-blue group-hover:text-white text-gray-400 py-4 rounded-2xl font-black text-xs uppercase transition shadow-sm">Bắt đầu ôn luyện ➝</button>
                   </div>

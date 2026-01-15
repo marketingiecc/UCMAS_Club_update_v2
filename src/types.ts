@@ -23,7 +23,7 @@ export interface Question {
   id: string;
   operands: number[];
   correctAnswer: number;
-  mode?: Mode;
+  mode?: Mode; // Optional for mixed exams
 }
 
 export interface Contest {
