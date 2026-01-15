@@ -28,39 +28,40 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Safety timeout: Tự động tắt loading sau 5s nếu mạng quá chậm hoặc lỗi
+    // SAFETY: Force stop loading after 8 seconds to prevent infinite hang
     const safetyTimer = setTimeout(() => {
-        if (loading) {
-            console.warn("Auth timeout - forcing UI render");
-            setLoading(false);
-        }
-    }, 5000);
+      if (loading) {
+        console.warn("Auth initialization timed out. Forcing UI render.");
+        setLoading(false);
+      }
+    }, 8000);
 
     const initAuth = async () => {
         try {
-            const u = await backend.getCurrentUser();
-            setUser(u);
-        } catch (error) {
-            console.error("Auth init failed:", error);
+          const u = await backend.getCurrentUser();
+          setUser(u);
+        } catch (e) {
+          console.error("Critical Auth Init Error:", e);
+          // Don't set user, let it fall back to login
         } finally {
-            setLoading(false);
-            clearTimeout(safetyTimer);
+          setLoading(false);
+          clearTimeout(safetyTimer);
         }
     };
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {
-            if (event === 'SIGNED_IN' && session?.user) {
-                 const u = await backend.fetchProfile(session.user.id);
-                 setUser(u);
-            } else if (event === 'SIGNED_OUT') {
-                 setUser(null);
-            } else if (event === 'PASSWORD_RECOVERY') {
-                 navigate('/auth/resetpass', { replace: true });
-            }
-        } catch (e) {
-            console.error("Auth state change error:", e);
+          if (event === 'SIGNED_IN' && session?.user) {
+               const u = await backend.fetchProfile(session.user.id);
+               setUser(u);
+          } else if (event === 'SIGNED_OUT') {
+               setUser(null);
+          } else if (event === 'PASSWORD_RECOVERY') {
+               navigate('/auth/resetpass', { replace: true });
+          }
+        } catch (err) {
+          console.error("Auth state change error:", err);
         }
     });
 
