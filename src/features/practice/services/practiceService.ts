@@ -65,7 +65,6 @@ export const practiceService = {
             return { success: false, error: "Phiên đăng nhập hết hạn." };
         }
 
-        // Trích xuất contestId từ config để lưu vào cột contest_id (Foreign Key)
         const contestId = data.config?.contestId || null;
 
         const payload = {
@@ -88,17 +87,15 @@ export const practiceService = {
             return { success: false, error: error.message || JSON.stringify(error) };
         }
 
-        // --- NEW: Populate mixed_exam_questions if questions exist ---
         if (insertedExam && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
             const questionRows = data.questions.map((q: any) => {
-                // Calculate stats for filtering
                 const maxOp = Math.max(...(q.operands || []).map((n: number) => Math.abs(n)));
                 const digits = maxOp.toString().length;
                 const rows = (q.operands || []).length;
                 
                 return {
                     exam_id: insertedExam.id,
-                    mode: q.mode || Mode.VISUAL, // Default
+                    mode: q.mode || Mode.VISUAL, 
                     digits: digits,
                     rows: rows,
                     content: { operands: q.operands },
@@ -106,9 +103,8 @@ export const practiceService = {
                 };
             });
 
-            // Batch insert (Supabase handles batching well)
             const { error: qError } = await supabase.from('mixed_exam_questions' as any).insert(questionRows);
-            if (qError) console.warn("Lỗi lưu mixed questions (nhưng đề đã tạo):", qError);
+            if (qError) console.warn("Lỗi lưu mixed questions:", qError);
         }
         
         return { success: true };
@@ -119,39 +115,35 @@ export const practiceService = {
   },
 
   async getRandomMixedQuestion(examId: string, criteria: { mode?: string | 'all', digits?: number, rows?: number }) {
-      // Strategy: Count first, then random offset.
-      // 1. Try fetching from NEW TABLE `mixed_exam_questions`
-      let query = supabase.from('mixed_exam_questions' as any).select('*', { count: 'exact', head: true }).eq('exam_id', examId);
+      // Wrapper for backward compatibility if needed, using batch fetch of 1
+      const batch = await practiceService.getMixedQuestionsBatch(examId, criteria, 1);
+      return batch.length > 0 ? batch[0] : null;
+  },
+
+  async getMixedQuestionsBatch(examId: string, criteria: { mode?: string | 'all', digits?: number, rows?: number }, limit: number = 20) {
+      // 1. Try fetching from mixed_exam_questions table
+      let query = supabase.from('mixed_exam_questions' as any).select('*');
+      query = query.eq('exam_id', examId);
       
       if (criteria.mode && criteria.mode !== 'all') query = query.eq('mode', criteria.mode);
       if (criteria.digits) query = query.eq('digits', criteria.digits);
       if (criteria.rows) query = query.eq('rows', criteria.rows);
 
-      const { count } = await query;
+      // Fetch a larger pool to shuffle from
+      const { data, error } = await query.limit(100);
 
-      if (count && count > 0) {
-          // Valid data in new table
-          const offset = Math.floor(Math.random() * count);
-          
-          let dataQuery = supabase.from('mixed_exam_questions' as any).select('*').eq('exam_id', examId);
-          if (criteria.mode && criteria.mode !== 'all') dataQuery = dataQuery.eq('mode', criteria.mode);
-          if (criteria.digits) dataQuery = dataQuery.eq('digits', criteria.digits);
-          if (criteria.rows) dataQuery = dataQuery.eq('rows', criteria.rows);
-          
-          const { data: qData } = await dataQuery.range(offset, offset).limit(1).maybeSingle();
-          
-          if (qData) {
-              return {
-                  id: qData.id,
-                  mode: qData.mode,
-                  operands: qData.content?.operands || [],
-                  correctAnswer: qData.correct_answer
-              };
-          }
+      if (data && data.length > 0) {
+          const shuffled = data.sort(() => 0.5 - Math.random()).slice(0, limit);
+          return shuffled.map((q: any) => ({
+              id: q.id,
+              mode: q.mode,
+              operands: q.content?.operands || [],
+              correctAnswer: q.correct_answer
+          }));
       }
 
-      // 2. FALLBACK: Check JSON in `assigned_practice_exams` (for old exams or if sync failed)
-      console.log("Fallback to JSON search for mixed question...");
+      // 2. FALLBACK: Check JSON in `assigned_practice_exams`
+      console.log("Fallback to JSON search for mixed questions...");
       const { data: parent } = await supabase.from('assigned_practice_exams' as any).select('questions').eq('id', examId).single();
       
       if (parent && parent.questions && Array.isArray(parent.questions)) {
@@ -171,17 +163,15 @@ export const practiceService = {
              return true;
           });
           
-          if (candidates.length > 0) {
-              const r = candidates[Math.floor(Math.random() * candidates.length)];
-              return {
-                  id: r.id || 'json-' + Math.random(),
-                  mode: r.mode || Mode.VISUAL,
-                  operands: r.operands,
-                  correctAnswer: r.correctAnswer
-              };
-          }
+          const shuffled = candidates.sort(() => 0.5 - Math.random()).slice(0, limit);
+          return shuffled.map(r => ({
+              id: r.id || 'json-' + Math.random(),
+              mode: r.mode || Mode.VISUAL,
+              operands: r.operands,
+              correctAnswer: r.correctAnswer
+          }));
       }
       
-      return null;
+      return [];
   }
 };
