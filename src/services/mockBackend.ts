@@ -39,7 +39,6 @@ export const backend = {
   },
 
   sendPasswordResetEmail: async (email: string) => {
-    // STRICT: Use window.location.origin for redirection base
     const { error } = await supabase.auth.resetPasswordForEmail(email, { 
       redirectTo: window.location.origin 
     });
@@ -49,49 +48,118 @@ export const backend = {
   },
 
   updateUserPassword: async (password: string) => {
-    // STRICT: No try/catch swallowing, direct Supabase call
     const { error } = await supabase.auth.updateUser({ password });
-    
     if (error) return { success: false, message: error.message };
     return { success: true };
   },
 
   // Users & Profiles
   getCurrentUser: async (): Promise<UserProfile | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return null;
-    return await backend.fetchProfile(session.user.id);
+    try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session?.user) return null;
+        return await backend.fetchProfile(session.user.id);
+    } catch (e) {
+        console.error("GetCurrentUser failed:", e);
+        return null;
+    }
   },
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
-    const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
-    if (error) console.error("Fetch profile error:", error);
-    if (data) {
-        return {
-            id: data.id || userId,
-            email: data.email || '',
-            full_name: data.full_name || '',
-            role: (data.role as any) || 'user',
-            created_at: data.created_at || new Date().toISOString(),
-            license_expiry: data.license_expiry || undefined,
-            allowed_modes: (data.allowed_modes as Mode[]) || [],
-            student_code: data.student_code || undefined
-        };
+    try {
+        // Attempt 1: Try Aggregated View (Use maybeSingle to prevent '0 rows' exception)
+        const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).maybeSingle();
+        
+        if (!error && data) {
+            return {
+                id: data.id || userId,
+                email: data.email || '',
+                full_name: data.full_name || '',
+                role: (data.role as any) || 'user',
+                created_at: data.created_at || new Date().toISOString(),
+                license_expiry: data.license_expiry || undefined,
+                allowed_modes: (data.allowed_modes as Mode[]) || [],
+                student_code: data.student_code || undefined
+            };
+        }
+
+        // Attempt 2: Fallback to basic profile table
+        if (error) console.warn("View fetch failed, falling back to profiles table:", error.message);
+
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        
+        if (profile) {
+             // Fetch entitlements separately
+             const now = new Date().toISOString();
+             const { data: entitlements } = await supabase
+                .from('entitlements')
+                .select('*')
+                .eq('user_id', userId)
+                .gt('expires_at', now);
+             
+             const modes = new Set<Mode>();
+             let maxExpiry = (profile as any).license_expiry; // fallback type check
+
+             if (entitlements) {
+                 entitlements.forEach((e: any) => {
+                     const scope = e.scope; 
+                     if (scope?.nhin_tinh) modes.add(Mode.VISUAL);
+                     if (scope?.nghe_tinh) modes.add(Mode.LISTENING);
+                     if (scope?.flash) modes.add(Mode.FLASH);
+                     
+                     if (e.expires_at) {
+                         if (!maxExpiry || new Date(e.expires_at) > new Date(maxExpiry)) {
+                             maxExpiry = e.expires_at;
+                         }
+                     }
+                 });
+             }
+
+             return {
+                 id: profile.id,
+                 email: profile.email || '',
+                 full_name: profile.full_name || '',
+                 role: (profile.role as any) || 'user',
+                 created_at: profile.created_at || new Date().toISOString(),
+                 license_expiry: maxExpiry,
+                 allowed_modes: Array.from(modes),
+                 student_code: profile.student_code
+             };
+        }
+    } catch (e) {
+        console.error("Fetch profile critical error:", e);
     }
     return null;
   },
 
   getAllUsers: async (): Promise<UserProfile[]> => {
-      const { data } = await supabase.from('user_profile_aggregated').select('*');
-      return (data || []).map(u => ({
-          id: u.id!,
-          email: u.email!,
-          full_name: u.full_name!,
-          role: (u.role as any) || 'user',
-          created_at: u.created_at!,
-          license_expiry: u.license_expiry || undefined,
-          allowed_modes: (u.allowed_modes as Mode[]) || [],
-          student_code: u.student_code || undefined
+      // Try view first
+      const { data, error } = await supabase.from('user_profile_aggregated').select('*');
+      
+      if (!error && data) {
+        return data.map(u => ({
+            id: u.id!,
+            email: u.email!,
+            full_name: u.full_name!,
+            role: (u.role as any) || 'user',
+            created_at: u.created_at!,
+            license_expiry: u.license_expiry || undefined,
+            allowed_modes: (u.allowed_modes as Mode[]) || [],
+            student_code: u.student_code || undefined
+        }));
+      }
+
+      // Fallback
+      const { data: profiles } = await supabase.from('profiles').select('*');
+      return (profiles || []).map(p => ({
+          id: p.id,
+          email: p.email || '',
+          full_name: p.full_name || '',
+          role: (p.role as any) || 'user',
+          created_at: p.created_at || new Date().toISOString(),
+          license_expiry: p.license_expiry || undefined,
+          allowed_modes: [],
+          student_code: p.student_code || undefined
       }));
   },
 
@@ -176,7 +244,7 @@ export const backend = {
 
   // Exams & Rules
   getLatestExamRule: async (mode: Mode) => {
-      const { data } = await supabase.from('exam_rules').select('*').eq('mode', mode).order('created_at', { ascending: false }).limit(1).single();
+      const { data } = await supabase.from('exam_rules').select('*').eq('mode', mode).order('created_at', { ascending: false }).limit(1).maybeSingle();
       return data;
   },
 
@@ -209,7 +277,7 @@ export const backend = {
   },
 
   getCustomExamById: async (id: string) => {
-      const { data } = await supabase.from('custom_exams').select('*').eq('id', id).single();
+      const { data } = await supabase.from('custom_exams').select('*').eq('id', id).maybeSingle();
       if (data) return { ...data, mode: data.mode as Mode, questions: data.questions as Question[] };
       return null;
   },
@@ -242,7 +310,7 @@ export const backend = {
   },
 
   getContestExam: async (contestId: string, mode: Mode): Promise<ContestExam | null> => {
-      const { data } = await supabase.from('contest_exams').select('*').eq('contest_id', contestId).eq('mode', mode).single();
+      const { data } = await supabase.from('contest_exams').select('*').eq('contest_id', contestId).eq('mode', mode).maybeSingle();
       if (!data) return null;
       return {
           contest_id: data.contest_id,
@@ -343,12 +411,12 @@ export const backend = {
   getMyContestSession: async (contestId: string): Promise<ContestSession | null> => {
       const { data: { user } } = await supabase.auth.getUser();
       if(!user) return null;
-      const { data } = await supabase.from('contest_sessions').select('*').eq('contest_id', contestId).eq('user_id', user.id).single();
+      const { data } = await supabase.from('contest_sessions').select('*').eq('contest_id', contestId).eq('user_id', user.id).maybeSingle();
       return data as ContestSession;
   },
 
   getContestSectionAttempt: async (sessionId: string, mode: Mode) => {
-      const { data } = await supabase.from('contest_section_attempts').select('*').eq('session_id', sessionId).eq('mode', mode).single();
+      const { data } = await supabase.from('contest_section_attempts').select('*').eq('session_id', sessionId).eq('mode', mode).maybeSingle();
       return data;
   },
 
