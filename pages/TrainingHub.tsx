@@ -322,19 +322,15 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full text-left px-4 py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors ${
+              title={tab.label}
+              className={`w-full text-left px-4 py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap ${
                 tab.id === 'path' && isPathLocked
                   ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
                   : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
               }`}
             >
               <span>{tab.icon}</span>
-              {tab.label}
-              {tab.id === 'path' && isPathLocked && (
-                <span className="ml-auto text-[10px] font-heading font-black uppercase tracking-widest bg-white/70 text-gray-600 px-2 py-1 rounded-full border border-gray-200">
-                  🔒 Kích hoạt
-                </span>
-              )}
+              <span className="min-w-0 truncate">{tab.label}</span>
             </button>
           ))}
         </nav>

@@ -45,11 +45,6 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                  alt="UCMAS Logo" 
                  className="h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
                />
-               <div className="hidden md:block">
-                 <p className="text-[10px] font-heading-bold text-ucmas-blue uppercase tracking-widest">
-                   Education With A Difference
-                 </p>
-               </div>
             </div>
 
             {/* Navigation Links */}
