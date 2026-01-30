@@ -309,11 +309,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex flex-col md:flex-row gap-4 md:gap-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex flex-col lg:flex-row gap-4 lg:gap-8">
       {/* Tabs: ngang trên mobile/tablet, dọc trên desktop */}
-      <div className="w-full md:w-56 flex-shrink-0">
-        <h1 className="text-lg sm:text-xl font-heading-bold text-ucmas-blue mb-3 md:mb-6">Trung tâm luyện tập</h1>
-        <nav className="flex flex-row md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
+      <div className="w-full lg:w-56 flex-shrink-0">
+        <h1 className="text-lg sm:text-xl font-heading-bold text-ucmas-blue mb-3 lg:mb-6">Trung tâm luyện tập</h1>
+        <nav className="flex flex-row lg:flex-col gap-2 lg:gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0">
           {[
             { id: 'mode' as TabId, label: 'Luyện theo chế độ', icon: '📋' },
             { id: 'path' as TabId, label: 'Luyện theo lộ trình', icon: '🏁' },
@@ -323,7 +323,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               title={tab.label}
-              className={`flex-shrink-0 md:w-full text-left px-4 py-2.5 md:py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap text-sm md:text-base ${
+              className={`flex-shrink-0 lg:w-full text-left px-4 py-2.5 lg:py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap text-sm lg:text-base ${
                 tab.id === 'path' && isPathLocked
                   ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
                   : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')

@@ -228,8 +228,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               Cuộc thi
             </button>
           </div>
-          {/* Desktop: table */}
-          <div className="hidden md:block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Desktop (>= lg): table */}
+          <div className="hidden lg:block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-heading-bold">
                 <tr>
@@ -282,8 +282,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               </tbody>
             </table>
           </div>
-          {/* Mobile/Tablet: cards */}
-          <div className="md:hidden space-y-3">
+          {/* Mobile/Tablet (< lg): cards */}
+          <div className="lg:hidden space-y-3">
             {loading ? (
               <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-400 text-sm">Đang tải...</div>
             ) : list.length === 0 ? (

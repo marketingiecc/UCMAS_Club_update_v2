@@ -59,8 +59,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                />
             </div>
 
-            {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center space-x-6">
+            {/* Desktop Navigation Links (chỉ desktop >= lg) */}
+            <div className="hidden lg:flex items-center space-x-6">
                <Link to="/" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/')}`}>Trang chủ</Link>
                {user && (
                  <>
@@ -89,7 +89,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               {user ? (
                 <>
-                  <Link to="/dashboard" className="hidden sm:flex items-center gap-2 md:gap-3 rounded-xl border border-gray-200 px-2 py-1.5 md:px-3 md:py-2 hover:bg-gray-50 transition-colors">
+                  {/* Profile preview: chỉ desktop để không chật trên mobile/tablet */}
+                  <Link to="/dashboard" className="hidden lg:flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors">
                     <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-ucmas-blue/20 flex items-center justify-center overflow-hidden">
                       {user.avatar_url ? (
                         <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -103,13 +104,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                     </div>
                   </Link>
                   {user.role !== 'admin' && daysLeft > 0 && (
-                    <span className={`hidden sm:inline text-[10px] px-2 py-0.5 rounded-full font-heading font-bold border ${daysLeft <= 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                    <span className={`hidden lg:inline text-[10px] px-2 py-0.5 rounded-full font-heading font-bold border ${daysLeft <= 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
                       Còn {daysLeft} ngày
                     </span>
                   )}
                   <button
                     onClick={handleLogout}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-medium transition"
+                    className="hidden lg:inline-flex bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium transition"
                   >
                     Đăng xuất
                   </button>
@@ -129,10 +130,18 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen((o) => !o)}
-                  className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-ucmas-blue transition"
+                  className="lg:hidden p-2 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 hover:text-ucmas-blue transition"
                   aria-label="Mở menu"
                 >
-                  {mobileMenuOpen ? (
+                  {user ? (
+                    user.avatar_url ? (
+                      <img src={user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+                    ) : (
+                      <span className="w-9 h-9 rounded-full bg-ucmas-blue/10 text-ucmas-blue font-heading-bold flex items-center justify-center">
+                        {user.full_name?.charAt(0) || '?'}
+                      </span>
+                    )
+                  ) : mobileMenuOpen ? (
                     <span className="text-2xl leading-none">✕</span>
                   ) : (
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -143,27 +152,62 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
           </div>
         </div>
 
-        {/* Mobile drawer - chỉ cho trang học sinh */}
+        {/* Mobile/Tablet menu - chỉ cho trang học sinh */}
         {showMobileNav && (
           <div
-            className={`md:hidden overflow-hidden transition-all duration-200 ease-out ${
+            className={`lg:hidden overflow-hidden transition-all duration-200 ease-out ${
               mobileMenuOpen ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
             }`}
           >
-            <div className="border-t border-gray-100 bg-white px-4 py-4 space-y-1">
-              <Link to="/" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Trang chủ</Link>
+            <div className="border-t border-gray-100 bg-white px-4 py-4 space-y-2">
               {user && (
-                <>
-                  <Link to="/training" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/training' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Luyện tập</Link>
-                  <Link to="/contests" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname.startsWith('/contests') ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Cuộc thi 🏆</Link>
-                  <Link to="/activate" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/activate' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Kích hoạt</Link>
-                  <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Trang cá nhân</Link>
-                </>
+                <div className="p-3 rounded-2xl border border-gray-200 bg-gray-50 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-ucmas-blue/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-ucmas-blue font-heading-bold text-lg">{user.full_name?.charAt(0) || '?'}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-heading font-bold text-gray-800 truncate">{user.full_name || 'Học sinh'}</div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {user.student_code ? `Mã: ${user.student_code}` : user.email}
+                      <span className="mx-2">•</span>
+                      Cấp độ: {user.level_symbol || '—'}
+                    </div>
+                    {user.role !== 'admin' && daysLeft > 0 && (
+                      <div className="mt-1 inline-flex text-[10px] px-2 py-0.5 rounded-full font-heading font-bold border bg-green-50 text-green-700 border-green-100">
+                        Còn {daysLeft} ngày
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
-              {!user && (
+
+              <Link to="/" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Trang chủ</Link>
+
+              {user ? (
                 <>
-                  <a href="#" className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Tin tức</a>
-                  <a href="#" className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Liên hệ</a>
+                  <Link to="/training" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/training' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Trung tâm luyện tập</Link>
+                  <Link to="/training/speed" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Speed Training</Link>
+                  <Link to="/contests" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname.startsWith('/contests') ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Cuộc thi 🏆</Link>
+                  <Link to="/history" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/history' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Lịch sử</Link>
+                  <Link to="/activate" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/activate' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Kích hoạt</Link>
+                  <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/dashboard' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Hồ sơ</Link>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="w-full mt-2 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-heading font-bold text-sm transition"
+                  >
+                    Đăng xuất
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Đăng nhập</Link>
+                  <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Đăng ký</Link>
                 </>
               )}
             </div>

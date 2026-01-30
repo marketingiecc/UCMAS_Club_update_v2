@@ -66,8 +66,8 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
             </div>
         </div>
 
-        {/* Desktop: table */}
-        <div className="hidden md:block bg-white rounded-2xl sm:rounded-[2.5rem] shadow-lg border-2 border-gray-100 overflow-hidden animate-fade-in">
+        {/* Desktop (>= lg): table */}
+        <div className="hidden lg:block bg-white rounded-2xl sm:rounded-[2.5rem] shadow-lg border-2 border-gray-100 overflow-hidden animate-fade-in">
             <table className="w-full text-left">
                 <thead className="bg-gradient-to-r from-ucmas-blue/10 to-ucmas-blue/5 text-gray-600 uppercase text-[10px] font-heading-bold tracking-widest">
                     <tr>
@@ -104,8 +104,8 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
             </table>
         </div>
 
-        {/* Mobile/Tablet: cards */}
-        <div className="md:hidden space-y-3 animate-fade-in">
+        {/* Mobile/Tablet (< lg): cards */}
+        <div className="lg:hidden space-y-3 animate-fade-in">
             {loading ? (
                 <div className="bg-white rounded-2xl border-2 border-gray-100 p-8 text-center text-gray-400 text-sm">Đang tải lịch sử...</div>
             ) : list.length === 0 ? (
