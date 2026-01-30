@@ -50,43 +50,60 @@ export const getExamConfig = (mode: Mode, level: number, customRules?: any): Exa
   return baseConfig;
 };
 
+/** Signature for duplicate check: không lặp lại câu giống y nhau trong cùng 1 bài (Nhìn tính, Nghe tính, Flash). */
+function questionSignature(operands: number[], correctAnswer: number): string {
+  return operands.join(",") + "=" + correctAnswer;
+}
+
 export const generateExam = (config: ExamConfig): Question[] => {
   const questions: Question[] = [];
-  
+  const seenSignatures = new Set<string>();
+  const maxDedupRetries = 500;
+
   for (let i = 0; i < config.numQuestions; i++) {
-    const numOperands = Math.floor(Math.random() * (config.numOperandsRange[1] - config.numOperandsRange[0] + 1)) + config.numOperandsRange[0];
-    const operands: number[] = [];
+    let operands: number[] = [];
     let currentSum = 0;
-    
-    for (let j = 0; j < numOperands; j++) {
-       const min = config.digitRange[0];
-       const max = config.digitRange[1];
-       let val = Math.floor(Math.random() * (max - min + 1)) + min;
-       
-       if (j === 0) {
-           operands.push(val);
-           currentSum += val;
-       } else {
-           // Quy tắc: Tổng tích lũy a+b, a+b+c... luôn phải dương
-           // Random 40% khả năng là số âm
-           const wantSubtract = Math.random() < 0.4;
-           
-           if (wantSubtract && (currentSum - val >= 0)) {
-               operands.push(-val);
-               currentSum -= val;
-           } else {
-               operands.push(val);
-               currentSum += val;
-           }
-       }
+    let attempts = 0;
+
+    for (;;) {
+      const numOperands = Math.floor(Math.random() * (config.numOperandsRange[1] - config.numOperandsRange[0] + 1)) + config.numOperandsRange[0];
+      operands = [];
+      currentSum = 0;
+
+      for (let j = 0; j < numOperands; j++) {
+         const min = config.digitRange[0];
+         const max = config.digitRange[1];
+         let val = Math.floor(Math.random() * (max - min + 1)) + min;
+
+         if (j === 0) {
+             operands.push(val);
+             currentSum += val;
+         } else {
+             const wantSubtract = Math.random() < 0.4;
+             if (wantSubtract && (currentSum - val >= 0)) {
+                 operands.push(-val);
+                 currentSum -= val;
+             } else {
+                 operands.push(val);
+                 currentSum += val;
+             }
+         }
+      }
+
+      const sig = questionSignature(operands, currentSum);
+      if (!seenSignatures.has(sig)) {
+        seenSignatures.add(sig);
+        break;
+      }
+      if (++attempts >= maxDedupRetries) break;
     }
-    
+
     questions.push({
       id: `q-${i + 1}`,
       operands,
       correctAnswer: currentSum
     });
   }
-  
+
   return questions;
 };

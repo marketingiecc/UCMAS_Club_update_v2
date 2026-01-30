@@ -4,6 +4,10 @@
  * Generated from rulebook markdown.
  *
  * Source rules: quy_tac_sinh_de_nhin_tinh_chi_tiet_lap_trinh.md
+ *
+ * Quy tắc sinh đề:
+ * - Không lặp lại các câu giống y nhau trong cùng 1 bài luyện tập hoặc đề thi.
+ *   (Hai câu coi là giống nhau khi có cùng biểu thức và cùng đáp án.)
  */
 
 export type LevelSymbol = "Z" | "A" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "K";
@@ -1423,6 +1427,13 @@ function generateDivQuestion(rng: RNG, no: number, dividendDigits: number, divis
   return { no, op: "div", dividend: divisor * quotient, divisor, answer: quotient };
 }
 
+/** Signature for duplicate check: không lặp lại câu giống y nhau trong cùng 1 bài. */
+function questionSignature(q: GeneratedQuestion): string {
+  if (q.op === "addsub") return `addsub:${q.displayTerms.join("|")}=${q.answer}`;
+  if (q.op === "mul") return `mul:${q.a},${q.b}=${q.answer}`;
+  return `div:${q.dividend},${q.divisor}=${q.answer}`;
+}
+
 /* -------------------------- Build parsed rules -------------------------- */
 function buildLevelRules(level: LevelSymbol): ParsedLevelRules {
   const raw = RULEBOOK_RAW.find(r => r.symbol === level);
@@ -1489,6 +1500,8 @@ export interface GenerateExamOptions {
   addSubOnly?: boolean;
 }
 
+const MAX_DEDUP_RETRIES = 500;
+
 export function generateExam(level: LevelSymbol, options: GenerateExamOptions = {}): GeneratedExam {
   const rules = buildLevelRules(level);
   const seed = typeof options.seed === "string"
@@ -1497,28 +1510,48 @@ export function generateExam(level: LevelSymbol, options: GenerateExamOptions = 
   const rng = new RNG(seed);
 
   const questions: GeneratedQuestion[] = [];
+  const seenSignatures = new Set<string>();
 
-  // 1) Add/Sub section: generate exactly as the doc question numbers.
+  // 1) Add/Sub section: generate exactly as the doc question numbers; no duplicate câu trong cùng bài.
   for (const grp of rules.addSubGroups) {
     for (let qNo = grp.range.start; qNo <= grp.range.end; qNo++) {
       const minusRequired = grp.minusCountFn(qNo);
-      questions.push(generateAddSubQuestion(rng, qNo, {
-        lines: grp.lines,
-        digitSpec: grp.digitSpec,
-        minusRequired,
-        constraints: grp.constraints,
-      }));
+      const spec = { lines: grp.lines, digitSpec: grp.digitSpec, minusRequired, constraints: grp.constraints };
+      let q = generateAddSubQuestion(rng, qNo, spec);
+      for (let retry = 0; retry < MAX_DEDUP_RETRIES; retry++) {
+        const sig = questionSignature(q);
+        if (!seenSignatures.has(sig)) {
+          seenSignatures.add(sig);
+          break;
+        }
+        q = generateAddSubQuestion(rng, qNo, spec);
+      }
+      questions.push(q);
     }
   }
 
-  // 2) Mul/Div section: appended after add/sub (since doc reuses 1-100 for that section).
+  // 2) Mul/Div section: appended after add/sub (since doc reuses 1-100 for that section); no duplicate.
   if (!options.addSubOnly) {
     let no = questions.length + 1;
     for (const grp of rules.mulDivGroups) {
       const count = grp.range.end - grp.range.start + 1;
       for (let i = 0; i < count; i++) {
-        if (grp.op === "mul") questions.push(generateMulQuestion(rng, no++, grp.aDigits, grp.bDigits));
-        else questions.push(generateDivQuestion(rng, no++, grp.dividendDigits ?? grp.aDigits, grp.bDigits));
+        let q: MulQuestion | DivQuestion =
+          grp.op === "mul"
+            ? generateMulQuestion(rng, no, grp.aDigits, grp.bDigits)
+            : generateDivQuestion(rng, no, grp.dividendDigits ?? grp.aDigits, grp.bDigits);
+        for (let retry = 0; retry < MAX_DEDUP_RETRIES; retry++) {
+          const sig = questionSignature(q);
+          if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            break;
+          }
+          q = grp.op === "mul"
+            ? generateMulQuestion(rng, no, grp.aDigits, grp.bDigits)
+            : generateDivQuestion(rng, no, grp.dividendDigits ?? grp.aDigits, grp.bDigits);
+        }
+        questions.push(q);
+        no++;
       }
     }
   }
