@@ -129,10 +129,14 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
             <div className="relative bg-white/80 backdrop-blur rounded-[2.5rem] border border-gray-200 shadow-xl p-6 sm:p-8">
               <div className="flex items-center justify-between mb-5">
                 <div>
-                  <div className="text-xs text-gray-500 font-heading font-semibold uppercase tracking-widest">Trí tuệ số học</div>
-                  <div className="text-2xl font-heading-extrabold text-gray-800">Nạp kiến thức mỗi ngày</div>
+                  <div className="text-[11px] text-gray-500 font-heading font-black uppercase tracking-widest">
+                    BÀN TÍNH VÀ SỐ HỌC TRÍ TUỆ
+                  </div>
+                  <div className="text-2xl font-heading-extrabold text-gray-800 uppercase tracking-tight mt-1">
+                    RÈN LUYỆN MỖ NGÀY - TRÍ TUỆ VƯỢT TRỘI
+                  </div>
                   <div className="text-sm text-gray-600 mt-1">
-                    Rèn phản xạ • tăng tập trung • phát triển tư duy
+                    Tăng tập trung - Ghi nhớ lâu bền - Phản xạ tốc độ
                   </div>
                 </div>
                 <div className="w-12 h-12 rounded-2xl bg-ucmas-yellow/20 flex items-center justify-center text-2xl">✨</div>
@@ -307,13 +311,17 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
 
                 <div className="mt-6 grid grid-cols-3 gap-3">
                   {[
-                    { k: 'Phát triển', v: 'Tư duy', c: 'text-ucmas-blue' },
-                    { k: 'Tỏa sáng', v: 'Phản xạ', c: 'text-ucmas-red' },
-                    { k: 'Nạp', v: 'Kiến thức', c: 'text-ucmas-green' },
+                    { label: 'NHÌN TÍNH', icon: '👁️', c: 'text-ucmas-blue', bg: 'bg-ucmas-blue/10' },
+                    { label: 'NGHE TÍNH', icon: '🎧', c: 'text-ucmas-red', bg: 'bg-ucmas-red/10' },
+                    { label: 'FLASH', icon: '⚡', c: 'text-ucmas-green', bg: 'bg-ucmas-green/10' },
                   ].map((i) => (
-                    <div key={i.k} className="rounded-2xl bg-white/70 border border-gray-200 p-3 text-center">
-                      <div className={`text-[10px] font-heading font-black uppercase tracking-widest ${i.c}`}>{i.k}</div>
-                      <div className="text-xs text-gray-700 font-heading font-bold mt-1">{i.v}</div>
+                    <div key={i.label} className="rounded-2xl bg-white/70 border border-gray-200 p-3 text-center">
+                      <div className={`mx-auto w-8 h-8 rounded-xl ${i.bg} flex items-center justify-center text-lg mb-1`}>
+                        {i.icon}
+                      </div>
+                      <div className={`text-[10px] font-heading font-black uppercase tracking-widest ${i.c}`}>
+                        {i.label}
+                      </div>
                     </div>
                   ))}
                 </div>
