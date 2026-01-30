@@ -11,6 +11,7 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
   const navigate = useNavigate();
   const PATH_TOTAL_DAYS = 96;
   const PATH_TOTAL_WEEKS = 16;
+  const brainSvgUrl = new URL('../svg/brain.svg', import.meta.url).toString();
 
   const handlePracticeClick = () => {
     if (!user) {
@@ -143,6 +144,134 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
                 <div className="pointer-events-none absolute -top-16 -left-16 w-56 h-56 bg-ucmas-blue/20 blur-3xl rounded-full"></div>
                 <div className="pointer-events-none absolute -bottom-16 -right-16 w-64 h-64 bg-ucmas-red/20 blur-3xl rounded-full"></div>
 
+                {/* Neural data transmission overlay */}
+                <svg
+                  className="pointer-events-none absolute inset-0 w-full h-full"
+                  viewBox="0 0 200 200"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="2.2" result="blur" />
+                      <feColorMatrix
+                        in="blur"
+                        type="matrix"
+                        values="
+                          0 0 0 0 0.10
+                          0 0 0 0 0.35
+                          0 0 0 0 0.90
+                          0 0 0 0.9 0"
+                        result="blue"
+                      />
+                      <feMerge>
+                        <feMergeNode in="blue" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <filter id="glowRed" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="2.2" result="blur" />
+                      <feColorMatrix
+                        in="blur"
+                        type="matrix"
+                        values="
+                          0 0 0 0 0.90
+                          0 0 0 0 0.18
+                          0 0 0 0 0.25
+                          0 0 0 0.9 0"
+                        result="red"
+                      />
+                      <feMerge>
+                        <feMergeNode in="red" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="2.2" result="blur" />
+                      <feColorMatrix
+                        in="blur"
+                        type="matrix"
+                        values="
+                          0 0 0 0 0.05
+                          0 0 0 0 0.65
+                          0 0 0 0 0.35
+                          0 0 0 0.9 0"
+                        result="green"
+                      />
+                      <feMerge>
+                        <feMergeNode in="green" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <linearGradient id="wireBlue" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0" stopColor="#2563eb" stopOpacity="0.2" />
+                      <stop offset="0.5" stopColor="#2563eb" stopOpacity="0.55" />
+                      <stop offset="1" stopColor="#2563eb" stopOpacity="0.2" />
+                    </linearGradient>
+                    <linearGradient id="wireRed" x1="1" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor="#ef4444" stopOpacity="0.18" />
+                      <stop offset="0.5" stopColor="#ef4444" stopOpacity="0.55" />
+                      <stop offset="1" stopColor="#ef4444" stopOpacity="0.18" />
+                    </linearGradient>
+                    <linearGradient id="wireGreen" x1="0" y1="1" x2="1" y2="0">
+                      <stop offset="0" stopColor="#16a34a" stopOpacity="0.16" />
+                      <stop offset="0.5" stopColor="#16a34a" stopOpacity="0.5" />
+                      <stop offset="1" stopColor="#16a34a" stopOpacity="0.16" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* faint neuron "wires" */}
+                  <path
+                    d="M25,120 C55,85 70,90 95,70 C120,50 145,65 170,40"
+                    fill="none"
+                    stroke="url(#wireBlue)"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeDasharray="10 8"
+                    opacity="0.9"
+                  >
+                    <animate attributeName="stroke-dashoffset" values="0;180" dur="3.2s" repeatCount="indefinite" />
+                  </path>
+                  <path
+                    d="M30,55 C60,35 85,55 105,85 C125,115 150,120 175,105"
+                    fill="none"
+                    stroke="url(#wireRed)"
+                    strokeWidth="2.0"
+                    strokeLinecap="round"
+                    strokeDasharray="12 9"
+                    opacity="0.85"
+                  >
+                    <animate attributeName="stroke-dashoffset" values="200;0" dur="3.8s" repeatCount="indefinite" />
+                  </path>
+                  <path
+                    d="M22,90 C52,115 70,135 100,130 C130,125 145,105 178,85"
+                    fill="none"
+                    stroke="url(#wireGreen)"
+                    strokeWidth="2.0"
+                    strokeLinecap="round"
+                    strokeDasharray="9 10"
+                    opacity="0.8"
+                  >
+                    <animate attributeName="stroke-dashoffset" values="0;220" dur="4.4s" repeatCount="indefinite" />
+                  </path>
+
+                  {/* moving "signals" */}
+                  {[
+                    { color: '#2563eb', filter: 'url(#glowBlue)', dur: '2.4s', begin: '0s', path: 'M25,120 C55,85 70,90 95,70 C120,50 145,65 170,40' },
+                    { color: '#ef4444', filter: 'url(#glowRed)', dur: '2.9s', begin: '0.4s', path: 'M30,55 C60,35 85,55 105,85 C125,115 150,120 175,105' },
+                    { color: '#16a34a', filter: 'url(#glowGreen)', dur: '3.3s', begin: '0.8s', path: 'M22,90 C52,115 70,135 100,130 C130,125 145,105 178,85' },
+                    { color: '#2563eb', filter: 'url(#glowBlue)', dur: '3.6s', begin: '1.2s', path: 'M170,40 C140,70 125,78 100,100 C75,122 55,118 30,145' },
+                  ].map((s, i) => (
+                    <g key={i}>
+                      <circle r="3.2" fill={s.color} filter={s.filter} opacity="0.95">
+                        <animateMotion dur={s.dur} begin={s.begin} repeatCount="indefinite" path={s.path} />
+                      </circle>
+                      <circle r="1.5" fill="#ffffff" opacity="0.9">
+                        <animateMotion dur={s.dur} begin={s.begin} repeatCount="indefinite" path={s.path} />
+                      </circle>
+                    </g>
+                  ))}
+                </svg>
+
                 {/* floating math */}
                 {[
                   { s: '+', cls: 'text-ucmas-blue', x: '8%', y: '18%', a: 'animate-bounce', d: '0ms' },
@@ -166,8 +295,12 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
                   <div className="absolute w-44 h-44 sm:w-52 sm:h-52 rounded-full bg-gradient-to-br from-ucmas-blue/20 via-white to-ucmas-red/20 blur-xl"></div>
                   <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-[2.5rem] bg-white border border-gray-200 shadow-lg flex items-center justify-center relative">
                     <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-ucmas-blue/10 to-ucmas-red/10 animate-pulse"></div>
-                    <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-ucmas-blue to-ucmas-red text-white flex items-center justify-center shadow-2xl">
-                      <span className="text-5xl sm:text-6xl">🧠</span>
+                    <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white/80 border border-gray-200 shadow-2xl flex items-center justify-center overflow-hidden">
+                      <img
+                        src={brainSvgUrl}
+                        alt="Brain"
+                        className="w-full h-full object-contain drop-shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
+                      />
                     </div>
                   </div>
                 </div>
