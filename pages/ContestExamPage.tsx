@@ -377,7 +377,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                                 <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
                             </div>
                          ) : (isFlashing || flashNumber !== null) ? (
-                            <div className="text-[150px] font-black text-ucmas-green leading-none tracking-tighter">
+                            <div className="text-[150px] font-heading font-bold text-ucmas-green leading-none tracking-[0.06em] tabular-nums">
                                 {flashNumber}
                             </div>
                          ) : (

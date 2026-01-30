@@ -4,6 +4,7 @@ import { UserProfile, Mode } from '../types';
 import CustomSlider from '../components/CustomSlider';
 import { practiceModeSettings, type DifficultyKey } from '../services/practiceModeSettings';
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { canUseTrial } from '../services/trialUsage';
 
 const LANGUAGES = [
   { code: 'vi-VN', label: 'Tiếng Việt' },
@@ -101,6 +102,12 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
   const settings = useMemo(() => practiceModeSettings.getSettings(), []);
 
+  const hasActiveLicense = () => {
+    if (user.role === 'admin') return true;
+    if (!user.license_expiry) return false;
+    return new Date(user.license_expiry) > new Date();
+  };
+
   const hasAccess = (mode: Mode) => {
     if (user.role === 'admin') return true;
     if (!user.license_expiry || new Date(user.license_expiry) < new Date()) return false;
@@ -110,7 +117,12 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const modeLimits = selectedModePractice ? settings[selectedModePractice][modeDifficulty as DifficultyKey] : null;
 
   const startPractice = (mode: Mode) => {
-    if (!hasAccess(mode)) {
+    // Trial policy (no activation):
+    // - Practice by mode: 3 attempts per mode
+    // - Practice by path: not allowed
+    const licensed = hasAccess(mode);
+    const allowTrial = !hasActiveLicense() && canUseTrial(user.id, 'mode', mode, 3);
+    if (!licensed && !allowTrial) {
       navigate('/activate');
       return;
     }
@@ -133,7 +145,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   };
 
   const startEliteVisual = () => {
-    if (!hasAccess(Mode.VISUAL)) {
+    const mode = Mode.VISUAL;
+    const licensed = hasAccess(mode);
+    const allowTrial = !hasActiveLicense() && canUseTrial(user.id, 'elite', mode, 1);
+    if (!licensed && !allowTrial) {
       navigate('/activate');
       return;
     }
@@ -151,7 +166,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   };
 
   const startEliteAudio = () => {
-    if (!hasAccess(Mode.LISTENING)) {
+    const mode = Mode.LISTENING;
+    const licensed = hasAccess(mode);
+    const allowTrial = !hasActiveLicense() && canUseTrial(user.id, 'elite', mode, 1);
+    if (!licensed && !allowTrial) {
       navigate('/activate');
       return;
     }
@@ -172,7 +190,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   };
 
   const startEliteFlash = () => {
-    if (!hasAccess(Mode.FLASH)) {
+    const mode = Mode.FLASH;
+    const licensed = hasAccess(mode);
+    const allowTrial = !hasActiveLicense() && canUseTrial(user.id, 'elite', mode, 1);
+    if (!licensed && !allowTrial) {
       navigate('/activate');
       return;
     }
@@ -205,7 +226,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const startPathExercise = (ex: PathExerciseEntry) => {
     const modeMap = { visual: Mode.VISUAL, audio: Mode.LISTENING, flash: Mode.FLASH } as const;
     const mode = modeMap[ex.mode];
-    if (!hasAccess(mode)) {
+    // Practice by path: NOT allowed without activation
+    if (!hasActiveLicense() || !hasAccess(mode)) {
       navigate('/activate');
       return;
     }

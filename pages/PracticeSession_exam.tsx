@@ -8,6 +8,7 @@ import ResultDetailModal from '../components/ResultDetailModal';
 import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
+import { canUseTrial, consumeTrial } from '../services/trialUsage';
 
 interface PracticeSessionExamProps {
   user: UserProfile;
@@ -68,10 +69,46 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       [Mode.FLASH]: { color: 'text-ucmas-green', bg: 'bg-ucmas-green', icon: '⚡', title: 'Flash' },
   }[currentMode] || { color: 'text-gray-800', bg: 'bg-gray-800', icon: '?', title: 'Luyện Tập' };
 
+  // Access control:
+  // - Without activation: Elite = 1 attempt per mode; Contests/Assigned/Creative allowed.
+  useEffect(() => {
+    if (!navState) return;
+    if (user.role === 'admin') return;
+
+    const now = new Date();
+    const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+    const hasActiveLicense = !!(expiry && expiry > now);
+    const isModeAllowed = user.allowed_modes.includes(currentMode);
+
+    if (hasActiveLicense) {
+      if (!isModeAllowed) navigate('/activate');
+      return;
+    }
+
+    // Unactivated user:
+    const isElite = returnTo?.tab === 'elite';
+    if (isElite) {
+      if (!canUseTrial(user.id, 'elite', currentMode, 1)) {
+        navigate('/activate');
+      }
+    }
+  }, [navState, currentMode, navigate, returnTo?.tab, user.allowed_modes, user.id, user.license_expiry, user.role]);
+
   useEffect(() => {
     if (!navState) {
         navigate('/contests');
         return;
+    }
+
+    // Consume elite trial on enter (only once per attempt). Contest/assigned/creative are not limited.
+    if (user.role !== 'admin') {
+      const now = new Date();
+      const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+      const hasActiveLicense = !!(expiry && expiry > now);
+      const isElite = returnTo?.tab === 'elite';
+      if (!hasActiveLicense && isElite) {
+        consumeTrial(user.id, 'elite', currentMode);
+      }
     }
     
     let finalQuestions: Question[] = [];
@@ -379,7 +416,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -605,7 +642,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                                     </div>
                                 </div>
                             ) : (isFlashing || flashNumber !== null) ? (
-                                <div className="font-heading font-black text-ucmas-blue leading-none tracking-tighter text-[clamp(6rem,22vw,16rem)]">
+                                <div className="font-heading font-bold text-ucmas-blue leading-none tracking-[0.06em] text-[clamp(6rem,22vw,16rem)] tabular-nums">
                                    {flashNumber}
                                 </div>
                             ) : (

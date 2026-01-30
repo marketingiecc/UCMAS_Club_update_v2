@@ -186,11 +186,11 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+            <div className="text-gray-700 font-heading font-bold text-[clamp(2rem,8vw,5rem)] uppercase">
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -351,7 +351,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         })()}
 
                         {currentQuestion.mode === Mode.FLASH && (
-                            <div className="font-black text-green-600 text-[clamp(5rem,20vw,14rem)] leading-none tracking-tighter text-center px-2">
+                            <div className="font-heading font-bold text-green-600 text-[clamp(5rem,20vw,14rem)] leading-none tracking-[0.06em] text-center px-2 tabular-nums">
                                 {flashOverlay ? (
                                     <span className="text-purple-600 text-[clamp(2.5rem,10vw,6rem)] uppercase">
                                         {flashOverlay}

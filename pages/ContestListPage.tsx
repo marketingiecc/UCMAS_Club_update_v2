@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Contest, UserProfile, Mode } from '../types';
@@ -12,6 +12,7 @@ interface ContestListPageProps {
 
 const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'contests' | 'assigned' | 'practice' | 'tips'>('contests');
   const [contests, setContests] = useState<Contest[]>([]);
   const [assignedExams, setAssignedExams] = useState<any[]>([]);
@@ -22,8 +23,13 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       digits: 1,
       operands: 5,
       speed: 1.0,
-      count: 10
   });
+
+  // Allow deep-linking back to Creative tab (used by "CÂU KHÁC")
+  useEffect(() => {
+    const initialTab = (location.state as any)?.initialTab as 'contests' | 'assigned' | 'practice' | 'tips' | undefined;
+    if (initialTab) setActiveTab(initialTab);
+  }, [location.state]);
 
   useEffect(() => {
     setLoading(true);
@@ -45,18 +51,21 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   }, [user.id]);
 
   const startCustomPractice = () => {
-      navigate(`/practice-exam/${practiceMode}`, { 
+      // Creative: always generate ONLY 1 calculation per run, using the same runtime logic as PracticeSession.
+      navigate(`/practice/${practiceMode}`, { 
           state: { 
-            customConfig: {
-              ...practiceConfig,
-              numQuestions: practiceConfig.count,
-              isCreative: true,
-              digitRange: [Math.pow(10, practiceConfig.digits - 1), Math.pow(10, practiceConfig.digits) - 1],
-              numOperandsRange: [practiceConfig.operands, practiceConfig.operands],
-              flashSpeed: practiceConfig.speed * 1000, 
-              speed: practiceConfig.speed,
-              name: 'Bài luyện tập sáng tạo'
-            } 
+            fromHub: true,
+            origin: 'contests_creative' as const,
+            config: {
+              level_symbol: user.level_symbol || 'A',
+              difficulty: 'basic',
+              question_count: 1,
+              digits: practiceConfig.digits,
+              rows: practiceConfig.operands,
+              // for Flash/Listening this is seconds/item
+              speed_seconds: practiceConfig.speed,
+              language: 'vi-VN',
+            }
           } 
       });
   };
@@ -98,7 +107,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
             {[
                 { id: 'contests', label: '🏁 Cuộc thi' },
                 { id: 'assigned', label: '📚 Luyện thi' },
-                { id: 'practice', label: '🔥 Sáng tạo đề' },
+                { id: 'practice', label: '✨ Sáng tạo phép tính' },
                 { id: 'tips', label: '💡 Kinh nghiệm' }
             ].map(tab => (
                 <button 
@@ -116,7 +125,7 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
           <div className="max-w-5xl mx-auto animate-fade-in bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
               <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-10 text-white flex justify-between items-center relative overflow-hidden">
                   <div className="relative z-10">
-                    <h2 className="text-3xl font-heading-extrabold uppercase tracking-tight">SÁNG TẠO ĐỀ THI RIÊNG</h2>
+                    <h2 className="text-3xl font-heading-extrabold uppercase tracking-tight">SÁNG TẠO PHÉP TÍNH</h2>
                     <p className="text-blue-100 text-sm mt-2 font-medium">Thiết lập thông số để rèn luyện phản xạ theo ý muốn</p>
                   </div>
                   <span className="text-9xl absolute -right-4 -bottom-8 opacity-10 select-none">🧮</span>
@@ -170,20 +179,9 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
 
                   <div className="space-y-12">
                       <div className="space-y-8 bg-gray-50/50 p-8 rounded-[2.5rem] border border-gray-100 shadow-inner">
-                          <div className="space-y-6">
-                              <CustomSlider
-                                label="SỐ LƯỢNG CÂU HỎI"
-                                value={practiceConfig.count}
-                                min={1}
-                                max={20}
-                                step={1}
-                                onChange={(val) => setPracticeConfig({...practiceConfig, count: val})}
-                                valueLabel={`${practiceConfig.count} câu`}
-                                color="blue"
-                                unit=""
-                                minLabel="1"
-                                maxLabel="20"
-                              />
+                          <div className="text-center bg-white rounded-2xl border border-gray-100 py-4 shadow-sm">
+                              <div className="text-[11px] font-heading font-black text-gray-400 uppercase tracking-widest">Số lượng</div>
+                              <div className="text-2xl font-heading font-black text-ucmas-blue mt-1">1 phép tính</div>
                           </div>
 
                           {(practiceMode === Mode.LISTENING || practiceMode === Mode.FLASH) && (
@@ -191,15 +189,15 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                                   <CustomSlider
                                     label="TỐC ĐỘ (GIÂY/SỐ)"
                                     value={practiceConfig.speed}
-                                    min={0.2}
-                                    max={3.0}
+                                    min={0.1}
+                                    max={1.5}
                                     step={0.1}
                                     onChange={(val) => setPracticeConfig({...practiceConfig, speed: val})}
                                     valueLabel={`${practiceConfig.speed}s`}
                                     color="red"
                                     unit="s"
-                                    minLabel="0.2s (Siêu nhanh)"
-                                    maxLabel="3.0s (Chậm)"
+                                    minLabel="0.1s (Nhanh)"
+                                    maxLabel="1.5s (Chậm)"
                                   />
                               </div>
                           )}

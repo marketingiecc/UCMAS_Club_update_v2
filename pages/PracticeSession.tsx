@@ -8,6 +8,7 @@ import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 
 interface PracticeSessionProps {
   user: UserProfile;
@@ -29,6 +30,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const locationState = location.state as {
     fromHub?: boolean;
     elite?: boolean;
+    origin?: 'contests_creative';
     returnTo?: { tab: 'elite' | 'mode' | 'path'; mode?: 'visual' | 'audio' | 'flash'; pathDay?: number };
     config?: {
       level_symbol?: string;
@@ -43,17 +45,45 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const hubConfig = locationState?.config;
   const fromHub = locationState?.fromHub;
   const returnTo = locationState?.returnTo;
+  const origin = locationState?.origin;
 
   useEffect(() => {
      if (user.role === 'admin') return;
 
      const now = new Date();
      const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
-     const hasLicense = expiry && expiry > now;
+     const hasActiveLicense = !!(expiry && expiry > now);
      const isModeAllowed = user.allowed_modes.includes(currentMode);
 
-     if (!hasLicense || !isModeAllowed) {
-         navigate('/activate');
+     // Users without activation can still access:
+     // - Practice by mode: 3 times per mode
+     // - Elite: 1 time per mode
+     // - Creative (Contests): allowed
+     // - Path: NOT allowed
+     if (hasActiveLicense) {
+       if (!isModeAllowed) navigate('/activate');
+       return;
+     }
+
+     if (origin === 'contests_creative') return; // always allowed
+
+     if (returnTo?.tab === 'path') {
+       navigate('/activate');
+       return;
+     }
+
+     const area: TrialArea | null =
+       returnTo?.tab === 'mode' ? 'mode' :
+       (locationState?.elite ? 'elite' : null);
+
+     if (!area) {
+       navigate('/activate');
+       return;
+     }
+
+     const limit = area === 'mode' ? 3 : 1;
+     if (!canUseTrial(user.id, area, currentMode, limit)) {
+       navigate('/activate');
      }
   }, [user, currentMode, navigate]);
 
@@ -138,6 +168,21 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     if (!hubConfig) return;
     setIsLoadingRule(true);
     try {
+      // Consume trial attempt (if user has no active license and this is a training flow)
+      if (user.role !== 'admin') {
+        const now = new Date();
+        const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+        const hasActiveLicense = !!(expiry && expiry > now);
+        if (!hasActiveLicense && origin !== 'contests_creative') {
+          const area: TrialArea | null =
+            returnTo?.tab === 'mode' ? 'mode' :
+            (locationState?.elite ? 'elite' : null);
+          if (area) {
+            consumeTrial(user.id, area, currentMode);
+          }
+        }
+      }
+
       const levelSymbol = hubConfig.level_symbol || selectedLevelSymbol;
       const levelNum = getLevelIndex(levelSymbol);
       const numQuestions = hubConfig.question_count || 20;
@@ -182,7 +227,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     } finally {
       setIsLoadingRule(false);
     }
-  }, [hubConfig, currentMode]);
+  }, [hubConfig, currentMode, origin, returnTo, user.id, user.license_expiry, user.role]);
 
   const hasStartedFromHub = useRef(false);
   useEffect(() => {
@@ -675,19 +720,23 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                👁️ Xem lại chi tiết
             </button>
             <div className="flex flex-wrap gap-3">
-               <button
-                 onClick={() => {
-                   if (fromHub && returnTo?.tab === 'path' && returnTo.pathDay != null) {
-                     navigate('/training', { state: { openTab: 'path' as const, pathDay: returnTo.pathDay } });
-                   } else {
-                     navigate('/dashboard');
-                   }
-                 }}
-                 className="flex-1 min-w-[120px] border-2 border-gray-300 text-gray-600 font-heading-bold py-3 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition uppercase text-sm shadow-sm"
-               >
-                  🏠 Dashboard
-               </button>
-               {fromHub && returnTo?.tab === 'path' && returnTo.pathDay != null && (
+               {/* Creative (SÁNG TẠO PHÉP TÍNH): no Dashboard button */}
+               {origin !== 'contests_creative' && (
+                 <button
+                   onClick={() => {
+                     if (fromHub && returnTo?.tab === 'path' && returnTo.pathDay != null) {
+                       navigate('/training', { state: { openTab: 'path' as const, pathDay: returnTo.pathDay } });
+                     } else {
+                       navigate('/dashboard');
+                     }
+                   }}
+                   className="flex-1 min-w-[120px] border-2 border-gray-300 text-gray-600 font-heading-bold py-3 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition uppercase text-sm shadow-sm"
+                 >
+                    🏠 Dashboard
+                 </button>
+               )}
+
+               {origin !== 'contests_creative' && fromHub && returnTo?.tab === 'path' && returnTo.pathDay != null && (
                  <button
                    onClick={() => navigate('/training', { state: { openTab: 'path' as const, pathDay: returnTo.pathDay } })}
                    className="flex-1 min-w-[140px] bg-ucmas-blue text-white font-heading-bold py-3 rounded-xl hover:bg-ucmas-red transition uppercase text-sm shadow-lg"
@@ -697,6 +746,12 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                )}
                <button
                  onClick={() => {
+                   // Creative flash: go back to Creative tab and generate a different calculation
+                   if (origin === 'contests_creative') {
+                     navigate('/contests', { state: { initialTab: 'practice' } });
+                     return;
+                   }
+
                    if (fromHub && returnTo) {
                      if (returnTo.tab === 'path' && returnTo.pathDay != null) {
                        navigate('/training', { state: { openTab: 'path' as const, pathDay: returnTo.pathDay } });
@@ -709,7 +764,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                  }}
                  className="flex-1 min-w-[120px] bg-ucmas-red text-white font-heading-bold py-3 rounded-xl hover:bg-ucmas-blue transition uppercase text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                >
-                  🔄 Làm lại
+                  {origin === 'contests_creative' ? 'CÂU KHÁC' : '🔄 Làm lại'}
                </button>
             </div>
         </div>
@@ -740,7 +795,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -933,7 +988,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                     </div>
                                 </div>
                             ) : (isFlashing || flashNumber !== null) ? (
-                                <div className="font-heading font-black text-ucmas-blue leading-none tracking-tighter text-[clamp(6rem,22vw,16rem)]">
+                                <div className="font-heading font-bold text-ucmas-blue leading-none tracking-[0.06em] text-[clamp(6rem,22vw,16rem)] tabular-nums">
                                    {flashNumber}
                                 </div>
                             ) : (
