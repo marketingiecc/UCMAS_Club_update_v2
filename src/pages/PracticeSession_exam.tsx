@@ -5,6 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
+import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
 
 interface PracticeSessionExamProps {
   user: UserProfile;
@@ -99,6 +100,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         setIsFlashing(false);
         setIsPlayingAudio(false);
         if (audioRef.current) audioRef.current.pause();
+        cancelBrowserSpeechSynthesis();
 
         const currentQMode = questions[currentQIndex]?.mode || urlMode;
 
@@ -143,16 +145,12 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     setIsFlashing(false);
   };
 
-  const playSingleAudio = (text: string, rate: number): Promise<void> => {
-    return new Promise((resolve) => {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
-        const audio = new Audio(url);
-        audio.playbackRate = rate;
-        audioRef.current = audio;
-        
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
-        audio.play().catch(() => resolve());
+  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+    const lang = 'vi-VN';
+    await playStableTts(text, lang, rate, {
+      onAudio: (a) => {
+        audioRef.current = a;
+      },
     });
   };
 

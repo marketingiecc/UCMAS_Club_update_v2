@@ -6,10 +6,7 @@ import { practiceModeSettings, type DifficultyKey } from '../services/practiceMo
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
 import { canUseTrial } from '../services/trialUsage';
 
-const LANGUAGES = [
-  { code: 'vi-VN', label: 'Tiếng Việt' },
-  { code: 'en-US', label: 'Tiếng Anh' },
-];
+// Ngôn ngữ: cố định tiếng Việt (không cho chọn)
 
 /** Bài luyện tập trong lộ trình (cùng cấu trúc Admin lưu localStorage) */
 interface PathExerciseEntry {
@@ -85,7 +82,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const [modeQuestionCount, setModeQuestionCount] = useState(20);
   const [modeSpeedRead, setModeSpeedRead] = useState(1.2);   // Tốc độ đọc (chỉ Nghe tính)
   const [modeSpeedDisplay, setModeSpeedDisplay] = useState(1.2); // Tốc độ hiển thị (chỉ Flash)
-  const [modeLang, setModeLang] = useState('vi-VN');
+  const modeLang = 'vi-VN';
 
   // Tab 3: Luyện thi HSG — chọn chế độ trước, sau đó hiện form
   const [selectedModeElite, setSelectedModeElite] = useState<SelectedMode | null>(null);
@@ -96,7 +93,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const [eliteQuestionCount, setEliteQuestionCount] = useState(30);
   const [eliteSpeedRead, setEliteSpeedRead] = useState(1.0);   // Tốc độ đọc (chỉ Nghe tính)
   const [eliteSpeedDisplay, setEliteSpeedDisplay] = useState(1.0); // Tốc độ hiển thị (chỉ Flash)
-  const [eliteLang, setEliteLang] = useState('vi-VN');
+  const eliteLang = 'vi-VN';
 
   const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
 
@@ -133,7 +130,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       difficulty: modeDifficulty,
       question_count: modeQuestionCount,
       speed_seconds: speed,
-      language: modeLang,
+      language: 'vi-VN',
     };
     navigate(`/practice/${mode}`, {
       state: {
@@ -183,7 +180,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           rows: eliteRows,
           question_count: eliteQuestionCount,
           speed_seconds: clampSpeedSeconds(eliteSpeedRead),
-          language: eliteLang,
+          language: 'vi-VN',
         },
       },
     });
@@ -207,7 +204,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           rows: eliteRows,
           question_count: eliteQuestionCount,
           speed_seconds: clampSpeedSeconds(eliteSpeedDisplay),
-          language: eliteLang,
+          language: 'vi-VN',
         },
       },
     });
@@ -309,7 +306,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                 >
                   <div className="w-20 h-20 rounded-full bg-ucmas-red text-white flex items-center justify-center text-4xl mb-4">🎧</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-red mb-2">Nghe tính</h3>
-                  <p className="text-sm text-gray-600 text-center">Cấp độ, độ khó, số câu, ngôn ngữ, tốc độ đọc</p>
+                  <p className="text-sm text-gray-600 text-center">Cấp độ, độ khó, số câu, tốc độ đọc</p>
                 </button>
                 <button
                   onClick={() => setSelectedModePractice('flash')}
@@ -388,12 +385,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Số câu</label>
                         <input type="number" min={modeLimits?.question_count_min ?? 10} max={modeLimits?.question_count_max ?? 120} value={modeQuestionCount} onChange={(e) => setModeQuestionCount(Number(e.target.value) || 20)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium" />
                       </div>
-                      <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Ngôn ngữ</label>
-                        <select value={modeLang} onChange={(e) => setModeLang(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium">
-                          {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-                        </select>
-                      </div>
+                      <div className="text-xs font-heading-bold text-ucmas-red uppercase tracking-wider">Ngôn ngữ: Tiếng Việt</div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Tốc độ đọc (s): {modeSpeedRead.toFixed(1)}</label>
                         <div className="mt-1">
@@ -668,7 +660,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                 >
                   <div className="w-20 h-20 rounded-full bg-ucmas-red text-white flex items-center justify-center text-4xl mb-4">🎧</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-red mb-2">Nghe tính</h3>
-                  <p className="text-sm text-gray-600 text-center">Số chữ số, số dòng, số câu, ngôn ngữ, tốc độ đọc.</p>
+                  <p className="text-sm text-gray-600 text-center">Số chữ số, số dòng, số câu, tốc độ đọc.</p>
                 </button>
                 <button
                   onClick={() => setSelectedModeElite('flash')}
@@ -739,12 +731,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Số câu</label>
                         <input type="number" min={5} value={eliteQuestionCount} onChange={(e) => setEliteQuestionCount(Number(e.target.value) || 20)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium" />
                       </div>
-                      <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Ngôn ngữ</label>
-                        <select value={eliteLang} onChange={(e) => setEliteLang(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium">
-                          {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-                        </select>
-                      </div>
+                      <div className="text-xs font-heading-bold text-ucmas-red uppercase tracking-wider">Ngôn ngữ: Tiếng Việt</div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Tốc độ đọc (s): {eliteSpeedRead.toFixed(1)}</label>
                         <div className="mt-1"><CustomSlider min={0.1} max={1.5} step={0.1} value={eliteSpeedRead} onChange={(v) => setEliteSpeedRead(clampSpeedSeconds(v))} /></div>

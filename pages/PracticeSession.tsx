@@ -7,7 +7,7 @@ import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
-import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, playFptAiTts, playStableTts, speakWithBrowserTts, splitTtsText } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 
 interface PracticeSessionProps {
@@ -15,11 +15,8 @@ interface PracticeSessionProps {
 }
 
 const LANGUAGES = [
+    // Ngôn ngữ cố định: Tiếng Việt
     { code: 'vi-VN', label: 'Tiếng Việt', sample: 'Một hai ba bốn năm sáu bảy tám chín mười' },
-    { code: 'en-US', label: 'Tiếng Anh', sample: 'One two three four five six seven eight nine ten' },
-    { code: 'ru-RU', label: 'Tiếng Nga', sample: 'один два три' },
-    { code: 'zh-CN', label: 'Tiếng Trung', sample: '一 二 三 四 五' },
-    { code: 'ja-JP', label: 'Tiếng Nhật', sample: 'いち に さん し go' },
 ];
 
 const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
@@ -106,12 +103,10 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [selectedExamId, setSelectedExamId] = useState<string>('');
   
   const [speed, setSpeed] = useState(1.0);
-  const [selectedLang, setSelectedLang] = useState('vi-VN');
+  const selectedLang = 'vi-VN';
   const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
-  const getListeningPhrases = (langCode: string) => {
-      const base = (langCode || 'vi').split('-')[0];
-      if (base === 'en') return { ready: 'Get ready', equals: 'Equals' };
-      // Default Vietnamese
+  const getListeningPhrases = (_langCode: string) => {
+      // Cố định Tiếng Việt
       return { ready: 'Chuẩn bị', equals: 'Bằng' };
   };
 
@@ -187,7 +182,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       const levelNum = getLevelIndex(levelSymbol);
       const numQuestions = hubConfig.question_count || 20;
       const speedSec = clampSpeedSeconds(hubConfig.speed_seconds ?? 1.2);
-      if (hubConfig.language) setSelectedLang(hubConfig.language);
+      // Ngôn ngữ cố định tiếng Việt (không nhận config từ hub)
       setSpeed(speedSec);
       setSelectedLevelSymbol(levelSymbol);
       setSourceType('auto');
@@ -304,12 +299,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       cancelBrowserSpeechSynthesis();
       setIsPlayingAudio(false); 
 
-      const url = getGoogleTTSUrl(langConfig.sample, selectedLang);
-      const audio = new Audio(url);
-      audio.playbackRate = getSpeechRate(speed);
-      audio.play().catch(async () => {
-        await speakWithBrowserTts(langConfig.sample, selectedLang, getSpeechRate(speed));
-      });
+      (async () => {
+        const rate = getSpeechRate(speed);
+        await playStableTts(langConfig.sample, selectedLang, rate, {
+          onAudio: (a) => {
+            audioRef.current = a;
+          },
+        });
+      })();
   };
 
   const canPlay = (idx: number) => {
@@ -372,31 +369,23 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     setIsFlashing(false);
   };
 
-  const playSingleAudio = (text: string, rate: number): Promise<void> => {
-      return new Promise((resolve) => {
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            resolve();
-          };
-
-          const url = getGoogleTTSUrl(text, selectedLang);
-          const audio = new Audio(url);
-          audio.playbackRate = rate;
-          audioRef.current = audio;
-          
-          audio.onended = () => finish();
-          audio.onerror = async () => {
-            await speakWithBrowserTts(text, selectedLang, rate);
-            finish();
-          };
-          
-          audio.play().catch(async () => {
-            await speakWithBrowserTts(text, selectedLang, rate);
-            finish();
-          });
+  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+    // Test FPT.AI voice ONLY for: "Cuộc thi → ✨ Sáng tạo phép tính → 🎧 Nghe"
+    if (origin === 'contests_creative' && currentMode === Mode.LISTENING) {
+      await playFptAiTts(text, 'vi-VN', rate, {
+        onAudio: (a) => {
+          audioRef.current = a;
+        },
+        voice: 'banmai',
       });
+      return;
+    }
+
+    await playStableTts(text, selectedLang, rate, {
+      onAudio: (a) => {
+        audioRef.current = a;
+      },
+    });
   };
 
   const playAudio = async () => {
@@ -577,14 +566,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
               {currentMode === Mode.LISTENING && (
                   <div>
-                    <label className={`block text-xs font-heading font-bold ${theme.color} mb-1.5 ml-1 uppercase`}>🗣️ Ngôn ngữ</label>
-                    <select 
-                        value={selectedLang} 
-                        onChange={e => setSelectedLang(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition appearance-none"
-                    >
-                        {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
-                    </select>
+                    <div className={`text-xs font-heading font-bold ${theme.color} mb-1.5 ml-1 uppercase`}>🗣️ Ngôn ngữ: Tiếng Việt</div>
                   </div>
               )}
 

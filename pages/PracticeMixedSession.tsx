@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Mode, Question, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
 
 interface PracticeMixedSessionProps {
   user: UserProfile;
@@ -26,7 +26,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
   const [digits, setDigits] = useState<number>(2);
   const [rows, setRows] = useState<number>(3);
   const [speed, setSpeed] = useState<number>(1.0);
-  const [selectedLang, setSelectedLang] = useState<'vi-VN' | 'en-US'>('vi-VN');
+  const TTS_LANG: 'vi-VN' = 'vi-VN';
 
   // Session State
   const [phase, setPhase] = useState<'setup' | 'playing' | 'result'>('setup');
@@ -38,6 +38,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
   const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioPlayCount, setAudioPlayCount] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -88,6 +89,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
       setCurrentQuestion(questionObj);
       setUserAnswer('');
       setPhase('playing');
+      setAudioPlayCount(0);
       
       if (questionObj.mode === Mode.FLASH) {
           setTimeout(() => runFlashSequence(questionObj), 500);
@@ -117,36 +119,23 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
 
   // -- AUDIO LOGIC --
   const runAudioSequence = async (q: Question) => {
+      if (isPlayingAudio) return;
+      // Policy: auto-play once + one replay (total 2)
+      if (audioPlayCount >= 2) return;
+      setAudioPlayCount(c => c + 1);
       setIsPlayingAudio(true);
       cancelBrowserSpeechSynthesis();
-      const play = (text: string, rate: number) => new Promise<void>(resolve => {
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            resolve();
-          };
-          const url = getGoogleTranslateTtsUrl(text, 'vi');
-          const audio = new Audio(url);
-          audio.playbackRate = rate;
-          audioRef.current = audio;
-          audio.onended = () => finish();
-          audio.onerror = async () => {
-            await speakWithBrowserTts(text, 'vi-VN', rate);
-            finish();
-          };
-          audio.play().catch(async () => {
-            await speakWithBrowserTts(text, 'vi-VN', rate);
-            finish();
-          });
-      });
 
-      const base = selectedLang.split('-')[0];
-      const phrases = base === 'en' ? { ready: 'Get ready', equals: 'Equals' } : { ready: 'Chuẩn bị', equals: 'Bằng' };
+      const phrases = { ready: 'Chuẩn bị', equals: 'Bằng' };
 
       // Adjust rate based on speed
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-      await play(`${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`, rate);
+      const fullText = `${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`;
+      await playStableTts(fullText, TTS_LANG, rate, {
+        onAudio: (a) => {
+          audioRef.current = a;
+        },
+      });
       
       setIsPlayingAudio(false);
       inputRef.current?.focus();
@@ -280,19 +269,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         </div>
                     </div>
 
-                    {(selectedMode === 'all' || selectedMode === Mode.LISTENING) && (
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ngôn ngữ (Nghe tính)</label>
-                        <select
-                          value={selectedLang}
-                          onChange={e => setSelectedLang(e.target.value as any)}
-                          className="w-full p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 border-2 border-transparent focus:border-purple-500 outline-none"
-                        >
-                          <option value="vi-VN">Tiếng Việt</option>
-                          <option value="en-US">Tiếng Anh</option>
-                        </select>
-                      </div>
-                    )}
+                    {/* Ngôn ngữ: cố định tiếng Việt */}
 
                     <div className="grid grid-cols-2 gap-6">
                         <div className="space-y-2">
@@ -369,7 +346,17 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         )}
 
                         {currentQuestion.mode === Mode.LISTENING && (
-                            <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl text-white shadow-2xl transition-all ${isPlayingAudio ? 'bg-red-500 scale-105 animate-pulse' : 'bg-red-400 cursor-pointer hover:bg-red-500'}`} onClick={() => !isPlayingAudio && runAudioSequence(currentQuestion)}>
+                            <div
+                              className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl text-white shadow-2xl transition-all ${
+                                isPlayingAudio
+                                  ? 'bg-red-500 scale-105 animate-pulse'
+                                  : audioPlayCount >= 2
+                                    ? 'bg-gray-300 cursor-not-allowed'
+                                    : 'bg-red-400 cursor-pointer hover:bg-red-500'
+                              }`}
+                              onClick={() => !isPlayingAudio && audioPlayCount < 2 && runAudioSequence(currentQuestion)}
+                              title={audioPlayCount >= 2 ? 'Đã hết lượt nghe' : 'Nghe lại (1 lần)'}
+                            >
                                 🎧
                             </div>
                         )}

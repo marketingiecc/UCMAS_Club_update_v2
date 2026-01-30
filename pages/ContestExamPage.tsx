@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
 import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
 
 interface ContestExamPageProps {
     user: UserProfile;
@@ -32,6 +32,8 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
   const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioPlayCounts, setAudioPlayCounts] = useState<Record<number, number>>({});
+  const audioPlayCountsRef = useRef<Record<number, number>>({});
   
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -127,7 +129,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
           if (currentMode === Mode.FLASH) {
               runFlashSequence(currentQIndex);
           } else if (currentMode === Mode.LISTENING) {
-              playAudioSequence(currentQIndex);
+              playAudioSequence(currentQIndex, false);
           }
       }
   }, [currentQIndex, status]);
@@ -169,34 +171,29 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       return Math.min(Math.max(rate, 0.5), 2.5);
   };
 
-  const playSingleAudio = (text: string, rate: number): Promise<void> => {
-    return new Promise((resolve) => {
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-
-        const url = getGoogleTranslateTtsUrl(text, 'vi');
-        const audio = new Audio(url);
-        audio.playbackRate = rate;
-        audioRef.current = audio;
-        
-        audio.onended = () => finish();
-        audio.onerror = async () => {
-          await speakWithBrowserTts(text, 'vi-VN', rate);
-          finish();
-        };
-        
-        audio.play().catch(async () => {
-          await speakWithBrowserTts(text, 'vi-VN', rate);
-          finish();
-        });
+  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+    const lang = 'vi-VN';
+    await playStableTts(text, lang, rate, {
+      onAudio: (a) => {
+        audioRef.current = a;
+      },
     });
   };
 
-  const playAudioSequence = async (qIndex: number) => {
+  const getPlayCount = (qIndex: number) => audioPlayCountsRef.current[qIndex] || 0;
+  const bumpPlayCount = (qIndex: number) => {
+    audioPlayCountsRef.current = { ...audioPlayCountsRef.current, [qIndex]: getPlayCount(qIndex) + 1 };
+    setAudioPlayCounts(audioPlayCountsRef.current);
+  };
+
+  const playAudioSequence = async (qIndex: number, force: boolean) => {
+      if (isPlayingAudio) return;
+      const count = getPlayCount(qIndex);
+      // Policy: auto-play only once; allow ONE replay (total 2 plays).
+      if (!force && count >= 1) return;
+      if (count >= 2) return;
+
+      bumpPlayCount(qIndex);
       setIsPlayingAudio(true);
       if (audioRef.current) {
           audioRef.current.pause();
@@ -393,10 +390,11 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                          <p className="text-gray-500 font-bold">{isPlayingAudio ? 'Đang đọc số...' : 'Đã đọc xong'}</p>
                          {!isPlayingAudio && (
                              <button 
-                                onClick={() => playAudioSequence(currentQIndex)}
-                                className="mt-4 text-xs font-bold text-ucmas-blue underline"
+                                onClick={() => playAudioSequence(currentQIndex, true)}
+                                disabled={(audioPlayCounts[currentQIndex] || 0) >= 2}
+                                className="mt-4 text-xs font-bold text-ucmas-blue underline disabled:opacity-50 disabled:cursor-not-allowed"
                              >
-                                 Nghe lại
+                                 {(audioPlayCounts[currentQIndex] || 0) >= 2 ? 'Đã hết lượt nghe' : 'Nghe lại (1 lần)'}
                              </button>
                          )}
                     </div>

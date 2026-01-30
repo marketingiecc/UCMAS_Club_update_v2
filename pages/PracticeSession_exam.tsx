@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 import { canUseTrial, consumeTrial } from '../services/trialUsage';
@@ -44,6 +44,8 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [isFlashing, setIsFlashing] = useState(false);
   const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioPlayCounts, setAudioPlayCounts] = useState<Record<number, number>>({});
+  const audioPlayCountsRef = useRef<Record<number, number>>({});
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   
   const timerRef = useRef<number | null>(null);
@@ -214,7 +216,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         cancelBrowserSpeechSynthesis();
 
         if (currentMode === Mode.FLASH) runFlashSequence(currentQIndex);
-        if (currentMode === Mode.LISTENING) playAudio(currentQIndex);
+        if (currentMode === Mode.LISTENING) playAudio(currentQIndex, false);
     }
   }, [currentQIndex, status]);
 
@@ -260,34 +262,28 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     setIsFlashing(false);
   };
 
-  const playSingleAudio = (text: string, rate: number): Promise<void> => {
-    return new Promise((resolve) => {
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-
-        const url = getGoogleTranslateTtsUrl(text, 'vi');
-        const audio = new Audio(url);
-        audio.playbackRate = rate;
-        audioRef.current = audio;
-        
-        audio.onended = () => finish();
-        audio.onerror = async () => {
-          await speakWithBrowserTts(text, 'vi-VN', rate);
-          finish();
-        };
-        audio.play().catch(async () => {
-          await speakWithBrowserTts(text, 'vi-VN', rate);
-          finish();
-        });
+  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+    const lang = 'vi-VN';
+    await playStableTts(text, lang, rate, {
+      onAudio: (a) => {
+        audioRef.current = a;
+      },
     });
   };
 
-  const playAudio = async (idx: number) => {
+  const getPlayCount = (idx: number) => audioPlayCountsRef.current[idx] || 0;
+  const bumpPlayCount = (idx: number) => {
+    audioPlayCountsRef.current = { ...audioPlayCountsRef.current, [idx]: getPlayCount(idx) + 1 };
+    setAudioPlayCounts(audioPlayCountsRef.current);
+  };
+
+  const playAudio = async (idx: number, force: boolean) => {
       if (isPlayingAudio) return;
+      const count = getPlayCount(idx);
+      // Policy: auto-play only once; allow ONE replay (total 2 plays).
+      if (!force && count >= 1) return;
+      if (count >= 2) return;
+      bumpPlayCount(idx);
       setIsPlayingAudio(true);
       const q = questions[idx];
       const speed = navState?.customConfig?.speed || 1.0;
@@ -658,11 +654,11 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                                 🎧
                             </div>
                             <button 
-                               onClick={() => playAudio(currentQIndex)}
-                               disabled={isPlayingAudio}
+                               onClick={() => playAudio(currentQIndex, true)}
+                               disabled={isPlayingAudio || (audioPlayCounts[currentQIndex] || 0) >= 2}
                                className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-12 py-5 rounded-2xl font-heading font-black shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xl uppercase tracking-widest"
                             >
-                               {isPlayingAudio ? 'Đang đọc...' : 'Nghe lại'}
+                               {isPlayingAudio ? 'Đang đọc...' : (audioPlayCounts[currentQIndex] || 0) >= 2 ? 'Đã hết lượt nghe' : 'Nghe lại (1 lần)'}
                             </button>
                         </div>
                     )}
