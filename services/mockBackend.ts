@@ -16,13 +16,44 @@ export const backend = {
   },
 
   login: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    if (data.user) {
-        const profile = await backend.fetchProfile(data.user.id);
-        return { user: profile };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error: error.message };
+      if (data.user) {
+          // Add timeout for fetchProfile to prevent hanging
+          const profilePromise = backend.fetchProfile(data.user.id);
+          const timeoutPromise = new Promise<UserProfile | null>((resolve) => {
+            setTimeout(() => resolve(null), 5000); // 5 second timeout
+          });
+          
+          const profile = await Promise.race([profilePromise, timeoutPromise]);
+          
+          if (!profile) {
+            // Profile not found - might be new user or trigger hasn't run yet
+            // Try to ensure profile exists
+            try {
+              await supabase.rpc('ensure_profile');
+              // Retry once after ensuring profile
+              const retryProfile = await Promise.race([
+                backend.fetchProfile(data.user.id),
+                new Promise<UserProfile | null>((resolve) => setTimeout(() => resolve(null), 3000))
+              ]);
+              if (retryProfile) return { user: retryProfile };
+            } catch (e) {
+              console.warn("ensure_profile failed:", e);
+            }
+            
+            // Return error if still no profile
+            return { error: 'Không tìm thấy thông tin người dùng. Vui lòng liên hệ quản trị viên.' };
+          }
+          
+          return { user: profile };
+      }
+      return { error: 'Đăng nhập thất bại.' };
+    } catch (err: any) {
+      console.error("Login error:", err);
+      return { error: err.message || 'Lỗi đăng nhập. Vui lòng thử lại.' };
     }
-    return { error: 'Đăng nhập thất bại.' };
   },
 
   register: async (email: string, password: string, fullName: string) => {
@@ -66,71 +97,100 @@ export const backend = {
 
   fetchProfile: async (userId: string): Promise<UserProfile | null> => {
     try {
-        // Attempt 1: Try Aggregated View
-        const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
-        
-        if (!error && data) {
-            return {
-                id: data.id || userId,
-                email: data.email || '',
-                full_name: data.full_name || '',
-                role: (data.role as any) || 'user',
-                created_at: data.created_at || new Date().toISOString(),
-                license_expiry: data.license_expiry || undefined,
-                allowed_modes: (data.allowed_modes as Mode[]) || [],
-                student_code: data.student_code || undefined
-            };
-        }
+        // Add timeout wrapper
+        const fetchWithTimeout = async (timeoutMs: number = 5000): Promise<UserProfile | null> => {
+          const fetchPromise = (async () => {
+            // Attempt 1: Try Aggregated View
+            const { data, error } = await supabase.from('user_profile_aggregated').select('*').eq('id', userId).single();
+            
+            if (!error && data) {
+                return {
+                    id: data.id || userId,
+                    email: data.email || '',
+                    full_name: data.full_name || '',
+                    role: (data.role as any) || 'user',
+                    created_at: data.created_at || new Date().toISOString(),
+                    license_expiry: data.license_expiry || undefined,
+                    allowed_modes: (data.allowed_modes as Mode[]) || [],
+                    student_code: data.student_code || undefined,
+                    phone: data.phone || undefined,
+                    level_symbol: data.level_symbol || undefined,
+                    class_name: data.class_name || undefined,
+                    center_id: data.center_id || undefined,
+                    center_name: data.center_name || undefined,
+                    avatar_url: data.avatar_url || undefined
+                };
+            }
 
-        // Attempt 2: Fallback to manual table queries if view fails (e.g. Permission Denied)
-        if (error && error.code !== 'PGRST116') {
-             console.warn("Fetch profile view warning (falling back):", error.message);
-        }
+            // Attempt 2: Fallback to manual table queries if view fails (e.g. Permission Denied)
+            if (error && error.code !== 'PGRST116') {
+                 console.warn("Fetch profile view warning (falling back):", error.message);
+            }
 
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-        
-        if (profile) {
-             // Fetch active entitlements
-             const now = new Date().toISOString();
-             const { data: entitlements } = await supabase
-                .from('entitlements')
-                .select('*')
-                .eq('user_id', userId)
-                .gt('expires_at', now);
-             
-             const modes = new Set<Mode>();
-             let maxExpiry = profile.license_expiry;
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+            
+            if (profile) {
+                 // Fetch active entitlements
+                 const now = new Date().toISOString();
+                 const { data: entitlements } = await supabase
+                    .from('entitlements')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .gt('expires_at', now);
+                 
+                 const modes = new Set<Mode>();
+                 let maxExpiry = profile.license_expiry;
 
-             if (entitlements) {
-                 entitlements.forEach((e: any) => {
-                     const scope = e.scope; // jsonb
-                     if (scope?.nhin_tinh) modes.add(Mode.VISUAL);
-                     if (scope?.nghe_tinh) modes.add(Mode.LISTENING);
-                     if (scope?.flash) modes.add(Mode.FLASH);
-                     
-                     if (e.expires_at) {
-                         if (!maxExpiry || new Date(e.expires_at) > new Date(maxExpiry)) {
-                             maxExpiry = e.expires_at;
+                 if (entitlements) {
+                     entitlements.forEach((e: any) => {
+                         const scope = e.scope; // jsonb
+                         if (scope?.nhin_tinh) modes.add(Mode.VISUAL);
+                         if (scope?.nghe_tinh) modes.add(Mode.LISTENING);
+                         if (scope?.flash) modes.add(Mode.FLASH);
+                         
+                         if (e.expires_at) {
+                             if (!maxExpiry || new Date(e.expires_at) > new Date(maxExpiry)) {
+                                 maxExpiry = e.expires_at;
+                             }
                          }
-                     }
-                 });
-             }
+                     });
+                 }
 
-             return {
-                 id: profile.id,
-                 email: profile.email || '',
-                 full_name: profile.full_name || '',
-                 role: (profile.role as any) || 'user',
-                 created_at: profile.created_at || new Date().toISOString(),
-                 license_expiry: maxExpiry,
-                 allowed_modes: Array.from(modes),
-                 student_code: profile.student_code
-             };
-        }
+                 return {
+                     id: profile.id,
+                     email: profile.email || '',
+                     full_name: profile.full_name || '',
+                     role: (profile.role as any) || 'user',
+                     created_at: profile.created_at || new Date().toISOString(),
+                     license_expiry: maxExpiry,
+                     allowed_modes: Array.from(modes),
+                     student_code: profile.student_code,
+                     phone: profile.phone || undefined,
+                     level_symbol: profile.level_symbol || undefined,
+                     class_name: profile.class_name || undefined,
+                     center_id: profile.center_id || undefined,
+                     center_name: profile.center_name || undefined,
+                     avatar_url: profile.avatar_url || undefined
+                 };
+            }
+            return null;
+          })();
+
+          const timeoutPromise = new Promise<UserProfile | null>((resolve) => {
+            setTimeout(() => {
+              console.warn("fetchProfile timeout for user:", userId);
+              resolve(null);
+            }, timeoutMs);
+          });
+
+          return await Promise.race([fetchPromise, timeoutPromise]);
+        };
+
+        return await fetchWithTimeout(5000);
     } catch (e) {
         console.error("Fetch profile exception:", e);
+        return null;
     }
-    return null;
   },
 
   getAllUsers: async (): Promise<UserProfile[]> => {
@@ -162,6 +222,20 @@ export const backend = {
           allowed_modes: [], // Expensive to compute for all users in fallback
           student_code: p.student_code || undefined
       }));
+  },
+
+  updateProfile: async (userId: string, data: Partial<Pick<UserProfile, 'full_name' | 'student_code' | 'phone' | 'level_symbol' | 'class_name' | 'center_id' | 'center_name'>>) => {
+      const payload: Record<string, unknown> = {};
+      if (data.full_name !== undefined) payload.full_name = data.full_name;
+      if (data.student_code !== undefined) payload.student_code = data.student_code;
+      if (data.phone !== undefined) payload.phone = data.phone;
+      if (data.level_symbol !== undefined) payload.level_symbol = data.level_symbol;
+      if (data.class_name !== undefined) payload.class_name = data.class_name;
+      if (data.center_id !== undefined) payload.center_id = data.center_id;
+      if (data.center_name !== undefined) payload.center_name = data.center_name;
+      const { error } = await supabase.from('profiles').update(payload).eq('id', userId);
+      if (error) return { success: false, message: error.message };
+      return { success: true };
   },
 
   adminActivateUser: async (userId: string, months: number) => {

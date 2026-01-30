@@ -221,7 +221,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         {(isFlashing || isPlayingAudio) && <span className="text-xs font-bold text-gray-400 animate-pulse">Running...</span>}
                     </div>
 
-                    <div className="min-h-[250px] flex items-center justify-center relative">
+                    <div className={`min-h-[250px] flex items-center justify-center relative ${currentQuestion.mode === Mode.FLASH ? 'min-h-[45vh]' : ''}`}>
                         {currentQuestion.mode === Mode.VISUAL && (
                             <div className="flex flex-col items-center">
                                 {currentQuestion.operands.map((n, i) => (
@@ -232,8 +232,20 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         )}
 
                         {currentQuestion.mode === Mode.FLASH && (
-                            <div className="text-9xl font-black text-green-600">
-                                {flashOverlay ? <span className="text-purple-600 text-6xl">{flashOverlay}</span> : flashNumber !== null ? flashNumber : isFlashing ? '' : <span className="text-gray-300 text-6xl cursor-pointer hover:text-green-500" onClick={() => runFlashSequence(currentQuestion)}>⟳</span>}
+                            <div className="font-black text-green-600 text-[clamp(5rem,20vw,14rem)] leading-none tracking-tighter text-center px-2">
+                                {flashOverlay ? (
+                                    <span className="text-purple-600 text-[clamp(2.5rem,10vw,6rem)] uppercase">
+                                        {flashOverlay}
+                                    </span>
+                                ) : flashNumber !== null ? (
+                                    flashNumber
+                                ) : isFlashing ? (
+                                    ''
+                                ) : (
+                                    <span className="text-gray-300 text-[clamp(3rem,12vw,7rem)] cursor-pointer hover:text-green-500" onClick={() => runFlashSequence(currentQuestion)}>
+                                        ⟳
+                                    </span>
+                                )}
                             </div>
                         )}
 

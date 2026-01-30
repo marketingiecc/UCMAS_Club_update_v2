@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase, backend } from './services/mockBackend';
 import { UserProfile } from './types';
@@ -20,37 +20,121 @@ import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import AdminContestPage from './pages/AdminContestPage';
 import AdminPracticeManager from './pages/AdminPracticeManager';
+import PracticeMixedSession from './pages/PracticeMixedSession';
+import TrainingHub from './pages/TrainingHub';
+import AdminTrainingPage from './pages/AdminTrainingPage';
+import SpeedTrainingPage from './pages/SpeedTrainingPage';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusText, setStatusText] = useState('Đang khởi động...');
   const navigate = useNavigate();
+  const mounted = useRef(true);
+  const userRef = useRef<UserProfile | null>(null);
+
+  // Sync userRef with user state
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
-    const initAuth = async () => {
-        const u = await backend.getCurrentUser();
-        setUser(u);
-        setLoading(false);
-    };
-    initAuth();
+    mounted.current = true;
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-             const u = await backend.fetchProfile(session.user.id);
+    // SAFETY: Force stop loading after 10 seconds to prevent infinite loading
+    const safetyTimer = setTimeout(() => {
+      if (mounted.current && loading) {
+        console.warn("Auth initialization timed out. Forcing UI render.");
+        setLoading(false);
+        setStatusText('Đã sẵn sàng');
+      }
+    }, 10000);
+
+    const initAuth = async () => {
+        try {
+          setStatusText('Đang kiểm tra kết nối...');
+          
+          // Add timeout for getCurrentUser call
+          const userPromise = backend.getCurrentUser();
+          const timeoutPromise = new Promise<UserProfile | null>((resolve) => {
+            setTimeout(() => resolve(null), 8000);
+          });
+          
+          setStatusText('Đang xác thực...');
+          const u = await Promise.race([userPromise, timeoutPromise]);
+          
+          if (mounted.current) {
              setUser(u);
-        } else if (event === 'SIGNED_OUT') {
-             setUser(null);
-        } else if (event === 'PASSWORD_RECOVERY') {
-             navigate('/auth/resetpass', { replace: true });
+             setStatusText('Đã sẵn sàng');
+          }
+        } catch (e) {
+          console.error("Critical Auth Init Error:", e);
+          // Continue even if auth fails - user can still access public pages
+          if (mounted.current) {
+            setUser(null);
+            setStatusText('Đã sẵn sàng');
+          }
+        } finally {
+          if (mounted.current) {
+             setLoading(false);
+          }
+          clearTimeout(safetyTimer);
+        }
+    };
+    
+    initAuth();
+    
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted.current) return;
+        
+        try {
+          if (event === 'SIGNED_IN' && session?.user) {
+               // Only fetch if we don't have user yet to avoid double fetch on load
+               if (!userRef.current) {
+                   const u = await backend.fetchProfile(session.user.id);
+                   if (mounted.current) {
+                     setUser(u);
+                   }
+               }
+          } else if (event === 'SIGNED_OUT') {
+               if (mounted.current) {
+                 setUser(null);
+               }
+          } else if (event === 'PASSWORD_RECOVERY') {
+               navigate('/auth/resetpass', { replace: true });
+          }
+        } catch (err) {
+          console.error("Auth state change error:", err);
         }
     });
 
     return () => {
-        authListener.subscription.unsubscribe();
+        mounted.current = false;
+        if (authListener?.subscription) {
+          authListener.subscription.unsubscribe();
+        }
+        clearTimeout(safetyTimer);
     };
-  }, [navigate]);
+  }, [navigate]); // Removed 'user' from dependencies to prevent infinite loop
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-white">
+        <div className="w-16 h-16 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mb-6"></div>
+        <p className="text-gray-700 font-heading font-semibold text-lg mb-2 animate-pulse">{statusText}</p>
+        <p className="text-xs text-gray-500 font-medium">Vui lòng đợi trong giây lát...</p>
+        <button 
+          onClick={() => {
+            setLoading(false);
+            setStatusText('Đã sẵn sàng');
+          }}
+          className="mt-6 px-6 py-2 bg-ucmas-red text-white font-heading-bold rounded-lg hover:bg-ucmas-blue transition-all shadow-md"
+        >
+          Bỏ qua
+        </button>
+      </div>
+    );
+  }
 
   return (
     <Layout user={user} setUser={setUser}>
@@ -63,11 +147,14 @@ const AppContent: React.FC = () => {
         <Route path="/auth/resetpass" element={<UpdatePasswordPage />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />
 
-        <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
+        <Route path="/dashboard" element={user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/login" />} />
+        <Route path="/training" element={user ? <TrainingHub user={user} /> : <Navigate to="/login" />} />
+        <Route path="/training/speed" element={user ? <SpeedTrainingPage /> : <Navigate to="/login" />} />
         <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
         
         {/* NEW ROUTES */}
         <Route path="/practice-exam/:mode" element={user ? <PracticeSessionExam user={user} /> : <Navigate to="/login" />} />
+        <Route path="/practice-mixed/:examId" element={user ? <PracticeMixedSession user={user} /> : <Navigate to="/login" />} />
         <Route path="/admin/practice" element={user?.role === 'admin' ? <AdminPracticeManager /> : <Navigate to="/dashboard" />} />
         
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
@@ -75,6 +162,7 @@ const AppContent: React.FC = () => {
         
         <Route path="/admin" element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/contests" element={user?.role === 'admin' ? <AdminContestPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/training" element={user?.role === 'admin' ? <AdminTrainingPage /> : <Navigate to="/dashboard" />} />
         
 
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />

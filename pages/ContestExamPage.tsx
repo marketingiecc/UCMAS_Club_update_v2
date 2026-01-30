@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
-import { Contest, Question, ContestSession, Mode, ContestExam } from '../types';
+import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
 
 interface ContestExamPageProps {
-    user: any;
+    user: UserProfile;
 }
 
 const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
@@ -111,7 +111,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
         }, 1000);
     }
     return () => { if(timerRef.current) clearInterval(timerRef.current); };
-  }, [status]);
+  }, [status, timeLeft]);
 
   useEffect(() => {
       if (status === 'running' && questions.length > 0) {
@@ -214,16 +214,21 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       if (audioRef.current) audioRef.current.pause();
       
       setStatus('submitted');
-      if (!session) return;
+      if (!session || !contest) return;
 
-      const duration = contest!.duration_minutes * 60 - timeLeft;
-
-      await backend.submitContestSection(session.id, currentMode, questions, answers, duration);
-      
-      if (auto) alert('Hết giờ! Bài làm đã được tự động nộp.');
-      else alert('Nộp bài thành công!');
-      
-      navigate(`/contests/${contestId}`);
+      try {
+          const duration = contest.duration_minutes * 60 - timeLeft;
+          await backend.submitContestSection(session.id, currentMode, questions, answers, duration);
+          
+          if (auto) alert('Hết giờ! Bài làm đã được tự động nộp.');
+          else alert('Nộp bài thành công!');
+          
+          navigate(`/contests/${contestId}`);
+      } catch (error: any) {
+          console.error('Error submitting exam:', error);
+          alert('Có lỗi xảy ra khi nộp bài. Vui lòng thử lại.');
+          setStatus('running'); // Allow retry
+      }
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">Đang tải đề thi...</div>;

@@ -8,14 +8,22 @@ export enum Mode {
 
 export type UserRole = 'user' | 'admin';
 
+export type LevelSymbol = 'Z' | 'A' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'K';
+
 export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
   student_code?: string;
+  phone?: string;
+  level_symbol?: LevelSymbol;
+  class_name?: string;
+  center_id?: string;
+  center_name?: string;
+  avatar_url?: string;
   role: UserRole;
   created_at: string;
-  license_expiry?: string; 
+  license_expiry?: string;
   allowed_modes: Mode[];
 }
 

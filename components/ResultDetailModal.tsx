@@ -23,16 +23,19 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="bg-ucmas-blue p-6 text-white flex justify-between items-center shrink-0">
+        <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-6 text-white flex justify-between items-center shrink-0">
            <div>
-               <h3 className="text-xl font-bold">{title || 'Chi tiết kết quả'}</h3>
-               <p className="text-blue-200 text-sm mt-1">
-                   Đúng: <span className="font-bold text-white">{correctCount}</span>/{questions.length} câu
+               <h3 className="text-xl font-heading-bold">{title || 'Chi tiết kết quả'}</h3>
+               <p className="text-blue-100 text-sm mt-2 font-medium">
+                   Đúng: <span className="font-heading-bold text-white text-lg">{correctCount}</span>/{questions.length} câu
+                   <span className="ml-3 text-ucmas-yellow">
+                     {Math.round((correctCount / questions.length) * 100)}%
+                   </span>
                </p>
            </div>
            <button 
              onClick={onClose}
-             className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition"
+             className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition-all hover:scale-110"
            >
               ✕
            </button>
@@ -49,15 +52,15 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
                   return (
                       <div 
                         key={q.id} 
-                        className={`relative p-4 rounded-xl border-l-4 shadow-sm bg-white flex flex-col justify-between ${
-                            isCorrect ? 'border-green-500' : 'border-red-500'
+                        className={`relative p-5 rounded-xl border-l-4 shadow-md bg-white flex flex-col justify-between hover:shadow-lg transition-all ${
+                            isCorrect ? 'border-ucmas-green' : 'border-ucmas-red'
                         }`}
                       >
                           {/* Question Detail */}
                           <div className="mb-3">
-                              <span className="text-xs font-bold text-gray-400 uppercase mb-2 block">Câu {idx + 1}</span>
+                              <span className="text-xs font-heading font-bold text-gray-400 uppercase mb-2 block">Câu {idx + 1}</span>
                               <div className="flex justify-center bg-gray-50 rounded-lg py-2">
-                                <div className="text-gray-800 font-bold font-mono text-lg tracking-widest flex flex-col items-end">
+                                <div className="text-gray-800 font-heading font-bold text-lg tracking-widest flex flex-col items-end">
                                     {q.operands.map((op, i) => (
                                         <div key={i}>{op}</div>
                                     ))}
@@ -69,19 +72,19 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
                           {/* Answers Comparison */}
                           <div className="flex justify-between items-center border-t border-gray-100 pt-3">
                               <div className="text-center">
-                                  <div className="text-[10px] text-gray-400 uppercase">Bạn chọn</div>
-                                  <div className={`font-bold text-lg ${isCorrect ? 'text-green-600' : 'text-red-500'}`}>
+                                  <div className="text-[10px] text-gray-400 uppercase font-heading font-semibold mb-1">Bạn chọn</div>
+                                  <div className={`font-heading-bold text-xl ${isCorrect ? 'text-ucmas-green' : 'text-ucmas-red'}`}>
                                       {isAnswered ? userAns : '--'}
                                   </div>
                               </div>
                               
-                              <div className="text-2xl">
+                              <div className="text-3xl transform scale-125">
                                   {isCorrect ? '✅' : '❌'}
                               </div>
 
                               <div className="text-center">
-                                  <div className="text-[10px] text-gray-400 uppercase">Đáp án</div>
-                                  <div className="font-bold text-lg text-ucmas-blue">
+                                  <div className="text-[10px] text-gray-400 uppercase font-heading font-semibold mb-1">Đáp án</div>
+                                  <div className="font-heading-bold text-xl text-ucmas-blue">
                                       {q.correctAnswer}
                                   </div>
                               </div>
@@ -93,10 +96,10 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-white border-t border-gray-200 flex justify-end shrink-0">
+        <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
             <button 
                 onClick={onClose}
-                className="px-6 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition"
+                className="px-8 py-3 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red shadow-md transition-all transform hover:-translate-y-0.5 hover:shadow-lg"
             >
                 Đóng
             </button>

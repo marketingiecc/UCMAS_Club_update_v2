@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { backend } from '../services/mockBackend';
 import { Mode, Contest } from '../types';
+import CustomSlider from '../components/CustomSlider';
 
 const AdminPracticeManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'creative' | 'upload' | 'mixed'>('creative');
@@ -343,16 +344,34 @@ const AdminPracticeManager: React.FC = () => {
                                 </div>
 
                                 {/* Sliders */}
-                                <div className="bg-gray-50 p-3 rounded-xl space-y-3 border border-gray-100">
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center"><label className="text-[10px] font-bold text-gray-500 uppercase">Số lượng</label><span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded shadow-sm text-gray-800">{config.count} câu</span></div>
-                                        <input type="range" min="5" max="50" value={config.count} onChange={e => setConfig({...config, count: parseInt(e.target.value)})} className="w-full accent-ucmas-blue h-1 bg-gray-200 rounded-full appearance-none cursor-pointer" />
-                                    </div>
+                                <div className="bg-gray-50 p-6 rounded-xl space-y-6 border border-gray-100">
+                                    <CustomSlider
+                                        label="Số lượng"
+                                        value={config.count}
+                                        min={5}
+                                        max={50}
+                                        step={1}
+                                        onChange={(val) => setConfig({...config, count: val})}
+                                        valueLabel={`${config.count} câu`}
+                                        color="blue"
+                                        unit=""
+                                        minLabel="5"
+                                        maxLabel="50"
+                                    />
                                     {(examMode === Mode.LISTENING || examMode === Mode.FLASH) && (
-                                        <div className="space-y-1">
-                                            <div className="flex justify-between items-center"><label className="text-[10px] font-bold text-gray-500 uppercase">Tốc độ (s)</label><span className="text-[10px] font-bold bg-white px-2 py-0.5 rounded shadow-sm text-ucmas-red">{config.speed}s</span></div>
-                                            <input type="range" min="0.2" max="3.0" step="0.1" value={config.speed} onChange={e => setConfig({...config, speed: parseFloat(e.target.value)})} className="w-full accent-ucmas-red h-1 bg-gray-200 rounded-full appearance-none cursor-pointer" />
-                                        </div>
+                                        <CustomSlider
+                                            label="Tốc độ (s)"
+                                            value={config.speed}
+                                            min={0.2}
+                                            max={3.0}
+                                            step={0.1}
+                                            onChange={(val) => setConfig({...config, speed: val})}
+                                            valueLabel={`${config.speed}s`}
+                                            color="red"
+                                            unit="s"
+                                            minLabel="0.2s"
+                                            maxLabel="3.0s"
+                                        />
                                     )}
                                 </div>
 

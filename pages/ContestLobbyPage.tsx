@@ -95,13 +95,13 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center border border-gray-100">
-            <h1 className="text-3xl font-black text-ucmas-blue mb-2">{contest.name}</h1>
+            <h1 className="text-3xl font-heading font-black text-ucmas-blue mb-2">{contest.name}</h1>
             <p className="text-gray-500 mb-8">
                 {new Date(contest.start_at).toLocaleString('vi-VN')} • {contest.duration_minutes} phút
             </p>
 
             {/* PHASE STATUS */}
-            <div className={`inline-block px-6 py-2 rounded-full font-bold text-lg mb-8 ${
+            <div className={`inline-block px-6 py-2 rounded-full font-heading font-bold text-lg mb-8 ${
                 phase === 'early' ? 'bg-gray-100 text-gray-500' :
                 phase === 'lobby' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
                 phase === 'live' ? 'bg-red-100 text-red-600' : 'bg-gray-800 text-white'
@@ -112,7 +112,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
             {/* NOT JOINED YET */}
             {!session && (
                 <div className="bg-gray-50 p-8 rounded-2xl max-w-md mx-auto">
-                    <h3 className="font-bold text-gray-700 mb-4">Nhập Mã Tham Gia</h3>
+                    <h3 className="font-heading font-bold text-gray-700 mb-4">Nhập Mã Tham Gia</h3>
                     <input 
                         type="text" 
                         value={joinCode}
@@ -123,7 +123,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                     {joinError && <p className="text-red-500 text-sm mb-4">{joinError}</p>}
                     <button 
                         onClick={handleJoin}
-                        className="w-full bg-ucmas-blue text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-lg"
+                        className="w-full bg-ucmas-blue text-white font-heading font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-lg"
                     >
                         Vào Phòng Thi
                     </button>
@@ -133,7 +133,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
             {/* JOINED - WAITING ROOM OR EXAM SELECTOR */}
             {session && (
                 <div className="animate-fade-in">
-                    <div className="flex items-center justify-center gap-2 mb-8 text-green-600 font-bold bg-green-50 p-2 rounded-lg inline-block">
+                    <div className="flex items-center justify-center gap-2 mb-8 text-green-600 font-heading font-bold bg-green-50 p-2 rounded-lg inline-block">
                         <span>✓</span> Đã tham gia (Mã số: {user.student_code || user.email})
                     </div>
 
@@ -141,7 +141,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                     
                     {(phase === 'lobby' || phase === 'live') && (
                         <div>
-                             <h3 className="font-bold text-gray-800 mb-6">Chọn phần thi</h3>
+                             <h3 className="font-heading font-bold text-gray-800 mb-6">Chọn phần thi</h3>
                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {contest.enable_nhin_tinh && (
                                     <button 
@@ -150,7 +150,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                                         className={`p-6 rounded-2xl border-2 transition ${phase === 'live' ? 'border-ucmas-blue text-ucmas-blue hover:bg-blue-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
                                     >
                                         <div className="text-3xl mb-2">👁️</div>
-                                        <div className="font-bold">Nhìn Tính</div>
+                                        <div className="font-heading font-bold">Nhìn Tính</div>
                                     </button>
                                 )}
                                 {contest.enable_nghe_tinh && (
@@ -160,7 +160,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                                         className={`p-6 rounded-2xl border-2 transition ${phase === 'live' ? 'border-ucmas-red text-ucmas-red hover:bg-red-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
                                     >
                                         <div className="text-3xl mb-2">🎧</div>
-                                        <div className="font-bold">Nghe Tính</div>
+                                        <div className="font-heading font-bold">Nghe Tính</div>
                                     </button>
                                 )}
                                 {contest.enable_flash && (
@@ -170,7 +170,7 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                                         className={`p-6 rounded-2xl border-2 transition ${phase === 'live' ? 'border-ucmas-green text-ucmas-green hover:bg-green-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
                                     >
                                         <div className="text-3xl mb-2">⚡</div>
-                                        <div className="font-bold">Flash</div>
+                                        <div className="font-heading font-bold">Flash</div>
                                     </button>
                                 )}
                              </div>

@@ -84,7 +84,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       }), 1000);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [status]);
+  }, [status, timeLeft]);
 
   // Trigger Flash/Audio khi chuyển câu
   useEffect(() => {
@@ -178,20 +178,30 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       if (audioRef.current) audioRef.current.pause();
       setStatus('finished');
       
-      let correct = 0;
-      questions.forEach((q, idx) => {
-          if (parseInt(answers[idx]) === q.correctAnswer) correct++;
-      });
+      try {
+          let correct = 0;
+          questions.forEach((q, idx) => {
+              if (parseInt(answers[idx]) === q.correctAnswer) correct++;
+          });
 
-      await practiceService.savePracticeAttempt({
-          userId: user.id,
-          examId: navState?.examId,
-          mode: currentMode,
-          config: navState?.customConfig || {},
-          score: { correct, total: questions.length },
-          duration: 600 - timeLeft,
-          isCreative: !!navState?.customConfig?.isCreative
-      });
+          const result = await practiceService.savePracticeAttempt({
+              userId: user.id,
+              examId: navState?.examId,
+              mode: currentMode,
+              config: navState?.customConfig || {},
+              score: { correct, total: questions.length },
+              duration: 600 - timeLeft,
+              isCreative: !!navState?.customConfig?.isCreative
+          });
+
+          if (!result.success) {
+              console.error('Failed to save attempt:', result.error);
+              // Still show results even if save fails
+          }
+      } catch (error: any) {
+          console.error('Error submitting exam:', error);
+          // Still show results even if save fails
+      }
   };
 
   if (status === 'setup') return <div className="h-screen flex items-center justify-center font-black text-gray-400 uppercase tracking-widest">Đang khởi tạo...</div>;
@@ -234,7 +244,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                 <h3 className="mt-4 text-gray-400 font-bold uppercase text-xs tracking-widest">{theme.title} - {navState?.customConfig?.name || 'Bài tập'}</h3>
             </div>
 
-            <div className="min-h-[250px] flex items-center justify-center mb-20 relative overflow-hidden">
+            <div className={`min-h-[250px] flex items-center justify-center mb-16 relative overflow-hidden ${currentMode === Mode.FLASH ? 'min-h-[45vh]' : ''}`}>
                 {currentMode === Mode.VISUAL && (
                    <div className="text-center animate-fade-in">
                       {questions[currentQIndex]?.operands.map((num, i) => (
@@ -245,13 +255,15 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                    </div>
                 )}
                 {currentMode === Mode.FLASH && (
-                    <div className="text-center w-full h-full flex items-center justify-center">
+                    <div className="text-center w-full h-full flex items-center justify-center px-2">
                         {flashOverlay ? (
                             <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
-                                <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
+                                <div className="text-white font-black text-[clamp(2.5rem,10vw,6rem)] uppercase animate-bounce">
+                                    {flashOverlay}
+                                </div>
                             </div>
                         ) : (
-                            <div className="text-[160px] font-black text-ucmas-blue leading-none tracking-tighter transition-all">
+                            <div className="font-black text-ucmas-blue leading-none tracking-tighter transition-all text-[clamp(5rem,20vw,14rem)]">
                                {flashNumber || <span className="text-gray-100">...</span>}
                             </div>
                         )}
@@ -266,7 +278,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                 <input 
                   ref={inputRef} type="number" autoFocus disabled={isFlashing || isPlayingAudio}
                   value={answers[currentQIndex] || ''}
-                  onChange={(e) => setAnswers({...answers, [currentQIndex]: e.target.value})}
+                  onChange={(e) => setAnswers(prev => ({...prev, [currentQIndex]: e.target.value}))}
                   onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                           if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1);

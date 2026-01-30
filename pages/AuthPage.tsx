@@ -90,19 +90,29 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
           }
           res = await backend.register(email, password, fullName);
       } else {
-          // Login
-          res = await backend.login(email, password);
+          // Login with timeout
+          const loginPromise = backend.login(email, password);
+          const timeoutPromise = new Promise<any>((resolve) => {
+            setTimeout(() => resolve({ error: 'Đăng nhập quá lâu. Vui lòng thử lại hoặc kiểm tra kết nối mạng.' }), 10000);
+          });
+          res = await Promise.race([loginPromise, timeoutPromise]);
       }
 
-      if (res.error) {
+      if (res?.error) {
         setNotification({ type: 'error', message: res.error });
-      } else if (res.user) {
+        setLoading(false);
+      } else if (res?.user) {
         setUser(res.user);
+        setLoading(false);
         navigate('/dashboard');
+      } else {
+        // No error but no user either - unexpected state
+        setNotification({ type: 'error', message: 'Đăng nhập không thành công. Vui lòng thử lại.' });
+        setLoading(false);
       }
     } catch (err: any) {
+      console.error("Auth error:", err);
       setNotification({ type: 'error', message: err.message || "Đã xảy ra lỗi không mong muốn." });
-    } finally {
       setLoading(false);
     }
   };
@@ -116,11 +126,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
                  alt="UCMAS" 
                  className="h-20 mx-auto mb-6 object-contain"
             />
-            <h2 className="text-3xl font-black text-ucmas-blue mb-2">
+            <h2 className="text-3xl font-heading-extrabold text-ucmas-blue mb-2">
                 {mode === 'register' ? 'Tạo Tài Khoản' : mode === 'forgot' ? 'Khôi Phục Mật Khẩu' : 'Đăng Nhập'}
             </h2>
-            <p className="text-gray-500 text-sm">
-                {mode === 'register' ? 'Đăng ký để bắt đầu luyện tập' : mode === 'forgot' ? 'Nhập email để đặt lại mật khẩu' : 'Chào mừng trở lại UCMAS Club'}
+            <p className="text-gray-600 text-sm font-medium">
+                {mode === 'register' ? 'Đăng ký để khai mở tiềm năng não bộ' : mode === 'forgot' ? 'Nhập email để đặt lại mật khẩu' : 'Chào mừng trở lại UCMAS Club'}
+            </p>
+            <p className="text-xs text-ucmas-red font-heading font-semibold mt-2 uppercase tracking-wider">
+                Education With A Difference
             </p>
         </div>
         
@@ -138,7 +151,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
         <form onSubmit={handleSubmit} className="space-y-5">
             {mode === 'register' && (
                 <div className="animate-fade-in">
-                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Họ và tên</label>
+                    <label className="block text-xs font-heading font-bold text-gray-700 mb-2 uppercase">Họ và tên</label>
                     <input 
                     type="text" 
                     required={mode === 'register'}
@@ -151,7 +164,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
             )}
 
             <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Email</label>
+                <label className="block text-xs font-heading font-bold text-gray-700 mb-2 uppercase">Email</label>
                 <input 
                 type="email" 
                 required 
@@ -164,7 +177,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
 
             {mode !== 'forgot' && (
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Mật khẩu</label>
+                    <label className="block text-xs font-heading font-bold text-gray-700 mb-2 uppercase">Mật khẩu</label>
                     <input 
                     type="password" 
                     required
@@ -186,9 +199,16 @@ const AuthPage: React.FC<AuthPageProps> = ({ setUser }) => {
             <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-ucmas-blue to-blue-600 text-white py-3 rounded-lg font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition disabled:opacity-70 disabled:cursor-not-allowed uppercase text-sm tracking-wide"
+                className="w-full bg-gradient-to-r from-ucmas-red to-ucmas-red/90 text-white py-4 rounded-xl font-heading-bold shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all disabled:opacity-70 disabled:cursor-not-allowed uppercase text-sm tracking-wider transform active:scale-95"
             >
-                {loading ? 'Đang xử lý...' : (mode === 'register' ? 'Đăng Ký Ngay' : mode === 'forgot' ? 'Gửi Link Khôi Phục' : 'Đăng Nhập')}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    <span>Đang xử lý...</span>
+                  </span>
+                ) : (
+                  mode === 'register' ? 'Đăng Ký Ngay →' : mode === 'forgot' ? 'Gửi Link Khôi Phục →' : 'Đăng Nhập →'
+                )}
             </button>
         </form>
 
