@@ -7,7 +7,7 @@ import {
   type DifficultyKey,
   type ModeDifficultyLimits,
 } from '../services/practiceModeSettings';
-import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES, type LevelSymbol } from '../config/levelsAndDifficulty';
 
 const MODE_LABELS: Record<ModeKey, string> = { visual: 'Nhìn tính', audio: 'Nghe tính', flash: 'Flash' };
 const DIFF_LABELS: Record<DifficultyKey, string> = { basic: 'Cơ bản', advanced: 'Nâng cao', elite: 'Vượt trội' };
@@ -18,6 +18,7 @@ const AdminTrainingPage: React.FC = () => {
   const navigate = useNavigate();
   const [status, setStatus] = useState('');
   const [activeTab, setActiveTab] = useState<TabId>('settings');
+  const [selectedLevel, setSelectedLevel] = useState<LevelSymbol>('A');
   const [modeSettings, setModeSettings] = useState<PracticeModeSettings>(() => practiceModeSettings.getSettings());
 
   useEffect(() => {
@@ -27,9 +28,15 @@ const AdminTrainingPage: React.FC = () => {
   const updateModeSetting = (mode: ModeKey, diff: DifficultyKey, field: keyof ModeDifficultyLimits, value: number) => {
     setModeSettings(prev => ({
       ...prev,
-      [mode]: {
-        ...prev[mode],
-        [diff]: { ...prev[mode][diff], [field]: value },
+      by_level: {
+        ...prev.by_level,
+        [selectedLevel]: {
+          ...prev.by_level[selectedLevel],
+          [mode]: {
+            ...prev.by_level[selectedLevel][mode],
+            [diff]: { ...prev.by_level[selectedLevel][mode][diff], [field]: value },
+          },
+        },
       },
     }));
   };
@@ -68,63 +75,97 @@ const AdminTrainingPage: React.FC = () => {
       {activeTab === 'settings' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-xl font-heading-bold text-ucmas-blue mb-2">Thiết lập chế độ luyện tập</h2>
-          <p className="text-gray-600 text-sm mb-6">Khoảng giá trị mặc định theo chế độ (Nhìn tính, Nghe tính, Flash) và độ khó (Cơ bản, Nâng cao, Vượt trội). Dùng cho form Luyện tập.</p>
-          <div className="space-y-8">
-            {(['visual', 'audio', 'flash'] as ModeKey[]).map(mode => (
-              <div key={mode} className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className={`px-4 py-3 font-heading-bold text-white ${mode === 'visual' ? 'bg-ucmas-blue' : mode === 'audio' ? 'bg-ucmas-red' : 'bg-ucmas-green'}`}>
-                  {MODE_LABELS[mode]}
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="text-left p-3 font-heading-bold text-gray-700">Độ khó</th>
-                        <th className="p-2">Chữ số (min–max)</th>
-                        <th className="p-2">Dòng (min–max)</th>
-                        <th className="p-2">Số câu (min–max)</th>
-                        {(mode === 'audio' || mode === 'flash') && (
-                          <th className="p-2">Tốc độ (s) min–max</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(['basic', 'advanced', 'elite'] as DifficultyKey[]).map(diff => {
-                        const row = modeSettings[mode][diff];
-                        return (
-                          <tr key={diff} className="border-b border-gray-100 hover:bg-gray-50/50">
-                            <td className="p-3 font-medium text-gray-800">{DIFF_LABELS[diff]}</td>
-                            <td className="p-2">
-                              <input type="number" min={1} max={10} className="w-14 border rounded px-2 py-1 mr-1" value={row.digits_min} onChange={e => updateModeSetting(mode, diff, 'digits_min', Number(e.target.value) || 1)} />
-                              –
-                              <input type="number" min={1} max={10} className="w-14 border rounded px-2 py-1 ml-1" value={row.digits_max} onChange={e => updateModeSetting(mode, diff, 'digits_max', Number(e.target.value) || 1)} />
-                            </td>
-                            <td className="p-2">
-                              <input type="number" min={1} max={100} className="w-14 border rounded px-2 py-1 mr-1" value={row.rows_min} onChange={e => updateModeSetting(mode, diff, 'rows_min', Number(e.target.value) || 1)} />
-                              –
-                              <input type="number" min={1} max={100} className="w-14 border rounded px-2 py-1 ml-1" value={row.rows_max} onChange={e => updateModeSetting(mode, diff, 'rows_max', Number(e.target.value) || 1)} />
-                            </td>
-                            <td className="p-2">
-                              <input type="number" min={5} max={200} className="w-14 border rounded px-2 py-1 mr-1" value={row.question_count_min} onChange={e => updateModeSetting(mode, diff, 'question_count_min', Number(e.target.value) || 5)} />
-                              –
-                              <input type="number" min={5} max={200} className="w-14 border rounded px-2 py-1 ml-1" value={row.question_count_max} onChange={e => updateModeSetting(mode, diff, 'question_count_max', Number(e.target.value) || 5)} />
-                            </td>
+          <p className="text-gray-600 text-sm mb-6">
+            Thiết lập theo <strong>từng cấp độ</strong>. Các cấu hình này sẽ được dùng để ra bài trong mục <strong>Luyện theo chế độ</strong> (Nhìn tính/Nghe tính/Flash).
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-3 bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mb-3">Danh sách cấp độ</div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-2 gap-2">
+                {LEVEL_SYMBOLS_ORDER.map((lv) => (
+                  <button
+                    key={lv}
+                    type="button"
+                    onClick={() => setSelectedLevel(lv)}
+                    className={`px-3 py-2 rounded-xl border text-sm font-heading font-black transition ${
+                      selectedLevel === lv
+                        ? 'bg-ucmas-blue text-white border-ucmas-blue shadow'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-ucmas-blue/40 hover:bg-ucmas-blue/5'
+                    }`}
+                    title={getLevelLabel(lv)}
+                  >
+                    {getLevelLabel(lv)}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 text-xs text-gray-500">
+                Đang chỉnh: <strong className="text-gray-800">{getLevelLabel(selectedLevel)}</strong>
+              </div>
+            </div>
+
+            <div className="lg:col-span-9 space-y-8">
+              {(['visual', 'audio', 'flash'] as ModeKey[]).map(mode => {
+                const cur = modeSettings.by_level[selectedLevel]?.[mode];
+                if (!cur) return null;
+                return (
+                  <div key={mode} className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className={`px-4 py-3 font-heading-bold text-white ${mode === 'visual' ? 'bg-ucmas-blue' : mode === 'audio' ? 'bg-ucmas-red' : 'bg-ucmas-green'}`}>
+                      {MODE_LABELS[mode]} — <span className="opacity-90">{getLevelLabel(selectedLevel)}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-200">
+                            <th className="text-left p-3 font-heading-bold text-gray-700">Độ khó</th>
+                            <th className="p-2">Chữ số (min–max)</th>
+                            <th className="p-2">Dòng (min–max)</th>
+                            <th className="p-2">Số câu (min–max)</th>
                             {(mode === 'audio' || mode === 'flash') && (
-                              <td className="p-2">
-                                <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 mr-1" value={row.speed_seconds_min ?? 0.1} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_min', Number(e.target.value) || 0.1)} />
-                                –
-                                <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 ml-1" value={row.speed_seconds_max ?? 1.5} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_max', Number(e.target.value) || 1.5)} />
-                              </td>
+                              <th className="p-2">Tốc độ (s) min–max</th>
                             )}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
+                        </thead>
+                        <tbody>
+                          {(['basic', 'advanced', 'elite'] as DifficultyKey[]).map(diff => {
+                            const row = cur[diff];
+                            return (
+                              <tr key={diff} className="border-b border-gray-100 hover:bg-gray-50/50">
+                                <td className="p-3 font-medium text-gray-800">{DIFF_LABELS[diff]}</td>
+                                <td className="p-2">
+                                  <input type="number" min={1} max={10} className="w-14 border rounded px-2 py-1 mr-1" value={row.digits_min} onChange={e => updateModeSetting(mode, diff, 'digits_min', Number(e.target.value) || 1)} />
+                                  –
+                                  <input type="number" min={1} max={10} className="w-14 border rounded px-2 py-1 ml-1" value={row.digits_max} onChange={e => updateModeSetting(mode, diff, 'digits_max', Number(e.target.value) || 1)} />
+                                </td>
+                                <td className="p-2">
+                                  <input type="number" min={1} max={100} className="w-14 border rounded px-2 py-1 mr-1" value={row.rows_min} onChange={e => updateModeSetting(mode, diff, 'rows_min', Number(e.target.value) || 1)} />
+                                  –
+                                  <input type="number" min={1} max={100} className="w-14 border rounded px-2 py-1 ml-1" value={row.rows_max} onChange={e => updateModeSetting(mode, diff, 'rows_max', Number(e.target.value) || 1)} />
+                                </td>
+                                <td className="p-2">
+                                  <input type="number" min={5} max={200} className="w-14 border rounded px-2 py-1 mr-1" value={row.question_count_min} onChange={e => updateModeSetting(mode, diff, 'question_count_min', Number(e.target.value) || 5)} />
+                                  –
+                                  <input type="number" min={5} max={200} className="w-14 border rounded px-2 py-1 ml-1" value={row.question_count_max} onChange={e => updateModeSetting(mode, diff, 'question_count_max', Number(e.target.value) || 5)} />
+                                </td>
+                                {(mode === 'audio' || mode === 'flash') && (
+                                  <td className="p-2">
+                                    <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 mr-1" value={row.speed_seconds_min ?? 0.1} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_min', Number(e.target.value) || 0.1)} />
+                                    –
+                                    <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 ml-1" value={row.speed_seconds_max ?? 1.5} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_max', Number(e.target.value) || 1.5)} />
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
           <div className="mt-6 flex gap-3">
             <button className="px-6 py-2 bg-ucmas-blue text-white rounded-lg font-heading-bold" onClick={handleSaveModeSettings}>Lưu thiết lập</button>
             <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-heading-bold hover:bg-gray-50" onClick={handleResetModeSettings}>Khôi phục mặc định</button>

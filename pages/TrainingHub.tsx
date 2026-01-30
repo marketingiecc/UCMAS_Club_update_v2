@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserProfile, Mode } from '../types';
 import CustomSlider from '../components/CustomSlider';
-import { practiceModeSettings, type DifficultyKey } from '../services/practiceModeSettings';
-import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { practiceModeSettings, type DifficultyKey, type ModeKey } from '../services/practiceModeSettings';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES, type LevelSymbol } from '../config/levelsAndDifficulty';
 import { canUseTrial } from '../services/trialUsage';
 
 // Ngôn ngữ: cố định tiếng Việt (không cho chọn)
@@ -97,8 +97,6 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
   const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
 
-  const settings = useMemo(() => practiceModeSettings.getSettings(), []);
-
   const hasActiveLicense = () => {
     if (user.role === 'admin') return true;
     if (!user.license_expiry) return false;
@@ -111,7 +109,30 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     return user.allowed_modes.includes(mode);
   };
 
-  const modeLimits = selectedModePractice ? settings[selectedModePractice][modeDifficulty as DifficultyKey] : null;
+  const modeKey = selectedModePractice as ModeKey | null;
+  const modeLimits = (
+    modeKey
+      ? practiceModeSettings.getLimits(modeLevel as LevelSymbol, modeKey, modeDifficulty as DifficultyKey)
+      : null
+  );
+
+  const clampInt = (n: number, min: number, max: number) => Math.max(min, Math.min(max, Math.floor(n)));
+  const randInt = (min: number, max: number) => {
+    const a = Math.min(min, max);
+    const b = Math.max(min, max);
+    return a + Math.floor(Math.random() * (b - a + 1));
+  };
+
+  // Keep inputs within the configured ranges for current selection
+  useEffect(() => {
+    if (!modeLimits) return;
+    setModeQuestionCount((prev) => clampInt(prev, modeLimits.question_count_min, modeLimits.question_count_max));
+
+    const min = modeLimits.speed_seconds_min ?? 0.1;
+    const max = modeLimits.speed_seconds_max ?? 1.5;
+    setModeSpeedRead((prev) => Math.min(max, Math.max(min, prev)));
+    setModeSpeedDisplay((prev) => Math.min(max, Math.max(min, prev)));
+  }, [modeLimits]);
 
   const startPractice = (mode: Mode) => {
     // Trial policy (no activation):
@@ -123,13 +144,31 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       navigate('/activate');
       return;
     }
-    const raw = mode === Mode.LISTENING ? modeSpeedRead : mode === Mode.FLASH ? modeSpeedDisplay : undefined;
-    const speed = typeof raw === 'number' ? clampSpeedSeconds(raw) : undefined;
+    const rawSpeed = mode === Mode.LISTENING ? modeSpeedRead : mode === Mode.FLASH ? modeSpeedDisplay : undefined;
+    const speed = typeof rawSpeed === 'number' ? clampSpeedSeconds(rawSpeed) : undefined;
+
+    // Apply admin-configured ranges for the selected level + difficulty.
+    const levelSym = (modeLevel || (user.level_symbol || 'A')) as LevelSymbol;
+    const key: ModeKey =
+      mode === Mode.VISUAL ? 'visual' :
+      mode === Mode.LISTENING ? 'audio' :
+      'flash';
+
+    const limits = practiceModeSettings.getLimits(levelSym, key, modeDifficulty as DifficultyKey);
+    const digits = randInt(clampInt(limits.digits_min, 1, 10), clampInt(limits.digits_max, 1, 10));
+    const rows = randInt(clampInt(limits.rows_min, 1, 100), clampInt(limits.rows_max, 1, 100));
+    const qCount = clampInt(modeQuestionCount, limits.question_count_min, limits.question_count_max);
+
+    const speedMin = limits.speed_seconds_min ?? 0.1;
+    const speedMax = limits.speed_seconds_max ?? 1.5;
+    const clampedSpeed = typeof speed === 'number' ? Math.min(speedMax, Math.max(speedMin, speed)) : undefined;
     const config = {
       level_symbol: modeLevel,
       difficulty: modeDifficulty,
-      question_count: modeQuestionCount,
-      speed_seconds: speed,
+      question_count: qCount,
+      digits,
+      rows,
+      speed_seconds: clampedSpeed,
       language: 'vi-VN',
     };
     navigate(`/practice/${mode}`, {
@@ -389,7 +428,13 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Tốc độ đọc (s): {modeSpeedRead.toFixed(1)}</label>
                         <div className="mt-1">
-                          <CustomSlider min={0.1} max={1.5} step={0.1} value={modeSpeedRead} onChange={(v) => setModeSpeedRead(clampSpeedSeconds(v))} />
+                          <CustomSlider
+                            min={modeLimits?.speed_seconds_min ?? 0.1}
+                            max={modeLimits?.speed_seconds_max ?? 1.5}
+                            step={0.1}
+                            value={modeSpeedRead}
+                            onChange={(v) => setModeSpeedRead(clampSpeedSeconds(v))}
+                          />
                         </div>
                       </div>
                     </div>
@@ -429,7 +474,13 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Tốc độ hiển thị (s): {modeSpeedDisplay.toFixed(1)}</label>
                         <div className="mt-1">
-                          <CustomSlider min={0.1} max={1.5} step={0.1} value={modeSpeedDisplay} onChange={(v) => setModeSpeedDisplay(clampSpeedSeconds(v))} />
+                          <CustomSlider
+                            min={modeLimits?.speed_seconds_min ?? 0.1}
+                            max={modeLimits?.speed_seconds_max ?? 1.5}
+                            step={0.1}
+                            value={modeSpeedDisplay}
+                            onChange={(v) => setModeSpeedDisplay(clampSpeedSeconds(v))}
+                          />
                         </div>
                       </div>
                     </div>

@@ -194,6 +194,14 @@ const AdminPage: React.FC = () => {
       setLoadingReport(false);
   };
 
+  const formatDuration = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}g ${m}p`;
+    return `${m}p`;
+  };
+
   const handleActivateUser = async (user: UserProfile) => {
       if (window.confirm(`Kích hoạt tài khoản cho ${user.full_name}?`)) {
           setActivatingIds(prev => [...prev, user.id]);
@@ -253,15 +261,128 @@ const AdminPage: React.FC = () => {
                         ))}
                     </div>
                 </div>
+                {loadingReport && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100 shadow-sm animate-pulse">
+                        <div className="h-3 w-28 bg-gray-200 rounded mb-4"></div>
+                        <div className="h-10 w-20 bg-gray-200 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {reportData && (
+                  <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                        {[{ label: 'Học sinh mới', val: reportData.new_users, bg: 'bg-blue-50', text: 'text-ucmas-blue' }, { label: 'Đã kích hoạt', val: reportData.new_licenses, bg: 'bg-green-50', text: 'text-green-600' }, { label: 'Đang luyện tập', val: reportData.active_students, bg: 'bg-orange-50', text: 'text-orange-600' }, { label: 'Tổng lượt thi', val: reportData.total_attempts, bg: 'bg-purple-50', text: 'text-purple-600' }].map((card, i) => (
-                            <div key={i} className={`${card.bg} p-8 rounded-[2.5rem] border border-gray-100 shadow-sm`}>
-                                <div className={`${card.text} text-[10px] font-heading font-black uppercase mb-2 tracking-widest`}>{card.label}</div>
-                                <div className="text-4xl font-heading font-black text-gray-800">{card.val}</div>
-                            </div>
-                        ))}
+                      {[
+                        { label: 'Tổng học viên', val: reportData?.totals?.total_students ?? 0, bg: 'bg-slate-50', text: 'text-slate-700' },
+                        { label: `Học viên mới (${reportRange === 'day' ? '24h' : reportRange === 'week' ? '7 ngày' : '30 ngày'})`, val: reportData?.totals?.new_students ?? 0, bg: 'bg-blue-50', text: 'text-ucmas-blue' },
+                        { label: 'Kích hoạt còn hiệu lực', val: reportData?.totals?.activated_students ?? 0, bg: 'bg-green-50', text: 'text-green-700' },
+                        { label: 'Học viên hoạt động', val: reportData?.totals?.active_students ?? 0, bg: 'bg-orange-50', text: 'text-orange-700' },
+                        { label: 'Tổng lượt làm bài', val: reportData?.totals?.total_attempts ?? 0, bg: 'bg-purple-50', text: 'text-purple-700' },
+                        { label: 'Điểm trung bình', val: `${reportData?.totals?.avg_accuracy_pct ?? 0}%`, bg: 'bg-indigo-50', text: 'text-indigo-700' },
+                        { label: 'Tổng thời lượng', val: formatDuration(reportData?.totals?.total_time_seconds ?? 0), bg: 'bg-emerald-50', text: 'text-emerald-700' },
+                        { label: 'Kích hoạt mới', val: reportData?.totals?.new_activations ?? 0, bg: 'bg-lime-50', text: 'text-lime-800' },
+                      ].map((card, i) => (
+                        <div key={i} className={`${card.bg} p-7 rounded-[2.25rem] border border-gray-100 shadow-sm`}>
+                          <div className={`${card.text} text-[10px] font-heading font-black uppercase mb-2 tracking-widest`}>{card.label}</div>
+                          <div className="text-4xl font-heading font-black text-gray-800">{card.val}</div>
+                        </div>
+                      ))}
                     </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div className="flex items-start justify-between gap-4 mb-5">
+                          <div>
+                            <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">Hoạt động theo chế độ</div>
+                            <div className="text-xl font-heading font-black text-gray-800 mt-1">Thống kê nhanh</div>
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono">
+                            {reportData?.meta?.attempts_rows_capped ? `Giới hạn ${reportData?.meta?.attempts_rows_used} lượt gần nhất` : `Dữ liệu: ${reportData?.meta?.attempts_rows_used ?? 0} lượt`}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {[
+                            { key: 'nhin_tinh', label: 'Nhìn tính', color: 'text-ucmas-blue', bg: 'bg-blue-50 border-blue-100' },
+                            { key: 'nghe_tinh', label: 'Nghe tính', color: 'text-ucmas-red', bg: 'bg-red-50 border-red-100' },
+                            { key: 'flash', label: 'Flash', color: 'text-ucmas-green', bg: 'bg-green-50 border-green-100' },
+                            { key: 'hon_hop', label: 'Hỗn hợp', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
+                          ].map((m: any) => {
+                            const row = reportData?.by_mode?.[m.key] || {};
+                            return (
+                              <div key={m.key} className={`flex items-center justify-between gap-4 rounded-2xl border p-4 ${m.bg}`}>
+                                <div className="min-w-0">
+                                  <div className={`font-heading font-black ${m.color}`}>{m.label}</div>
+                                  <div className="text-[11px] text-gray-500 mt-0.5">
+                                    {row.active_students ?? 0} học viên • {row.attempts ?? 0} lượt • {row.accuracy_pct ?? 0}% đúng
+                                  </div>
+                                </div>
+                                <div className="text-[11px] text-gray-600 font-heading font-black">
+                                  {formatDuration(row.total_time_seconds ?? 0)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div className="mb-5">
+                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">Top học viên hoạt động</div>
+                          <div className="text-xl font-heading font-black text-gray-800 mt-1">Theo lượt làm bài</div>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                          <table className="w-full text-left">
+                            <thead className="bg-gray-50 text-gray-400 font-heading font-black uppercase text-[10px] tracking-widest">
+                              <tr>
+                                <th className="p-4">Học viên</th>
+                                <th className="p-4 text-center">Lượt</th>
+                                <th className="p-4 text-center">Đúng</th>
+                                <th className="p-4 text-center">Thời lượng</th>
+                                <th className="p-4">Lần cuối</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {(reportData?.top_students || []).length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="p-8 text-center text-gray-400 font-medium italic">
+                                    Chưa có dữ liệu trong khoảng thời gian này.
+                                  </td>
+                                </tr>
+                              ) : (
+                                (reportData?.top_students || []).map((s: any) => (
+                                  <tr key={s.user_id} className="hover:bg-gray-50 transition">
+                                    <td className="p-4">
+                                      <div className="font-black text-gray-800">{s.full_name || 'Unknown'}</div>
+                                      <div className="text-[10px] text-gray-400 font-mono mt-1">
+                                        {s.student_code ? `Mã: ${s.student_code}` : (s.email || `${String(s.user_id).slice(0, 8)}...`)}
+                                      </div>
+                                    </td>
+                                    <td className="p-4 text-center font-heading font-black text-gray-800">{s.attempts_count}</td>
+                                    <td className="p-4 text-center">
+                                      <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-blue-50 text-ucmas-blue border border-blue-100 text-[10px] font-heading font-black">
+                                        {s.accuracy_pct}%
+                                      </span>
+                                    </td>
+                                    <td className="p-4 text-center text-[11px] text-gray-700 font-heading font-black">
+                                      {formatDuration(s.total_time_seconds)}
+                                    </td>
+                                    <td className="p-4 text-[11px] text-gray-500 font-mono">
+                                      {s.last_attempt_at ? new Date(s.last_attempt_at).toLocaleString('vi-VN') : '—'}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 )}
             </div>
         )}

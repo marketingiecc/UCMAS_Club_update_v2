@@ -527,18 +527,273 @@ export const backend = {
   },
 
   getReportData: async (range: 'day'|'week'|'month') => {
-      const { count: users } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-      const { count: attempts } = await supabase.from('attempts').select('*', { count: 'exact', head: true });
-      
-      const { data } = await supabase.from('user_profile_aggregated').select('*').limit(5);
-      const top = (data || []).map(u => ({ ...u, attempts_count: Math.floor(Math.random() * 20) }));
-      
-      return {
-          new_users: users || 0,
-          new_licenses: 0,
-          active_students: users || 0,
-          total_attempts: attempts || 0,
-          top_students: top
+      type ReportRange = 'day' | 'week' | 'month';
+      type ReportModeKey = 'nhin_tinh' | 'nghe_tinh' | 'flash' | 'hon_hop' | 'unknown';
+
+      type AdminReportTopStudent = {
+        user_id: string;
+        full_name?: string;
+        email?: string;
+        student_code?: string;
+        attempts_count: number;
+        accuracy_pct: number; // 0-100
+        total_time_seconds: number;
+        last_attempt_at?: string;
       };
+
+      type AdminReportData = {
+        range: ReportRange;
+        from: string;
+        to: string;
+        totals: {
+          total_students: number;
+          new_students: number;
+          active_students: number;
+          activated_students: number; // currently active entitlement
+          new_activations: number;
+          total_attempts: number;
+          avg_accuracy_pct: number;
+          total_time_seconds: number;
+        };
+        by_mode: Record<
+          ReportModeKey,
+          {
+            attempts: number;
+            active_students: number;
+            accuracy_pct: number;
+            total_time_seconds: number;
+          }
+        >;
+        top_students: AdminReportTopStudent[];
+        meta: {
+          attempts_rows_used: number;
+          attempts_rows_capped: boolean;
+        };
+      };
+
+      const now = new Date();
+      const toIso = now.toISOString();
+      const fromDate = new Date(now);
+      if (range === 'day') fromDate.setDate(fromDate.getDate() - 1);
+      else if (range === 'week') fromDate.setDate(fromDate.getDate() - 7);
+      else fromDate.setDate(fromDate.getDate() - 30);
+      const fromIso = fromDate.toISOString();
+
+      const modeKey = (m: unknown): ReportModeKey => {
+        if (m === 'nhin_tinh' || m === 'nghe_tinh' || m === 'flash' || m === 'hon_hop') return m;
+        return 'unknown';
+      };
+
+      const round1 = (n: number) => Math.round(n * 10) / 10;
+
+      const baseByMode: AdminReportData['by_mode'] = {
+        nhin_tinh: { attempts: 0, active_students: 0, accuracy_pct: 0, total_time_seconds: 0 },
+        nghe_tinh: { attempts: 0, active_students: 0, accuracy_pct: 0, total_time_seconds: 0 },
+        flash: { attempts: 0, active_students: 0, accuracy_pct: 0, total_time_seconds: 0 },
+        hon_hop: { attempts: 0, active_students: 0, accuracy_pct: 0, total_time_seconds: 0 },
+        unknown: { attempts: 0, active_students: 0, accuracy_pct: 0, total_time_seconds: 0 },
+      };
+
+      // --- Counts: students (exclude admins) ---
+      const { count: totalStudentsCount } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .neq('role', 'admin');
+
+      const { count: newStudentsCount } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .neq('role', 'admin')
+        .gte('created_at', fromIso)
+        .lt('created_at', toIso);
+
+      // --- Entitlements ---
+      const { data: activeEntRows } = await supabase
+        .from('entitlements')
+        .select('user_id, expires_at')
+        .gt('expires_at', toIso);
+
+      const activatedUserIds = new Set<string>();
+      (activeEntRows || []).forEach(r => {
+        if (r?.user_id) activatedUserIds.add(r.user_id);
+      });
+
+      const { data: newEntRows } = await supabase
+        .from('entitlements')
+        .select('user_id, created_at')
+        .gte('created_at', fromIso)
+        .lt('created_at', toIso);
+
+      const newActivationUserIds = new Set<string>();
+      (newEntRows || []).forEach(r => {
+        if (r?.user_id) newActivationUserIds.add(r.user_id);
+      });
+
+      // --- Attempts (paged for aggregation) ---
+      const MAX_ATTEMPT_ROWS = 5000;
+      const PAGE_SIZE = 1000;
+      const attemptsRows: Array<{
+        user_id: string;
+        mode: string;
+        score_correct: number;
+        score_total: number;
+        duration_seconds: number;
+        created_at: string;
+      }> = [];
+
+      for (let offset = 0; offset < MAX_ATTEMPT_ROWS; offset += PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from('attempts')
+          .select('user_id, mode, score_correct, score_total, duration_seconds, created_at')
+          .gte('created_at', fromIso)
+          .lt('created_at', toIso)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) {
+          console.warn('getReportData attempts query error:', error.message);
+          break;
+        }
+
+        if (data && data.length > 0) attemptsRows.push(...(data as any));
+        if (!data || data.length < PAGE_SIZE) break;
+      }
+
+      const attemptsRowsCapped = attemptsRows.length >= MAX_ATTEMPT_ROWS;
+
+      // Aggregations
+      const activeUsersAll = new Set<string>();
+      const activeUsersByMode: Record<ReportModeKey, Set<string>> = {
+        nhin_tinh: new Set(),
+        nghe_tinh: new Set(),
+        flash: new Set(),
+        hon_hop: new Set(),
+        unknown: new Set(),
+      };
+
+      let sumCorrect = 0;
+      let sumTotal = 0;
+      let sumDuration = 0;
+
+      const byModeCorrect: Record<ReportModeKey, number> = {
+        nhin_tinh: 0,
+        nghe_tinh: 0,
+        flash: 0,
+        hon_hop: 0,
+        unknown: 0,
+      };
+      const byModeTotal: Record<ReportModeKey, number> = {
+        nhin_tinh: 0,
+        nghe_tinh: 0,
+        flash: 0,
+        hon_hop: 0,
+        unknown: 0,
+      };
+
+      const perUser = new Map<
+        string,
+        { attempts: number; correct: number; total: number; duration: number; last?: string }
+      >();
+
+      attemptsRows.forEach(a => {
+        if (!a?.user_id) return;
+        const m = modeKey(a.mode);
+        activeUsersAll.add(a.user_id);
+        activeUsersByMode[m].add(a.user_id);
+
+        baseByMode[m].attempts += 1;
+        baseByMode[m].total_time_seconds += a.duration_seconds || 0;
+
+        const c = Number(a.score_correct || 0);
+        const t = Number(a.score_total || 0);
+        const d = Number(a.duration_seconds || 0);
+
+        sumCorrect += c;
+        sumTotal += t;
+        sumDuration += d;
+
+        byModeCorrect[m] += c;
+        byModeTotal[m] += t;
+
+        const prev = perUser.get(a.user_id) ?? { attempts: 0, correct: 0, total: 0, duration: 0, last: undefined };
+        prev.attempts += 1;
+        prev.correct += c;
+        prev.total += t;
+        prev.duration += d;
+        if (!prev.last || new Date(a.created_at) > new Date(prev.last)) prev.last = a.created_at;
+        perUser.set(a.user_id, prev);
+      });
+
+      (Object.keys(baseByMode) as ReportModeKey[]).forEach(m => {
+        baseByMode[m].active_students = activeUsersByMode[m].size;
+        const t = byModeTotal[m];
+        const c = byModeCorrect[m];
+        baseByMode[m].accuracy_pct = t > 0 ? round1((c / t) * 100) : 0;
+      });
+
+      const avgAccuracyPct = sumTotal > 0 ? round1((sumCorrect / sumTotal) * 100) : 0;
+
+      // Top students in period
+      const topUserAgg = Array.from(perUser.entries())
+        .map(([user_id, s]) => {
+          const acc = s.total > 0 ? (s.correct / s.total) * 100 : 0;
+          return {
+            user_id,
+            attempts_count: s.attempts,
+            accuracy_pct: round1(acc),
+            total_time_seconds: s.duration,
+            last_attempt_at: s.last,
+          };
+        })
+        .sort((a, b) => b.attempts_count - a.attempts_count || b.accuracy_pct - a.accuracy_pct)
+        .slice(0, 10);
+
+      let topStudents: AdminReportTopStudent[] = topUserAgg;
+      if (topUserAgg.length > 0) {
+        const ids = topUserAgg.map(x => x.user_id);
+        const { data: profiles } = await supabase
+          .from('user_profile_aggregated')
+          .select('id, full_name, email, student_code')
+          .in('id', ids as any);
+
+        const profileById = new Map<string, any>();
+        (profiles || []).forEach(p => {
+          if (p?.id) profileById.set(p.id, p);
+        });
+
+        topStudents = topUserAgg.map(s => {
+          const p = profileById.get(s.user_id);
+          return {
+            ...s,
+            full_name: p?.full_name ?? undefined,
+            email: p?.email ?? undefined,
+            student_code: p?.student_code ?? undefined,
+          };
+        });
+      }
+
+      const result: AdminReportData = {
+        range,
+        from: fromIso,
+        to: toIso,
+        totals: {
+          total_students: totalStudentsCount || 0,
+          new_students: newStudentsCount || 0,
+          active_students: activeUsersAll.size,
+          activated_students: activatedUserIds.size,
+          new_activations: newActivationUserIds.size,
+          total_attempts: attemptsRows.length,
+          avg_accuracy_pct: avgAccuracyPct,
+          total_time_seconds: sumDuration,
+        },
+        by_mode: baseByMode,
+        top_students: topStudents,
+        meta: {
+          attempts_rows_used: attemptsRows.length,
+          attempts_rows_capped: attemptsRowsCapped,
+        },
+      };
+
+      return result;
   }
 };
