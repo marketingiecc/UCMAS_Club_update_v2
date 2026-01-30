@@ -11,6 +11,11 @@ const ActivatePage: React.FC<ActivatePageProps> = ({ user, setUser }) => {
   const [code, setCode] = useState('');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(false);
+  const daysLeft = (() => {
+    if (!user.license_expiry) return 0;
+    const diff = new Date(user.license_expiry).getTime() - new Date().getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  })();
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,9 +71,14 @@ const ActivatePage: React.FC<ActivatePageProps> = ({ user, setUser }) => {
         <h3 className="text-xs font-heading font-bold text-gray-400 uppercase tracking-wide mb-3 text-center">TRẠNG THÁI HIỆN TẠI</h3>
         <div className="bg-gray-50 p-4 rounded-xl text-center">
            {user.license_expiry ? (
-             <div className="text-green-600">
-               <div className="font-heading font-bold text-lg mb-1">Đã kích hoạt</div>
+             <div className={daysLeft > 0 ? "text-green-600" : "text-red-600"}>
+               <div className="font-heading font-bold text-lg mb-1">{daysLeft > 0 ? 'Đã kích hoạt' : 'Đã hết hạn'}</div>
                <div className="text-sm">Hạn sử dụng: <span className="font-heading font-mono font-bold text-gray-800">{new Date(user.license_expiry).toLocaleDateString('vi-VN')}</span></div>
+               {daysLeft > 0 && (
+                 <div className="text-xs mt-2 text-gray-600 bg-white inline-block px-2 py-1 rounded border border-gray-200">
+                   Còn <span className="font-heading font-black text-ucmas-blue">{daysLeft}</span> ngày
+                 </div>
+               )}
                <div className="text-xs mt-2 text-gray-500 bg-white inline-block px-2 py-1 rounded border border-gray-200">
                    Chế độ: {user.allowed_modes.join(', ')}
                </div>

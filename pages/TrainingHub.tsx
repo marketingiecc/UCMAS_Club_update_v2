@@ -4,7 +4,7 @@ import { UserProfile, Mode } from '../types';
 import CustomSlider from '../components/CustomSlider';
 import { practiceModeSettings, type DifficultyKey, type ModeKey } from '../services/practiceModeSettings';
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES, type LevelSymbol } from '../config/levelsAndDifficulty';
-import { canUseTrial } from '../services/trialUsage';
+import { canUseTrial, getTrialCount } from '../services/trialUsage';
 
 // Ngôn ngữ: cố định tiếng Việt (không cho chọn)
 
@@ -108,6 +108,19 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     if (!user.license_expiry || new Date(user.license_expiry) < new Date()) return false;
     return user.allowed_modes.includes(mode);
   };
+
+  const activeLicense = hasActiveLicense();
+  const isTrialUser = user.role !== 'admin' && !activeLicense;
+  const isPathLocked = isTrialUser;
+
+  const getTrialRemaining = (area: 'mode' | 'elite', mode: Mode, limit: number) => {
+    if (!isTrialUser) return null;
+    const used = getTrialCount(user.id, area, mode);
+    return Math.max(0, limit - used);
+  };
+
+  const modeTrialRemaining = (mode: Mode) => getTrialRemaining('mode', mode, 3);
+  const eliteTrialRemaining = (mode: Mode) => getTrialRemaining('elite', mode, 1);
 
   const modeKey = selectedModePractice as ModeKey | null;
   const modeLimits = (
@@ -310,13 +323,18 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`w-full text-left px-4 py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-ucmas-blue text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                tab.id === 'path' && isPathLocked
+                  ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
+                  : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
               }`}
             >
               <span>{tab.icon}</span>
               {tab.label}
+              {tab.id === 'path' && isPathLocked && (
+                <span className="ml-auto text-[10px] font-heading font-black uppercase tracking-widest bg-white/70 text-gray-600 px-2 py-1 rounded-full border border-gray-200">
+                  🔒 Kích hoạt
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -328,6 +346,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           <div className="space-y-8">
             <h2 className="text-2xl font-heading-bold text-ucmas-blue">Luyện theo chế độ</h2>
             <p className="text-gray-600">Chọn cấp độ, độ khó và số câu. Kết quả lưu vào Lịch sử luyện tập.</p>
+            {isTrialUser && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-sm">
+                Bạn chưa kích hoạt. Mỗi chế độ được luyện <strong>tối đa 3 lượt</strong>. Hãy xem số lượt còn lại trên từng chế độ.
+              </div>
+            )}
 
             {selectedModePractice === null ? (
               <div className="grid md:grid-cols-3 gap-6">
@@ -338,6 +361,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-blue text-white flex items-center justify-center text-4xl mb-4">👁️</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-blue mb-2">Nhìn tính</h3>
                   <p className="text-sm text-gray-600 text-center">Cấp độ, độ khó, số câu</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {modeTrialRemaining(Mode.VISUAL) ?? 0}/3 lượt
+                    </div>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedModePractice('audio')}
@@ -346,6 +374,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-red text-white flex items-center justify-center text-4xl mb-4">🎧</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-red mb-2">Nghe tính</h3>
                   <p className="text-sm text-gray-600 text-center">Cấp độ, độ khó, số câu, tốc độ đọc</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {modeTrialRemaining(Mode.LISTENING) ?? 0}/3 lượt
+                    </div>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedModePractice('flash')}
@@ -354,6 +387,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-green text-white flex items-center justify-center text-4xl mb-4">⚡</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-green mb-2">Flash</h3>
                   <p className="text-sm text-gray-600 text-center">Cấp độ, độ khó, số câu, tốc độ hiển thị</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {modeTrialRemaining(Mode.FLASH) ?? 0}/3 lượt
+                    </div>
+                  )}
                 </button>
               </div>
             ) : (
@@ -364,6 +402,20 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                 >
                   ← Quay lại chọn chế độ
                 </button>
+                {isTrialUser && (
+                  <div className="mb-6 bg-white border border-gray-200 rounded-2xl p-4 text-sm text-gray-700">
+                    {selectedModePractice === 'visual' && <>Nhìn tính: còn <strong>{modeTrialRemaining(Mode.VISUAL) ?? 0}/3</strong> lượt.</>}
+                    {selectedModePractice === 'audio' && <>Nghe tính: còn <strong>{modeTrialRemaining(Mode.LISTENING) ?? 0}/3</strong> lượt.</>}
+                    {selectedModePractice === 'flash' && <>Flash: còn <strong>{modeTrialRemaining(Mode.FLASH) ?? 0}/3</strong> lượt.</>}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/activate')}
+                      className="ml-3 text-ucmas-blue font-heading font-bold hover:underline"
+                    >
+                      Kích hoạt
+                    </button>
+                  </div>
+                )}
                 {selectedModePractice === 'visual' && (
                   <div className="bg-white rounded-3xl shadow-xl border-2 border-gray-100 overflow-hidden">
                     <div className="bg-ucmas-blue text-white px-6 py-4 flex items-center gap-3">
@@ -392,7 +444,15 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={() => startPractice(Mode.VISUAL)} className="w-full py-3.5 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-colors shadow-lg">
+                      <button
+                        onClick={() => startPractice(Mode.VISUAL)}
+                        disabled={isTrialUser && (modeTrialRemaining(Mode.VISUAL) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (modeTrialRemaining(Mode.VISUAL) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
+                        }`}
+                      >
                         Bắt đầu → Làm bài
                       </button>
                     </div>
@@ -439,7 +499,15 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={() => startPractice(Mode.LISTENING)} className="w-full py-3.5 bg-ucmas-red text-white font-heading-bold rounded-xl hover:bg-ucmas-blue transition-colors shadow-lg">
+                      <button
+                        onClick={() => startPractice(Mode.LISTENING)}
+                        disabled={isTrialUser && (modeTrialRemaining(Mode.LISTENING) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (modeTrialRemaining(Mode.LISTENING) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
+                        }`}
+                      >
                         Bắt đầu → Làm bài
                       </button>
                     </div>
@@ -485,7 +553,15 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={() => startPractice(Mode.FLASH)} className="w-full py-3.5 bg-ucmas-green text-white font-heading-bold rounded-xl hover:bg-ucmas-blue transition-colors shadow-lg">
+                      <button
+                        onClick={() => startPractice(Mode.FLASH)}
+                        disabled={isTrialUser && (modeTrialRemaining(Mode.FLASH) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (modeTrialRemaining(Mode.FLASH) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
+                        }`}
+                      >
                         Bắt đầu → Làm bài
                       </button>
                     </div>
@@ -506,194 +582,225 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               Lộ trình mới gồm <strong>{PATH_TOTAL_DAYS} ngày</strong>, chia thành <strong>{PATH_TOTAL_WEEKS} tuần</strong> (mỗi tuần <strong>{PATH_DAYS_PER_WEEK} ngày</strong>). Mỗi ngày có thể có nhiều bài luyện tập (Nhìn tính, Nghe tính, Flash).
             </div>
 
-            {selectedPathDay != null ? (
-              /* Panel chi tiết ngày: danh sách bài + Làm bài */
-              <div className="bg-white rounded-2xl border-2 border-ucmas-blue shadow-lg overflow-hidden">
-                <div className="bg-ucmas-blue text-white px-6 py-4 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPathDay(null)}
-                    className="text-white/90 hover:text-white font-heading font-semibold flex items-center gap-1"
-                  >
-                    ← Quay lại lộ trình
-                  </button>
-                </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-heading-bold text-ucmas-blue mb-1">
-                    Tuần {Math.ceil(selectedPathDay / PATH_DAYS_PER_WEEK)} • Ngày {((selectedPathDay - 1) % PATH_DAYS_PER_WEEK) + 1}
-                  </h3>
-                  <p className="text-gray-500 text-sm mb-4">Tổng ngày {selectedPathDay} – {getLevelLabel(userLevel)}</p>
-                  {(() => {
-                    const dayExercises = exercisesForLevel.filter((e) => e.day_no === selectedPathDay);
-                    if (dayExercises.length === 0) {
-                      return (
-                        <p className="text-gray-500 py-4">Chưa có bài nào cho ngày này. Admin có thể thiết lập tại Thiết kế lộ trình.</p>
-                      );
-                    }
-                    return (
-                      <ul className="space-y-3">
-                        {dayExercises.map((ex) => (
-                          <li
-                            key={ex.id}
-                            className="flex items-center justify-between gap-4 p-4 rounded-xl bg-gray-50 border border-gray-200 hover:border-ucmas-blue/50 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl">
-                                {ex.mode === 'visual' ? '👁️' : ex.mode === 'audio' ? '🎧' : '⚡'}
-                              </span>
-                              <div>
-                                <span className="font-heading font-bold text-gray-800">{PATH_MODE_LABELS[ex.mode]}</span>
-                                <span className="text-gray-600 text-sm ml-2">
-                                  {ex.question_count} câu · {ex.difficulty} · {ex.digits} chữ số, {ex.rows} dòng
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => startPathExercise(ex)}
-                              className="px-5 py-2.5 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-colors shadow"
-                            >
-                              Làm bài
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    );
-                  })()}
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Week selector */}
-                <div className="flex gap-2 flex-wrap items-center">
-                  <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mr-2">
-                    Chọn tuần
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {Array.from({ length: PATH_TOTAL_WEEKS }, (_, i) => i).map((wIdx) => (
+            <div className="relative">
+              <div className={isPathLocked ? 'opacity-40 grayscale pointer-events-none select-none' : ''}>
+                {selectedPathDay != null ? (
+                  /* Panel chi tiết ngày: danh sách bài + Làm bài */
+                  <div className="bg-white rounded-2xl border-2 border-ucmas-blue shadow-lg overflow-hidden">
+                    <div className="bg-ucmas-blue text-white px-6 py-4 flex items-center gap-3">
                       <button
-                        key={wIdx}
                         type="button"
-                        onClick={() => setPathWeekIndex(wIdx)}
-                        className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${
-                          pathWeekIndex === wIdx
-                            ? 'bg-ucmas-blue text-white shadow'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        onClick={() => setSelectedPathDay(null)}
+                        className="text-white/90 hover:text-white font-heading font-semibold flex items-center gap-1"
                       >
-                        Tuần {wIdx + 1}
+                        ← Quay lại lộ trình
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Road infographic */}
-                {(() => {
-                  const weekNo = pathWeekIndex + 1;
-                  const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
-                  const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
-
-                  return (
-                    <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-white rounded-[2.5rem] border border-indigo-100 shadow-sm p-6 overflow-hidden">
-                      <div className="flex items-start justify-between gap-4 mb-6">
-                        <div>
-                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-indigo-600">
-                            Roadmap lộ trình
-                          </div>
-                          <h3 className="text-2xl font-heading-extrabold text-ucmas-blue mt-1">
-                            Tuần {weekNo}
-                          </h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Chọn 1 ngày để xem bài và luyện tập.
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
-                            {getLevelLabel(userLevel)}
-                          </div>
-                          <div className="text-sm font-heading font-bold text-gray-700">
-                            Ngày {startDay}–{Math.min(startDay + PATH_DAYS_PER_WEEK - 1, PATH_TOTAL_DAYS)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="relative w-full h-[360px] sm:h-[420px] rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden">
-                        {/* Road */}
-                        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 420" preserveAspectRatio="none">
-                          <path
-                            d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
-                            fill="none"
-                            stroke="rgba(99,102,241,0.55)"
-                            strokeWidth="70"
-                            strokeLinecap="round"
-                          />
-                          <path
-                            d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
-                            fill="none"
-                            stroke="rgba(255,255,255,0.85)"
-                            strokeWidth="6"
-                            strokeDasharray="16 14"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-
-                        {/* Nodes */}
-                        {days.map((day, idx) => {
-                          const dayExs = exercisesForLevel.filter((e) => e.day_no === day);
-                          const hasExercises = dayExs.length > 0;
-                          const hasCompleted = pathDaysCompleted[userLevel]?.[day] === true;
-                          const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
-
-                          const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };
-                          const ringCls = hasCompleted
-                            ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
-                            : hasExercises
-                              ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue'
-                              : 'border-gray-300 bg-gray-100 text-gray-600';
-
+                    </div>
+                    <div className="p-6">
+                      <h3 className="text-xl font-heading-bold text-ucmas-blue mb-1">
+                        Tuần {Math.ceil(selectedPathDay / PATH_DAYS_PER_WEEK)} • Ngày {((selectedPathDay - 1) % PATH_DAYS_PER_WEEK) + 1}
+                      </h3>
+                      <p className="text-gray-500 text-sm mb-4">Tổng ngày {selectedPathDay} – {getLevelLabel(userLevel)}</p>
+                      {(() => {
+                        const dayExercises = exercisesForLevel.filter((e) => e.day_no === selectedPathDay);
+                        if (dayExercises.length === 0) {
                           return (
-                            <button
-                              key={day}
-                              type="button"
-                              onClick={() => setSelectedPathDay(day)}
-                              className="absolute group"
-                              style={{ left: point.x, top: point.y, transform: 'translate(-50%, -50%)' }}
-                              title={`Ngày ${day}: ${modeSummary}`}
-                            >
-                              <div className={`w-16 h-16 rounded-full border-4 shadow-lg flex items-center justify-center font-heading font-black text-lg ${ringCls} transition-transform group-hover:scale-105`}>
-                                {((day - 1) % PATH_DAYS_PER_WEEK) + 1}
-                              </div>
-                              <div className="mt-2 bg-white/95 border border-gray-100 shadow-md rounded-2xl px-3 py-2 min-w-[160px] opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 transition-all">
-                                <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">
-                                  Ngày {day}
-                                </div>
-                                <div className="text-sm font-heading font-bold text-gray-800 mt-0.5">
-                                  {hasExercises ? `${dayExs.length} bài` : 'Chưa có bài'}
-                                </div>
-                                <div className="text-xs text-gray-600 mt-0.5 truncate">
-                                  {modeSummary}
-                                </div>
-                              </div>
-                              {hasCompleted && (
-                                <div className="absolute -right-1 -top-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs shadow">
-                                  ✓
-                                </div>
-                              )}
-                            </button>
+                            <p className="text-gray-500 py-4">Chưa có bài nào cho ngày này. Admin có thể thiết lập tại Thiết kế lộ trình.</p>
                           );
-                        })}
+                        }
+                        return (
+                          <ul className="space-y-3">
+                            {dayExercises.map((ex) => (
+                              <li
+                                key={ex.id}
+                                className="flex items-center justify-between gap-4 p-4 rounded-xl bg-gray-50 border border-gray-200 hover:border-ucmas-blue/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl">
+                                    {ex.mode === 'visual' ? '👁️' : ex.mode === 'audio' ? '🎧' : '⚡'}
+                                  </span>
+                                  <div>
+                                    <span className="font-heading font-bold text-gray-800">{PATH_MODE_LABELS[ex.mode]}</span>
+                                    <span className="text-gray-600 text-sm ml-2">
+                                      {ex.question_count} câu · {ex.difficulty} · {ex.digits} chữ số, {ex.rows} dòng
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => startPathExercise(ex)}
+                                  className="px-5 py-2.5 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-colors shadow"
+                                >
+                                  Làm bài
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Week selector */}
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mr-2">
+                        Chọn tuần
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {Array.from({ length: PATH_TOTAL_WEEKS }, (_, i) => i).map((wIdx) => (
+                          <button
+                            key={wIdx}
+                            type="button"
+                            onClick={() => setPathWeekIndex(wIdx)}
+                            className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${
+                              pathWeekIndex === wIdx
+                                ? 'bg-ucmas-blue text-white shadow'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Tuần {wIdx + 1}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  );
-                })()}
-              </>
-            )}
+
+                    {/* Road infographic */}
+                    {(() => {
+                      const weekNo = pathWeekIndex + 1;
+                      const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
+                      const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
+
+                      return (
+                        <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-white rounded-[2.5rem] border border-indigo-100 shadow-sm p-6 overflow-hidden">
+                          <div className="flex items-start justify-between gap-4 mb-6">
+                            <div>
+                              <div className="text-[10px] font-heading font-black uppercase tracking-widest text-indigo-600">
+                                Roadmap lộ trình
+                              </div>
+                              <h3 className="text-2xl font-heading-extrabold text-ucmas-blue mt-1">
+                                Tuần {weekNo}
+                              </h3>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Chọn 1 ngày để xem bài và luyện tập.
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                                {getLevelLabel(userLevel)}
+                              </div>
+                              <div className="text-sm font-heading font-bold text-gray-700">
+                                Ngày {startDay}–{Math.min(startDay + PATH_DAYS_PER_WEEK - 1, PATH_TOTAL_DAYS)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="relative w-full h-[360px] sm:h-[420px] rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden">
+                            {/* Road */}
+                            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 420" preserveAspectRatio="none">
+                              <path
+                                d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
+                                fill="none"
+                                stroke="rgba(99,102,241,0.55)"
+                                strokeWidth="70"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
+                                fill="none"
+                                stroke="rgba(255,255,255,0.85)"
+                                strokeWidth="6"
+                                strokeDasharray="16 14"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+
+                            {/* Nodes */}
+                            {days.map((day, idx) => {
+                              const dayExs = exercisesForLevel.filter((e) => e.day_no === day);
+                              const hasExercises = dayExs.length > 0;
+                              const hasCompleted = pathDaysCompleted[userLevel]?.[day] === true;
+                              const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
+
+                              const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };
+                              const ringCls = hasCompleted
+                                ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
+                                : hasExercises
+                                  ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue'
+                                  : 'border-gray-300 bg-gray-100 text-gray-600';
+
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => setSelectedPathDay(day)}
+                                  className="absolute group"
+                                  style={{ left: point.x, top: point.y, transform: 'translate(-50%, -50%)' }}
+                                  title={`Ngày ${day}: ${modeSummary}`}
+                                >
+                                  <div className={`w-16 h-16 rounded-full border-4 shadow-lg flex items-center justify-center font-heading font-black text-lg ${ringCls} transition-transform group-hover:scale-105`}>
+                                    {((day - 1) % PATH_DAYS_PER_WEEK) + 1}
+                                  </div>
+                                  <div className="mt-2 bg-white/95 border border-gray-100 shadow-md rounded-2xl px-3 py-2 min-w-[160px] opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 transition-all">
+                                    <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">
+                                      Ngày {day}
+                                    </div>
+                                    <div className="text-sm font-heading font-bold text-gray-800 mt-0.5">
+                                      {hasExercises ? `${dayExs.length} bài` : 'Chưa có bài'}
+                                    </div>
+                                    <div className="text-xs text-gray-600 mt-0.5 truncate">
+                                      {modeSummary}
+                                    </div>
+                                  </div>
+                                  {hasCompleted && (
+                                    <div className="absolute -right-1 -top-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs shadow">
+                                      ✓
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+
+              {isPathLocked && (
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="max-w-md w-full bg-white rounded-3xl border border-gray-200 shadow-xl p-8 text-center">
+                    <div className="text-5xl mb-3">🔒</div>
+                    <h3 className="text-xl font-heading-bold text-gray-800 mb-2">Cần kích hoạt để luyện theo lộ trình</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Tài khoản chưa có mã kích hoạt <strong>không thể tham gia</strong> luyện theo lộ trình.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/activate')}
+                      className="w-full py-3 bg-ucmas-blue text-white font-heading-bold rounded-2xl hover:bg-ucmas-red transition-colors shadow"
+                    >
+                      Kích hoạt ngay
+                    </button>
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">
+                      Mở khóa lộ trình • Theo dõi tiến độ
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {activeTab === 'elite' && (
           <div className="space-y-8">
             <h2 className="text-2xl font-heading-bold text-ucmas-blue">Luyện thi học sinh giỏi</h2>
+            {isTrialUser && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-sm">
+                Bạn chưa kích hoạt. Mỗi chế độ được luyện <strong>tối đa 1 lượt</strong>. Hãy xem số lượt còn lại trên từng chế độ.
+              </div>
+            )}
 
             {selectedModeElite === null ? (
               <div className="grid md:grid-cols-3 gap-6">
@@ -704,6 +811,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-blue text-white flex items-center justify-center text-4xl mb-4">👁️</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-blue mb-2">Nhìn tính</h3>
                   <p className="text-sm text-gray-600 text-center">200 câu / 8 phút. Cấp độ, đề nguồn.</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {eliteTrialRemaining(Mode.VISUAL) ?? 0}/1 lượt
+                    </div>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedModeElite('audio')}
@@ -712,6 +824,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-red text-white flex items-center justify-center text-4xl mb-4">🎧</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-red mb-2">Nghe tính</h3>
                   <p className="text-sm text-gray-600 text-center">Số chữ số, số dòng, số câu, tốc độ đọc.</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {eliteTrialRemaining(Mode.LISTENING) ?? 0}/1 lượt
+                    </div>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedModeElite('flash')}
@@ -720,6 +837,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   <div className="w-20 h-20 rounded-full bg-ucmas-green text-white flex items-center justify-center text-4xl mb-4">⚡</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-green mb-2">Flash</h3>
                   <p className="text-sm text-gray-600 text-center">Số chữ số, số dòng, số câu, tốc độ hiển thị.</p>
+                  {isTrialUser && (
+                    <div className="mt-3 text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                      Còn {eliteTrialRemaining(Mode.FLASH) ?? 0}/1 lượt
+                    </div>
+                  )}
                 </button>
               </div>
             ) : (
@@ -730,6 +852,20 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                 >
                   ← Quay lại chọn chế độ
                 </button>
+                {isTrialUser && (
+                  <div className="mb-6 bg-white border border-gray-200 rounded-2xl p-4 text-sm text-gray-700">
+                    {selectedModeElite === 'visual' && <>Nhìn tính: còn <strong>{eliteTrialRemaining(Mode.VISUAL) ?? 0}/1</strong> lượt.</>}
+                    {selectedModeElite === 'audio' && <>Nghe tính: còn <strong>{eliteTrialRemaining(Mode.LISTENING) ?? 0}/1</strong> lượt.</>}
+                    {selectedModeElite === 'flash' && <>Flash: còn <strong>{eliteTrialRemaining(Mode.FLASH) ?? 0}/1</strong> lượt.</>}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/activate')}
+                      className="ml-3 text-ucmas-blue font-heading font-bold hover:underline"
+                    >
+                      Kích hoạt
+                    </button>
+                  </div>
+                )}
                 {selectedModeElite === 'visual' && (
                   <div className="bg-white rounded-3xl shadow-xl border-2 border-gray-100 overflow-hidden">
                     <div className="bg-ucmas-blue text-white px-6 py-4 flex items-center gap-3">
@@ -756,7 +892,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={startEliteVisual} className="w-full py-3.5 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-colors shadow-lg">BẮT ĐẦU → Làm bài</button>
+                      <button
+                        onClick={startEliteVisual}
+                        disabled={isTrialUser && (eliteTrialRemaining(Mode.VISUAL) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (eliteTrialRemaining(Mode.VISUAL) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
+                        }`}
+                      >
+                        BẮT ĐẦU → Làm bài
+                      </button>
                     </div>
                   </div>
                 )}
@@ -789,7 +935,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={startEliteAudio} className="w-full py-3.5 bg-ucmas-red text-white font-heading-bold rounded-xl hover:bg-ucmas-blue transition-colors shadow-lg">BẮT ĐẦU → Làm bài</button>
+                      <button
+                        onClick={startEliteAudio}
+                        disabled={isTrialUser && (eliteTrialRemaining(Mode.LISTENING) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (eliteTrialRemaining(Mode.LISTENING) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
+                        }`}
+                      >
+                        BẮT ĐẦU → Làm bài
+                      </button>
                     </div>
                   </div>
                 )}
@@ -821,7 +977,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                     </div>
                     <div className="px-6 pb-6">
-                      <button onClick={startEliteFlash} className="w-full py-3.5 bg-ucmas-green text-white font-heading-bold rounded-xl hover:bg-ucmas-blue transition-colors shadow-lg">BẮT ĐẦU → Làm bài</button>
+                      <button
+                        onClick={startEliteFlash}
+                        disabled={isTrialUser && (eliteTrialRemaining(Mode.FLASH) ?? 0) <= 0}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
+                          isTrialUser && (eliteTrialRemaining(Mode.FLASH) ?? 0) <= 0
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
+                        }`}
+                      >
+                        BẮT ĐẦU → Làm bài
+                      </button>
                     </div>
                   </div>
                 )}
