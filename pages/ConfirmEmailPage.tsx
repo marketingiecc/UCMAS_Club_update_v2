@@ -46,11 +46,11 @@ const ConfirmEmailPage: React.FC = () => {
   }, [navigate, location]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 text-center max-w-sm w-full">
-        <div className="w-16 h-16 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Đang xác thực email</h2>
-        <p className="text-gray-500 text-sm">{status}</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-6">
+      <div className="bg-white p-5 sm:p-8 rounded-xl sm:rounded-2xl shadow-lg border border-gray-100 text-center max-w-sm w-full">
+        <div className="w-14 h-14 sm:w-16 sm:h-16 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">Đang xác thực email</h2>
+        <p className="text-gray-500 text-xs sm:text-sm">{status}</p>
       </div>
     </div>
   );

@@ -37,10 +37,10 @@ const ActivatePage: React.FC<ActivatePageProps> = ({ user, setUser }) => {
   };
 
   return (
-    <div className="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mt-10">
-      <div className="text-center mb-8">
-         <h2 className="text-2xl font-heading font-black text-gray-800 mb-2">Kích Hoạt Bản Quyền</h2>
-         <p className="text-gray-500 text-sm">Nhập mã kích hoạt do giáo viên cung cấp để mở khóa các bài tập.</p>
+    <div className="max-w-lg mx-auto bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 mt-4 sm:mt-6 md:mt-10 mx-3 sm:mx-4">
+      <div className="text-center mb-6 sm:mb-8">
+         <h2 className="text-xl sm:text-2xl font-heading font-black text-gray-800 mb-2">Kích Hoạt Bản Quyền</h2>
+         <p className="text-gray-500 text-xs sm:text-sm">Nhập mã kích hoạt do giáo viên cung cấp để mở khóa các bài tập.</p>
       </div>
       
       {message && (

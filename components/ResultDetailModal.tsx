@@ -33,14 +33,14 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
   }).length;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black bg-opacity-50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-6 text-white flex justify-between items-center shrink-0">
-           <div>
-               <h3 className="text-xl font-heading-bold">{title || 'Chi tiết kết quả'}</h3>
-               <p className="text-blue-100 text-sm mt-2 font-medium">
+        <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-4 sm:p-6 text-white flex justify-between items-center shrink-0 gap-2">
+           <div className="min-w-0">
+               <h3 className="text-base sm:text-xl font-heading-bold truncate">{title || 'Chi tiết kết quả'}</h3>
+               <p className="text-blue-100 text-xs sm:text-sm mt-1 sm:mt-2 font-medium">
                    Đúng: <span className="font-heading-bold text-white text-lg">{correctCount}</span>/{questions.length} câu
                    <span className="ml-3 text-ucmas-yellow">
                      {Math.round((correctCount / questions.length) * 100)}%
@@ -49,15 +49,16 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
            </div>
            <button 
              onClick={onClose}
-             className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition-all hover:scale-110"
+             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition-all hover:scale-110 flex-shrink-0"
+             aria-label="Đóng"
            >
               ✕
            </button>
         </div>
 
         {/* Content - Scrollable */}
-        <div className="p-6 overflow-y-auto bg-gray-50 flex-grow">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="p-3 sm:p-6 overflow-y-auto bg-gray-50 flex-grow">
+           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {questions.map((q, idx) => {
                   const userAns = userAnswers[idx];
                   const isAnswered = userAns !== undefined && userAns !== '';

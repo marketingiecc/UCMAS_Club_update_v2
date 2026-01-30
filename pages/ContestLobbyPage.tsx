@@ -93,10 +93,10 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
   if (!contest) return <div className="text-center py-20">Cuộc thi không tồn tại.</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center border border-gray-100">
-            <h1 className="text-3xl font-heading font-black text-ucmas-blue mb-2">{contest.name}</h1>
-            <p className="text-gray-500 mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-3 sm:p-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 max-w-2xl w-full text-center border border-gray-100">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-heading font-black text-ucmas-blue mb-2 px-2">{contest.name}</h1>
+            <p className="text-gray-500 mb-4 sm:mb-8 text-sm sm:text-base">
                 {new Date(contest.start_at).toLocaleString('vi-VN')} • {contest.duration_minutes} phút
             </p>
 
@@ -111,14 +111,14 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
 
             {/* NOT JOINED YET */}
             {!session && (
-                <div className="bg-gray-50 p-8 rounded-2xl max-w-md mx-auto">
-                    <h3 className="font-heading font-bold text-gray-700 mb-4">Nhập Mã Tham Gia</h3>
+                <div className="bg-gray-50 p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl max-w-md mx-auto">
+                    <h3 className="font-heading font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Nhập Mã Tham Gia</h3>
                     <input 
                         type="text" 
                         value={joinCode}
                         onChange={e => setJoinCode(e.target.value)}
                         placeholder="CODE"
-                        className="w-full text-center text-2xl font-mono uppercase tracking-widest p-3 border-2 border-gray-200 rounded-xl mb-4 focus:border-ucmas-blue outline-none"
+                        className="w-full text-center text-lg sm:text-2xl font-mono uppercase tracking-widest p-3 border-2 border-gray-200 rounded-xl mb-4 focus:border-ucmas-blue outline-none"
                     />
                     {joinError && <p className="text-red-500 text-sm mb-4">{joinError}</p>}
                     <button 
@@ -141,8 +141,8 @@ const ContestLobbyPage: React.FC<ContestLobbyPageProps> = ({ user }) => {
                     
                     {(phase === 'lobby' || phase === 'live') && (
                         <div>
-                             <h3 className="font-heading font-bold text-gray-800 mb-6">Chọn phần thi</h3>
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                             <h3 className="font-heading font-bold text-gray-800 mb-4 sm:mb-6 text-sm sm:text-base">Chọn phần thi</h3>
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                                 {contest.enable_nhin_tinh && (
                                     <button 
                                         onClick={() => enterExam(Mode.VISUAL)}

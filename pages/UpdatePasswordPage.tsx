@@ -27,9 +27,9 @@ const UpdatePasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
-            <h2 className="text-2xl font-black text-gray-800 mb-6 text-center">Đặt Lại Mật Khẩu</h2>
+    <div className="min-h-[80vh] flex items-center justify-center bg-gray-50 px-3 sm:px-4 py-6">
+        <div className="w-full max-w-md bg-white p-5 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-xl border border-gray-100">
+            <h2 className="text-xl sm:text-2xl font-black text-gray-800 mb-4 sm:mb-6 text-center">Đặt Lại Mật Khẩu</h2>
             
             {message && (
                 <div className={`p-4 rounded-lg mb-4 text-sm font-medium text-center ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>

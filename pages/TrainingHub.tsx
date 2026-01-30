@@ -309,21 +309,21 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8">
-      {/* Left: Tabs */}
-      <div className="w-56 flex-shrink-0">
-        <h1 className="text-xl font-heading-bold text-ucmas-blue mb-6">Trung tâm luyện tập</h1>
-        <nav className="space-y-1">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex flex-col md:flex-row gap-4 md:gap-8">
+      {/* Tabs: ngang trên mobile/tablet, dọc trên desktop */}
+      <div className="w-full md:w-56 flex-shrink-0">
+        <h1 className="text-lg sm:text-xl font-heading-bold text-ucmas-blue mb-3 md:mb-6">Trung tâm luyện tập</h1>
+        <nav className="flex flex-row md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
           {[
             { id: 'mode' as TabId, label: 'Luyện theo chế độ', icon: '📋' },
             { id: 'path' as TabId, label: 'Luyện theo lộ trình', icon: '🏁' },
-            { id: 'elite' as TabId, label: 'Luyện thi học sinh giỏi', icon: '🏆' },
+            { id: 'elite' as TabId, label: 'Luyện thi HSG', icon: '🏆' },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               title={tab.label}
-              className={`w-full text-left px-4 py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap ${
+              className={`flex-shrink-0 md:w-full text-left px-4 py-2.5 md:py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap text-sm md:text-base ${
                 tab.id === 'path' && isPathLocked
                   ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
                   : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
@@ -336,23 +336,23 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
         </nav>
       </div>
 
-      {/* Right: Content */}
+      {/* Content */}
       <div className="flex-1 min-w-0">
         {activeTab === 'mode' && (
-          <div className="space-y-8">
-            <h2 className="text-2xl font-heading-bold text-ucmas-blue">Luyện theo chế độ</h2>
-            <p className="text-gray-600">Chọn cấp độ, độ khó và số câu. Kết quả lưu vào Lịch sử luyện tập.</p>
+          <div className="space-y-4 sm:space-y-8">
+            <h2 className="text-xl sm:text-2xl font-heading-bold text-ucmas-blue">Luyện theo chế độ</h2>
+            <p className="text-gray-600 text-sm sm:text-base">Chọn cấp độ, độ khó và số câu. Kết quả lưu vào Lịch sử luyện tập.</p>
             {isTrialUser && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-sm">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-amber-900 text-xs sm:text-sm">
                 Bạn chưa kích hoạt. Mỗi chế độ được luyện <strong>tối đa 3 lượt</strong>. Hãy xem số lượt còn lại trên từng chế độ.
               </div>
             )}
 
             {selectedModePractice === null ? (
-              <div className="grid md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 <button
                   onClick={() => setSelectedModePractice('visual')}
-                  className="bg-white rounded-2xl border-2 border-ucmas-blue p-8 shadow-sm hover:shadow-lg hover:border-ucmas-red transition-all text-left flex flex-col items-center"
+                  className="bg-white rounded-xl sm:rounded-2xl border-2 border-ucmas-blue p-5 sm:p-8 shadow-sm hover:shadow-lg hover:border-ucmas-red transition-all text-left flex flex-col items-center"
                 >
                   <div className="w-20 h-20 rounded-full bg-ucmas-blue text-white flex items-center justify-center text-4xl mb-4">👁️</div>
                   <h3 className="text-lg font-heading-bold text-ucmas-blue mb-2">Nhìn tính</h3>
@@ -691,7 +691,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                             </div>
                           </div>
 
-                          <div className="relative w-full h-[360px] sm:h-[420px] rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden">
+                          <div className="relative w-full h-[300px] sm:h-[360px] md:h-[420px] rounded-xl sm:rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden"> bg-white/60 border border-white shadow-inner overflow-hidden">
                             {/* Road */}
                             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 420" preserveAspectRatio="none">
                               <path

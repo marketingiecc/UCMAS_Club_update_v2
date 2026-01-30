@@ -40,8 +40,10 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
       }
   };
 
+  const list = activeTab === 'contest' ? history : pHistory;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {selectedAttempt && (
             <ResultDetailModal 
                 isOpen={!!selectedAttempt}
@@ -52,19 +54,20 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
             />
         )}
 
-        <div className="text-center mb-12">
-            <div className="inline-block mb-4">
-              <span className="text-5xl">📊</span>
+        <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-block mb-2 sm:mb-4">
+              <span className="text-4xl sm:text-5xl">📊</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-heading-extrabold text-ucmas-blue uppercase tracking-tight mb-4">Lịch Sử Kết Quả</h2>
-            <p className="text-gray-600 mb-8 font-medium">Theo dõi tiến bộ và thành tích của bạn</p>
-            <div className="flex justify-center p-1.5 bg-gray-100 rounded-full inline-flex shadow-inner border-2 border-gray-200">
-                <button onClick={() => setActiveTab('contest')} className={`px-8 py-3 rounded-full text-xs font-heading-bold uppercase transition-all ${activeTab === 'contest' ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-700'}`}>🏁 Kết quả Cuộc thi</button>
-                <button onClick={() => setActiveTab('practice')} className={`px-8 py-3 rounded-full text-xs font-heading-bold uppercase transition-all ${activeTab === 'practice' ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-700'}`}>📚 Lịch sử Luyện thi</button>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading-extrabold text-ucmas-blue uppercase tracking-tight mb-2 sm:mb-4 px-2">Lịch Sử Kết Quả</h2>
+            <p className="text-gray-600 mb-4 sm:mb-8 font-medium text-sm sm:text-base">Theo dõi tiến bộ và thành tích của bạn</p>
+            <div className="flex flex-wrap justify-center gap-1 p-1.5 bg-gray-100 rounded-full shadow-inner border-2 border-gray-200">
+                <button onClick={() => setActiveTab('contest')} className={`px-4 py-2.5 sm:px-8 sm:py-3 rounded-full text-[10px] sm:text-xs font-heading-bold uppercase transition-all ${activeTab === 'contest' ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-700'}`}>🏁 Cuộc thi</button>
+                <button onClick={() => setActiveTab('practice')} className={`px-4 py-2.5 sm:px-8 sm:py-3 rounded-full text-[10px] sm:text-xs font-heading-bold uppercase transition-all ${activeTab === 'practice' ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-700'}`}>📚 Luyện thi</button>
             </div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] shadow-lg border-2 border-gray-100 overflow-hidden animate-fade-in">
+        {/* Desktop: table */}
+        <div className="hidden md:block bg-white rounded-2xl sm:rounded-[2.5rem] shadow-lg border-2 border-gray-100 overflow-hidden animate-fade-in">
             <table className="w-full text-left">
                 <thead className="bg-gradient-to-r from-ucmas-blue/10 to-ucmas-blue/5 text-gray-600 uppercase text-[10px] font-heading-bold tracking-widest">
                     <tr>
@@ -78,9 +81,9 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
                 <tbody className="divide-y divide-gray-50">
                     {loading ? (
                         <tr><td colSpan={5} className="p-20 text-center text-gray-400 italic">Đang tải lịch sử...</td></tr>
-                    ) : (activeTab === 'contest' ? history : pHistory).length === 0 ? (
+                    ) : list.length === 0 ? (
                         <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-heading font-bold uppercase text-xs">Chưa có dữ liệu</td></tr>
-                    ) : (activeTab === 'contest' ? history : pHistory).map(h => (
+                    ) : list.map(h => (
                         <tr key={h.id} className="hover:bg-gray-50 transition group">
                             <td className="px-10 py-6 text-sm font-mono text-gray-600">{new Date(h.created_at).toLocaleString('vi-VN')}</td>
                             <td className="px-10 py-6 font-heading font-bold uppercase text-xs text-gray-800">{h.mode}</td>
@@ -99,6 +102,29 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
                     ))}
                 </tbody>
             </table>
+        </div>
+
+        {/* Mobile/Tablet: cards */}
+        <div className="md:hidden space-y-3 animate-fade-in">
+            {loading ? (
+                <div className="bg-white rounded-2xl border-2 border-gray-100 p-8 text-center text-gray-400 text-sm">Đang tải lịch sử...</div>
+            ) : list.length === 0 ? (
+                <div className="bg-white rounded-2xl border-2 border-gray-100 p-8 text-center text-gray-300 font-heading font-bold uppercase text-xs">Chưa có dữ liệu</div>
+            ) : list.map(h => (
+                <div key={h.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-4 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs text-gray-500 font-mono">{new Date(h.created_at).toLocaleString('vi-VN')}</div>
+                        <div className="font-heading font-bold text-gray-800 mt-0.5 uppercase text-xs">{h.mode}</div>
+                        <div className="text-sm mt-0.5">
+                            <span className="font-heading-extrabold text-ucmas-blue">{h.score_correct || 0}/{h.score_total || 0}</span>
+                            <span className={`ml-2 text-[10px] font-heading-bold uppercase px-2 py-0.5 rounded-full ${activeTab === 'contest' ? 'bg-ucmas-blue/10 text-ucmas-blue' : h.is_custom_creative ? 'bg-ucmas-red/10 text-ucmas-red' : 'bg-ucmas-green/10 text-ucmas-green'}`}>
+                                {activeTab === 'contest' ? 'Thi đấu' : h.is_custom_creative ? 'Sáng tạo' : h.practice_exams?.name || 'Giao đề'}
+                            </span>
+                        </div>
+                    </div>
+                    <button onClick={() => handleViewDetails(h)} className="px-4 py-2 rounded-xl bg-ucmas-blue text-white font-heading font-semibold text-sm hover:bg-ucmas-red transition">Xem</button>
+                </div>
+            ))}
         </div>
     </div>
   );

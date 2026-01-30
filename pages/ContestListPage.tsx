@@ -92,28 +92,28 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="text-center mb-12">
-        <div className="inline-block mb-4">
-          <span className="text-6xl">🏆</span>
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      <div className="text-center mb-6 sm:mb-12">
+        <div className="inline-block mb-2 sm:mb-4">
+          <span className="text-4xl sm:text-6xl">🏆</span>
         </div>
-        <h1 className="text-4xl md:text-5xl font-heading-extrabold text-ucmas-blue mb-4 uppercase tracking-tight">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-heading-extrabold text-ucmas-blue mb-2 sm:mb-4 uppercase tracking-tight px-2">
           Hệ Thống Thi & Luyện Tập
         </h1>
-        <p className="text-gray-600 mb-8 font-medium">
+        <p className="text-gray-600 mb-4 sm:mb-8 font-medium text-sm sm:text-base px-2">
           Phát triển kỹ năng qua các cuộc thi và bài luyện tập đa dạng
         </p>
-        <div className="flex flex-wrap justify-center p-1.5 bg-gray-100 rounded-[2rem] inline-flex shadow-inner mb-2 border-2 border-gray-200">
+        <div className="flex flex-wrap justify-center gap-1 sm:gap-0 p-1.5 bg-gray-100 rounded-xl sm:rounded-[2rem] shadow-inner mb-2 border-2 border-gray-200 max-w-full">
             {[
                 { id: 'contests', label: '🏁 Cuộc thi' },
                 { id: 'assigned', label: '📚 Luyện thi' },
-                { id: 'practice', label: '✨ Sáng tạo phép tính' },
+                { id: 'practice', label: '✨ Sáng tạo' },
                 { id: 'tips', label: '💡 Kinh nghiệm' }
             ].map(tab => (
                 <button 
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)} 
-                    className={`px-8 py-3.5 rounded-2xl text-xs font-heading-bold uppercase transition-all ${activeTab === tab.id ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-800 hover:bg-white/50'}`}
+                    className={`px-3 py-2.5 sm:px-6 sm:py-3.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-heading-bold uppercase transition-all ${activeTab === tab.id ? 'bg-white text-ucmas-red shadow-lg border-2 border-ucmas-red' : 'text-gray-500 hover:text-gray-800 hover:bg-white/50'}`}
                 >
                     {tab.label}
                 </button>
@@ -122,19 +122,19 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       </div>
 
       {activeTab === 'practice' && (
-          <div className="max-w-5xl mx-auto animate-fade-in bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-10 text-white flex justify-between items-center relative overflow-hidden">
-                  <div className="relative z-10">
-                    <h2 className="text-3xl font-heading-extrabold uppercase tracking-tight">SÁNG TẠO PHÉP TÍNH</h2>
-                    <p className="text-blue-100 text-sm mt-2 font-medium">Thiết lập thông số để rèn luyện phản xạ theo ý muốn</p>
+          <div className="max-w-5xl mx-auto animate-fade-in bg-white rounded-2xl sm:rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 p-4 sm:p-6 md:p-10 text-white flex justify-between items-center relative overflow-hidden">
+                  <div className="relative z-10 min-w-0">
+                    <h2 className="text-lg sm:text-2xl md:text-3xl font-heading-extrabold uppercase tracking-tight">SÁNG TẠO PHÉP TÍNH</h2>
+                    <p className="text-blue-100 text-xs sm:text-sm mt-1 sm:mt-2 font-medium">Thiết lập thông số để rèn luyện phản xạ theo ý muốn</p>
                   </div>
-                  <span className="text-9xl absolute -right-4 -bottom-8 opacity-10 select-none">🧮</span>
+                  <span className="text-5xl sm:text-7xl md:text-9xl absolute -right-2 -bottom-4 md:-right-4 md:-bottom-8 opacity-10 select-none flex-shrink-0">🧮</span>
               </div>
-              <div className="p-10 lg:p-14 grid lg:grid-cols-2 gap-16">
+              <div className="p-4 sm:p-6 md:p-10 lg:p-14 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-16">
                   <div className="space-y-12">
                       <div>
-                          <label className="block text-[11px] font-heading font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">Chế độ luyện tập</label>
-                          <div className="grid grid-cols-3 gap-4">
+                          <label className="block text-[10px] sm:text-[11px] font-heading font-black text-gray-400 uppercase tracking-widest mb-3 sm:mb-6 ml-1">Chế độ luyện tập</label>
+                          <div className="grid grid-cols-3 gap-2 sm:gap-4">
                               {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
                                   <button key={m} onClick={() => setPracticeMode(m)} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-2 transition-all ${practiceMode === m ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-lg scale-105' : 'border-gray-50 text-gray-300 hover:bg-gray-50'}`}>
                                       <span className="text-3xl">{m === Mode.VISUAL ? '👁️' : m === Mode.LISTENING ? '🎧' : '⚡'}</span>
@@ -213,13 +213,13 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       )}
 
       {activeTab === 'contests' && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 animate-fade-in">
             {contests.length === 0 ? (
-                <div className="col-span-full py-20 text-center bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
-                    <p className="text-gray-400 font-heading font-bold uppercase tracking-widest">Chưa có cuộc thi nào đang diễn ra</p>
+                <div className="col-span-full py-12 sm:py-20 text-center bg-gray-50 rounded-2xl sm:rounded-[3rem] border-2 border-dashed border-gray-200">
+                    <p className="text-gray-400 font-heading font-bold uppercase tracking-widest text-sm sm:text-base">Chưa có cuộc thi nào đang diễn ra</p>
                 </div>
             ) : contests.map(c => (
-                <div key={c.id} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all flex flex-col group">
+                <div key={c.id} className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all flex flex-col group">
                     <h3 className="text-2xl font-heading font-black text-gray-800 mb-2 group-hover:text-ucmas-blue transition-colors">{c.name}</h3>
                     <p className="text-xs text-gray-400 mb-8 italic flex items-center gap-2">📅 Bắt đầu: {new Date(c.start_at).toLocaleString('vi-VN')}</p>
                     <button onClick={() => navigate(`/contests/${c.id}`)} className="mt-auto py-4 bg-ucmas-blue text-white font-heading font-black rounded-2xl uppercase hover:bg-blue-700 transition shadow-lg active:scale-95">Tham gia ngay ➜</button>
@@ -229,13 +229,13 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       )}
 
       {activeTab === 'assigned' && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 animate-fade-in">
               {assignedExams.length === 0 ? (
-                <div className="col-span-full py-20 text-center bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
-                    <p className="text-gray-400 font-heading font-bold uppercase tracking-widest">Bạn chưa có đề luyện thi nào được giao</p>
+                <div className="col-span-full py-12 sm:py-20 text-center bg-gray-50 rounded-2xl sm:rounded-[3rem] border-2 border-dashed border-gray-200">
+                    <p className="text-gray-400 font-heading font-bold uppercase tracking-widest text-sm sm:text-base px-2">Bạn chưa có đề luyện thi nào được giao</p>
                 </div>
               ) : assignedExams.map(ex => (
-                  <div key={ex.id} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-ucmas-blue transition-all relative overflow-hidden flex flex-col min-h-[220px]">
+                  <div key={ex.id} className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-ucmas-blue transition-all relative overflow-hidden flex flex-col min-h-[200px] sm:min-h-[220px]">
                       <div className="flex justify-between items-center mb-6">
                           <span className="bg-red-50 text-ucmas-red text-[10px] font-heading font-black px-3 py-1 rounded-full uppercase tracking-widest border border-red-100">{ex.exam_code || 'EXAM'}</span>
                           <span className="text-[10px] text-gray-400 italic font-medium">Hạn: {new Date(ex.expiry_date).toLocaleDateString()}</span>
@@ -256,14 +256,14 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
       )}
 
       {activeTab === 'tips' && (
-          <div className="grid md:grid-cols-2 gap-8 animate-fade-in max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 animate-fade-in max-w-5xl mx-auto">
               {[
                   { title: "Bí quyết Nhìn Tính 👁️", desc: "Tập trung tối đa vào bàn tính ảo trong tâm trí, tránh bị xao nhãng bởi tiếng động xung quanh.", color: "bg-blue-50", text: "text-blue-700" },
                   { title: "Kỹ thuật Flash ⚡", desc: "Đừng cố đọc số thành tiếng, hãy cố gắng chụp ảnh con số bằng não phải để phản xạ nhanh hơn.", color: "bg-green-50", text: "text-green-700" },
                   { title: "Kinh nghiệm Nghe Tính 🎧", desc: "Nghe đến đâu đẩy hạt đến đó, không đợi đọc hết dãy số mới tính toán kết quả.", color: "bg-red-50", text: "text-red-700" },
                   { title: "Quản lý thời gian ⏱️", desc: "Nếu gặp câu quá khó, hãy bỏ qua nhanh chóng để dành thời gian cho các câu tiếp theo.", color: "bg-yellow-50", text: "text-yellow-700" }
               ].map((tip, i) => (
-                  <div key={i} className={`${tip.color} p-10 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-md transition-all`}>
+                  <div key={i} className={`${tip.color} p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-md transition-all`}>
                       <h4 className={`text-xl font-heading font-black mb-4 ${tip.text}`}>{tip.title}</h4>
                       <p className="text-gray-500 font-medium leading-relaxed">{tip.desc}</p>
                       <button className={`mt-6 text-[10px] font-heading font-black uppercase tracking-widest hover:underline ${tip.text}`}>Xem thêm ➝</button>

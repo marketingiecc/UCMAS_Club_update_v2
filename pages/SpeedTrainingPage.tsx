@@ -52,27 +52,27 @@ const SpeedTrainingPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-heading-extrabold text-ucmas-blue">Speed Training</h1>
-          <p className="text-gray-600">Luyện phản xạ tốc độ và khả năng tính nhanh.</p>
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-10">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6 sm:mb-8">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading-extrabold text-ucmas-blue">Speed Training</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Luyện phản xạ tốc độ và khả năng tính nhanh.</p>
         </div>
         <button
           onClick={() => navigate('/training')}
-          className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+          className="px-3 py-2 sm:px-4 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm sm:text-base"
         >
           ← Quay lại
         </button>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 lg:p-10">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-100 p-4 sm:p-6 lg:p-10">
         {status === 'setup' && (
-          <div className="grid lg:grid-cols-2 gap-10 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 items-center">
             <div>
-              <div className="text-6xl mb-4">⚡</div>
-              <h2 className="text-2xl font-heading-bold text-ucmas-red mb-2">Cấu hình tốc độ</h2>
-              <p className="text-gray-600 mb-6">
+              <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">⚡</div>
+              <h2 className="text-xl sm:text-2xl font-heading-bold text-ucmas-red mb-2">Cấu hình tốc độ</h2>
+              <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
                 Chọn số chữ số, số lượng số và tốc độ hiển thị.
               </p>
               <div className="grid grid-cols-2 gap-4">

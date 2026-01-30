@@ -47,41 +47,41 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
 
   return (
     <div className="relative">
-      {/* Background blobs */}
-      <div className="pointer-events-none absolute -top-24 -left-24 w-[520px] h-[520px] bg-ucmas-blue/10 rounded-full blur-3xl"></div>
-      <div className="pointer-events-none absolute -bottom-28 -right-24 w-[620px] h-[620px] bg-ucmas-red/10 rounded-full blur-3xl"></div>
+      {/* Background blobs - thu nhỏ trên mobile */}
+      <div className="pointer-events-none absolute -top-24 -left-24 w-[280px] h-[280px] sm:w-[400px] sm:h-[400px] lg:w-[520px] lg:h-[520px] bg-ucmas-blue/10 rounded-full blur-3xl"></div>
+      <div className="pointer-events-none absolute -bottom-28 -right-24 w-[320px] h-[320px] sm:w-[480px] sm:h-[480px] lg:w-[620px] lg:h-[620px] bg-ucmas-red/10 rounded-full blur-3xl"></div>
 
-      <div className="max-w-7xl mx-auto px-4 py-10 sm:py-14">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-10 md:py-14">
         {/* HERO */}
-        <div className="grid lg:grid-cols-2 gap-10 items-center">
+        <div className="grid lg:grid-cols-2 gap-6 sm:gap-10 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-ucmas-blue/20 bg-white/60 backdrop-blur text-xs text-gray-700 mb-5">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-ucmas-blue/20 bg-white/60 backdrop-blur text-[10px] sm:text-xs text-gray-700 mb-3 sm:mb-5">
               <span className="font-heading font-semibold text-ucmas-blue">UCMAS Club</span>
-              <span className="text-gray-300">•</span>
-              <span className="font-heading font-semibold">Education With A Difference</span>
+              <span className="text-gray-300 hidden sm:inline">•</span>
+              <span className="font-heading font-semibold hidden sm:inline">Education With A Difference</span>
             </div>
 
-            <h1 className="text-4xl md:text-5xl font-heading-extrabold text-ucmas-blue leading-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-heading-extrabold text-ucmas-blue leading-tight">
               Khai mở tiềm năng trí tuệ
               <span className="text-ucmas-red"> mỗi ngày</span>
             </h1>
-            <p className="text-gray-600 text-lg mt-4 max-w-xl">
+            <p className="text-gray-600 text-sm sm:text-base md:text-lg mt-3 sm:mt-4 max-w-xl">
               Nền tảng luyện tập UCMAS: <strong>Nhìn tính</strong>, <strong>Nghe tính</strong>, <strong>Flash</strong>,
               lộ trình <strong>{PATH_TOTAL_WEEKS} tuần ({PATH_TOTAL_DAYS} ngày)</strong> theo cấp độ và hệ thống <strong>Cuộc thi</strong> để theo dõi tiến bộ.
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-5 sm:mt-7 flex flex-wrap gap-2 sm:gap-3">
               {!user ? (
                 <>
                   <button
                     onClick={() => navigate('/register')}
-                    className="px-6 py-3 bg-ucmas-red text-white font-heading-bold rounded-xl hover:bg-ucmas-blue shadow-md transition-all"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base bg-ucmas-red text-white font-heading-bold rounded-xl hover:bg-ucmas-blue shadow-md transition-all"
                   >
                     Đăng ký ngay
                   </button>
                   <button
                     onClick={() => navigate('/login')}
-                    className="px-6 py-3 border-2 border-ucmas-blue text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base border-2 border-ucmas-blue text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
                   >
                     Đăng nhập
                   </button>
@@ -90,13 +90,13 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
                 <>
                   <button
                     onClick={() => navigate('/dashboard')}
-                    className="px-6 py-3 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-all shadow-md"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-all shadow-md"
                   >
                     Vào trang cá nhân
                   </button>
                   <button
                     onClick={handlePracticeClick}
-                    className="px-6 py-3 border-2 border-ucmas-blue/30 bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base border-2 border-ucmas-blue/30 bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
                   >
                     Bắt đầu luyện tập
                   </button>
@@ -104,7 +104,7 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
               )}
             </div>
 
-            <div className="mt-7 grid sm:grid-cols-3 gap-3">
+            <div className="mt-5 sm:mt-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white/70 backdrop-blur border border-gray-200 p-4">
                 <div className="text-2xl mb-1">🏁</div>
                 <div className="font-heading font-bold text-gray-800">Lộ trình {PATH_TOTAL_WEEKS} tuần</div>
@@ -124,22 +124,22 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
           </div>
 
           {/* Right visual cards */}
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-ucmas-blue/10 to-ucmas-red/10 rounded-[2.5rem] blur-xl"></div>
-            <div className="relative bg-white/80 backdrop-blur rounded-[2.5rem] border border-gray-200 shadow-xl p-6 sm:p-8">
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <div className="text-[11px] text-gray-500 font-heading font-black uppercase tracking-widest">
+          <div className="relative order-first lg:order-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-ucmas-blue/10 to-ucmas-red/10 rounded-2xl sm:rounded-[2.5rem] blur-xl"></div>
+            <div className="relative bg-white/80 backdrop-blur rounded-2xl sm:rounded-[2.5rem] border border-gray-200 shadow-xl p-4 sm:p-6 md:p-8">
+              <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5">
+                <div className="min-w-0">
+                  <div className="text-[9px] sm:text-[11px] text-gray-500 font-heading font-black uppercase tracking-widest">
                     BÀN TÍNH VÀ SỐ HỌC TRÍ TUỆ
                   </div>
-                  <div className="text-2xl font-heading-extrabold text-gray-800 uppercase tracking-tight mt-1">
+                  <div className="text-base sm:text-xl md:text-2xl font-heading-extrabold text-gray-800 uppercase tracking-tight mt-1">
                     RÈN LUYỆN MỖ NGÀY - TRÍ TUỆ VƯỢT TRỘI
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">
+                  <div className="text-xs sm:text-sm text-gray-600 mt-1">
                     Tăng tập trung - Ghi nhớ lâu bền - Phản xạ tốc độ
                   </div>
                 </div>
-                <div className="w-12 h-12 rounded-2xl bg-ucmas-yellow/20 flex items-center justify-center text-2xl">✨</div>
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-ucmas-yellow/20 flex items-center justify-center text-lg sm:text-2xl flex-shrink-0">✨</div>
               </div>
 
               {/* Brain illustration */}
@@ -327,22 +327,22 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
                 <button
                   onClick={handlePracticeClick}
-                  className="px-5 py-3 bg-ucmas-blue text-white font-heading-bold rounded-xl hover:bg-ucmas-red transition-all shadow-md"
+                  className="flex-1 min-w-[100px] sm:flex-none px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-heading-bold bg-ucmas-blue text-white rounded-xl hover:bg-ucmas-red transition-all shadow-md"
                 >
                   Vào luyện tập
                 </button>
                 <button
                   onClick={handleRoadmapClick}
-                  className="px-5 py-3 bg-white border-2 border-ucmas-blue/30 text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
+                  className="flex-1 min-w-[100px] sm:flex-none px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-heading-bold bg-white border-2 border-ucmas-blue/30 text-ucmas-blue rounded-xl hover:bg-ucmas-blue hover:text-white transition-all"
                 >
                   Xem lộ trình
                 </button>
                 <button
                   onClick={handleContestClick}
-                  className="px-5 py-3 bg-white border-2 border-ucmas-red/30 text-ucmas-red font-heading-bold rounded-xl hover:bg-ucmas-red hover:text-white transition-all"
+                  className="flex-1 min-w-[100px] sm:flex-none px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-heading-bold bg-white border-2 border-ucmas-red/30 text-ucmas-red rounded-xl hover:bg-ucmas-red hover:text-white transition-all"
                 >
                   Xem cuộc thi
                 </button>
@@ -352,72 +352,72 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
         </div>
 
         {/* QUICK ACTIONS */}
-        <div className="mt-12 grid lg:grid-cols-4 sm:grid-cols-2 gap-4">
+        <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <button
             onClick={handlePracticeClick}
-            className="text-left p-6 rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
+            className="text-left p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
           >
-            <div className="w-12 h-12 rounded-2xl bg-ucmas-blue/10 flex items-center justify-center text-2xl mb-4">📋</div>
-            <div className="font-heading font-black text-gray-800">Luyện tập</div>
-            <div className="text-sm text-gray-600 mt-1">Chọn chế độ, độ khó, số câu, tốc độ</div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-ucmas-blue/10 flex items-center justify-center text-xl sm:text-2xl mb-3 sm:mb-4">📋</div>
+            <div className="font-heading font-black text-gray-800 text-sm sm:text-base">Luyện tập</div>
+            <div className="text-xs sm:text-sm text-gray-600 mt-1">Chọn chế độ, độ khó, số câu, tốc độ</div>
           </button>
           <button
             onClick={handleRoadmapClick}
-            className="text-left p-6 rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
+            className="text-left p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
           >
-            <div className="w-12 h-12 rounded-2xl bg-ucmas-green/10 flex items-center justify-center text-2xl mb-4">🏁</div>
-            <div className="font-heading font-black text-gray-800">Lộ trình</div>
-            <div className="text-sm text-gray-600 mt-1">Theo ngày – mỗi ngày tối đa 3 bài</div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-ucmas-green/10 flex items-center justify-center text-xl sm:text-2xl mb-3 sm:mb-4">🏁</div>
+            <div className="font-heading font-black text-gray-800 text-sm sm:text-base">Lộ trình</div>
+            <div className="text-xs sm:text-sm text-gray-600 mt-1">Theo ngày – mỗi ngày tối đa 3 bài</div>
           </button>
           <button
             onClick={handleContestClick}
-            className="text-left p-6 rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
+            className="text-left p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
           >
-            <div className="w-12 h-12 rounded-2xl bg-ucmas-yellow/20 flex items-center justify-center text-2xl mb-4">🏆</div>
-            <div className="font-heading font-black text-gray-800">Cuộc thi</div>
-            <div className="text-sm text-gray-600 mt-1">Tham gia, làm bài theo chế độ, nộp kết quả</div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-ucmas-yellow/20 flex items-center justify-center text-xl sm:text-2xl mb-3 sm:mb-4">🏆</div>
+            <div className="font-heading font-black text-gray-800 text-sm sm:text-base">Cuộc thi</div>
+            <div className="text-xs sm:text-sm text-gray-600 mt-1">Tham gia, làm bài theo chế độ, nộp kết quả</div>
           </button>
           <button
             onClick={handleActivateClick}
-            className="text-left p-6 rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
+            className="text-left p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-200 bg-white hover:shadow-lg transition"
           >
-            <div className="w-12 h-12 rounded-2xl bg-ucmas-red/10 flex items-center justify-center text-2xl mb-4">🔑</div>
-            <div className="font-heading font-black text-gray-800">Kích hoạt</div>
-            <div className="text-sm text-gray-600 mt-1">Nhập mã để mở khóa lộ trình và tăng quyền luyện tập</div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-ucmas-red/10 flex items-center justify-center text-xl sm:text-2xl mb-3 sm:mb-4">🔑</div>
+            <div className="font-heading font-black text-gray-800 text-sm sm:text-base">Kích hoạt</div>
+            <div className="text-xs sm:text-sm text-gray-600 mt-1">Nhập mã để mở khóa lộ trình và tăng quyền luyện tập</div>
           </button>
         </div>
 
         {/* CORE MODES (moved down from hero right panel) */}
-        <div className="mt-12">
-          <div className="text-center mb-6">
-            <div className="text-xs text-gray-500 font-heading font-semibold uppercase tracking-widest">Chế độ luyện tập</div>
-            <div className="text-3xl font-heading-extrabold text-gray-800">3 chế độ cốt lõi</div>
-            <p className="text-gray-600 mt-2">Nhìn – Nghe – Flash: luyện đều để tăng tốc độ và độ chính xác.</p>
+        <div className="mt-8 sm:mt-12">
+          <div className="text-center mb-4 sm:mb-6 px-2">
+            <div className="text-[10px] sm:text-xs text-gray-500 font-heading font-semibold uppercase tracking-widest">Chế độ luyện tập</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-heading-extrabold text-gray-800">3 chế độ cốt lõi</div>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">Nhìn – Nghe – Flash: luyện đều để tăng tốc độ và độ chính xác.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="rounded-[2.5rem] border border-gray-200 bg-white p-8 shadow-sm hover:shadow-lg transition">
-              <div className="w-14 h-14 rounded-2xl bg-ucmas-blue/10 flex items-center justify-center text-3xl mb-4">👁️</div>
-              <div className="font-heading font-black text-ucmas-blue text-xl">Nhìn tính</div>
-              <div className="text-sm text-gray-600 mt-2">Tập trung – tốc độ – độ chính xác</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+            <div className="rounded-2xl sm:rounded-[2.5rem] border border-gray-200 bg-white p-5 sm:p-8 shadow-sm hover:shadow-lg transition">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-ucmas-blue/10 flex items-center justify-center text-2xl sm:text-3xl mb-3 sm:mb-4">👁️</div>
+              <div className="font-heading font-black text-ucmas-blue text-lg sm:text-xl">Nhìn tính</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-2">Tập trung – tốc độ – độ chính xác</div>
             </div>
-            <div className="rounded-[2.5rem] border border-gray-200 bg-white p-8 shadow-sm hover:shadow-lg transition">
-              <div className="w-14 h-14 rounded-2xl bg-ucmas-red/10 flex items-center justify-center text-3xl mb-4">🎧</div>
-              <div className="font-heading font-black text-ucmas-red text-xl">Nghe tính</div>
-              <div className="text-sm text-gray-600 mt-2">Phản xạ nghe – ghi nhớ chuỗi số</div>
+            <div className="rounded-2xl sm:rounded-[2.5rem] border border-gray-200 bg-white p-5 sm:p-8 shadow-sm hover:shadow-lg transition">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-ucmas-red/10 flex items-center justify-center text-2xl sm:text-3xl mb-3 sm:mb-4">🎧</div>
+              <div className="font-heading font-black text-ucmas-red text-lg sm:text-xl">Nghe tính</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-2">Phản xạ nghe – ghi nhớ chuỗi số</div>
             </div>
-            <div className="rounded-[2.5rem] border border-gray-200 bg-white p-8 shadow-sm hover:shadow-lg transition">
-              <div className="w-14 h-14 rounded-2xl bg-ucmas-green/10 flex items-center justify-center text-3xl mb-4">⚡</div>
-              <div className="font-heading font-black text-ucmas-green text-xl">Flash</div>
-              <div className="text-sm text-gray-600 mt-2">Tốc độ hiển thị – xử lý nhanh</div>
+            <div className="rounded-2xl sm:rounded-[2.5rem] border border-gray-200 bg-white p-5 sm:p-8 shadow-sm hover:shadow-lg transition sm:col-span-2 md:col-span-1">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-ucmas-green/10 flex items-center justify-center text-2xl sm:text-3xl mb-3 sm:mb-4">⚡</div>
+              <div className="font-heading font-black text-ucmas-green text-lg sm:text-xl">Flash</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-2">Tốc độ hiển thị – xử lý nhanh</div>
             </div>
           </div>
         </div>
 
         {/* BENEFITS + FEATURES */}
-        <div className="mt-14 grid lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-3xl border border-gray-200 p-8 shadow-sm">
-            <h2 className="text-2xl font-heading-extrabold text-gray-800 mb-2">Lợi ích nổi bật</h2>
-            <p className="text-gray-600 mb-6">
+        <div className="mt-8 sm:mt-14 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-200 p-5 sm:p-8 shadow-sm">
+            <h2 className="text-xl sm:text-2xl font-heading-extrabold text-gray-800 mb-2">Lợi ích nổi bật</h2>
+            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
               UCMAS giúp rèn luyện tư duy và kỹ năng học tập thông qua luyện tập đều đặn mỗi ngày.
             </p>
             <div className="grid sm:grid-cols-2 gap-4">
@@ -436,9 +436,9 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-ucmas-blue/5 via-white to-ucmas-red/5 rounded-3xl border border-ucmas-blue/10 p-8">
-            <h2 className="text-2xl font-heading-extrabold text-gray-800 mb-2">Tính năng trên UCMAS Club</h2>
-            <p className="text-gray-600 mb-6">
+          <div className="bg-gradient-to-br from-ucmas-blue/5 via-white to-ucmas-red/5 rounded-2xl sm:rounded-3xl border border-ucmas-blue/10 p-5 sm:p-8">
+            <h2 className="text-xl sm:text-2xl font-heading-extrabold text-gray-800 mb-2">Tính năng trên UCMAS Club</h2>
+            <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
               Thiết kế để học sinh dễ tập trung, dễ theo dõi tiến bộ và luyện đúng lộ trình.
             </p>
             <ul className="space-y-3">
@@ -459,25 +459,25 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
         </div>
 
         {/* CTA BOTTOM */}
-        <div className="mt-14 rounded-[2.5rem] bg-ucmas-blue text-white p-8 sm:p-10 overflow-hidden relative">
-          <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/10 rounded-full blur-2xl"></div>
+        <div className="mt-8 sm:mt-14 rounded-2xl sm:rounded-[2.5rem] bg-ucmas-blue text-white p-5 sm:p-8 md:p-10 overflow-hidden relative">
+          <div className="absolute -top-24 -right-24 w-48 sm:w-72 h-48 sm:h-72 bg-white/10 rounded-full blur-2xl"></div>
           <div className="relative">
-            <h2 className="text-2xl sm:text-3xl font-heading-extrabold">Sẵn sàng bắt đầu luyện tập?</h2>
-            <p className="text-white/90 mt-2 max-w-2xl">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-heading-extrabold">Sẵn sàng bắt đầu luyện tập?</h2>
+            <p className="text-white/90 mt-2 max-w-2xl text-sm sm:text-base">
               Học đều mỗi ngày theo lộ trình – xem kết quả, rèn phản xạ và cải thiện độ chính xác.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
               {!user ? (
                 <>
                   <button
                     onClick={() => navigate('/register')}
-                    className="px-6 py-3 bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-yellow transition shadow-md"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-yellow transition shadow-md"
                   >
                     Tạo tài khoản
                   </button>
                   <button
                     onClick={() => navigate('/login')}
-                    className="px-6 py-3 border-2 border-white/60 text-white font-heading-bold rounded-xl hover:bg-white hover:text-ucmas-blue transition"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base border-2 border-white/60 text-white font-heading-bold rounded-xl hover:bg-white hover:text-ucmas-blue transition"
                   >
                     Đăng nhập
                   </button>
@@ -486,13 +486,13 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
                 <>
                   <button
                     onClick={handlePracticeClick}
-                    className="px-6 py-3 bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-yellow transition shadow-md"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base bg-white text-ucmas-blue font-heading-bold rounded-xl hover:bg-ucmas-yellow transition shadow-md"
                   >
                     Vào luyện tập
                   </button>
                   <button
                     onClick={handleActivateClick}
-                    className="px-6 py-3 border-2 border-white/60 text-white font-heading-bold rounded-xl hover:bg-white hover:text-ucmas-blue transition"
+                    className="px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base border-2 border-white/60 text-white font-heading-bold rounded-xl hover:bg-white hover:text-ucmas-blue transition"
                   >
                     Kích hoạt / Gia hạn
                   </button>
@@ -503,7 +503,7 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
         </div>
 
         {/* Footer note */}
-        <div className="mt-10 text-center text-xs text-gray-500">
+        <div className="mt-6 sm:mt-10 text-center text-[10px] sm:text-xs text-gray-500 px-2">
           © {new Date().getFullYear()} UCMAS Club. Nền tảng luyện tập dành cho học sinh – giáo viên – trung tâm.
         </div>
       </div>

@@ -89,16 +89,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   const list = historyTab === 'contest' ? history : pHistory;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-heading-bold text-ucmas-blue">Hồ sơ học sinh</h1>
-        <p className="text-gray-600 mt-1">Thông tin cá nhân và lịch sử luyện tập</p>
+    <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-heading-bold text-ucmas-blue">Hồ sơ học sinh</h1>
+        <p className="text-gray-600 mt-1 text-sm sm:text-base">Thông tin cá nhân và lịch sử luyện tập</p>
       </div>
 
-      <div className="flex gap-2 mb-8 border-b border-gray-200">
+      <div className="flex flex-wrap gap-1 sm:gap-2 mb-6 sm:mb-8 border-b border-gray-200 -mx-1 sm:mx-0">
         <button
           onClick={() => setActiveTab('info')}
-          className={`px-6 py-3 font-heading font-semibold rounded-t-xl transition-colors ${
+          className={`px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-heading font-semibold rounded-t-xl transition-colors ${
             activeTab === 'info' ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
@@ -106,7 +106,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-6 py-3 font-heading font-semibold rounded-t-xl transition-colors ${
+          className={`px-4 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-heading font-semibold rounded-t-xl transition-colors ${
             activeTab === 'history' ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
@@ -115,8 +115,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       </div>
 
       {activeTab === 'info' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-          <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6 md:p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
               <input
@@ -210,10 +210,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               title={`Kết quả: ${selectedAttempt.mode} - ${historyTab === 'contest' ? 'Cuộc thi' : 'Luyện tập'}`}
             />
           )}
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             <button
               onClick={() => setHistoryTab('practice')}
-              className={`px-4 py-2 rounded-lg font-heading font-semibold text-sm ${
+              className={`px-3 py-2 sm:px-4 rounded-lg font-heading font-semibold text-xs sm:text-sm ${
                 historyTab === 'practice' ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
@@ -221,14 +221,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
             </button>
             <button
               onClick={() => setHistoryTab('contest')}
-              className={`px-4 py-2 rounded-lg font-heading font-semibold text-sm ${
+              className={`px-3 py-2 sm:px-4 rounded-lg font-heading font-semibold text-xs sm:text-sm ${
                 historyTab === 'contest' ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
               Cuộc thi
             </button>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Desktop: table */}
+          <div className="hidden md:block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-heading-bold">
                 <tr>
@@ -280,6 +281,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
                 )}
               </tbody>
             </table>
+          </div>
+          {/* Mobile/Tablet: cards */}
+          <div className="md:hidden space-y-3">
+            {loading ? (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-400 text-sm">Đang tải...</div>
+            ) : list.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 text-sm">Chưa có lịch sử.</div>
+            ) : (
+              list.map((h: any) => (
+                <div key={h.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-500 font-medium">{h.created_at ? new Date(h.created_at).toLocaleString('vi-VN') : '—'}</div>
+                    <div className="font-heading font-semibold text-gray-800 mt-0.5">{h.mode || '—'}</div>
+                    <div className="text-sm text-gray-600 mt-0.5">
+                      {h.score_correct != null && h.score_total != null ? `${h.score_correct}/${h.score_total}` : h.score ?? '—'}
+                      <span className="ml-2 text-gray-400">• {historyTab === 'contest' ? 'Cuộc thi' : 'Luyện tập'}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleViewDetails(h)}
+                    className="px-4 py-2 rounded-xl bg-ucmas-blue text-white font-heading font-semibold text-sm hover:bg-ucmas-red transition"
+                  >
+                    Xem
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </>
       )}

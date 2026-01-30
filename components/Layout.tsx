@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
@@ -13,11 +13,20 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const showMobileNav = !isAdminRoute;
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await backend.logout();
     setUser(null);
     navigate('/login');
+    setMobileMenuOpen(false);
   };
 
   const isActive = (path: string) => location.pathname === path ? "text-ucmas-blue font-heading font-bold border-b-2 border-ucmas-blue" : "text-gray-600 hover:text-ucmas-blue";
@@ -33,32 +42,35 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   
   const daysLeft = getDaysLeft();
 
+  const navLinkClass = (active: boolean) =>
+    active ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red';
+
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <nav className="bg-white border-b-2 border-ucmas-blue/10 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-16 sm:h-20">
             {/* Logo with Tagline */}
-            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/')}>
+            <div className="flex items-center gap-3 cursor-pointer group flex-shrink-0" onClick={() => navigate('/')}>
                <img 
                  src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro" 
                  alt="UCMAS Logo" 
-                 className="h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+                 className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
                />
             </div>
 
-            {/* Navigation Links */}
+            {/* Desktop Navigation Links */}
             <div className="hidden md:flex items-center space-x-6">
-               <Link to="/" className={`text-sm font-heading font-semibold transition-colors ${isActive('/') ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red'}`}>Trang chủ</Link>
+               <Link to="/" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/')}`}>Trang chủ</Link>
                {user && (
                  <>
-                   <Link to="/training" className={`text-sm font-heading font-semibold transition-colors ${isActive('/training') ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red'}`}>Luyện tập</Link>
-                   <Link to="/contests" className={`text-sm font-heading font-semibold transition-colors ${isContestActive() ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red'}`}>
+                   <Link to="/training" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/training')}`}>Luyện tập</Link>
+                   <Link to="/contests" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname.startsWith('/contests'))}`}>
                      <span className="flex items-center gap-1">Cuộc thi <span className="text-ucmas-yellow">🏆</span></span>
                    </Link>
-                   <Link to="/activate" className={`text-sm font-heading font-semibold transition-colors ${isActive('/activate') ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red'}`}>Kích hoạt</Link>
+                   <Link to="/activate" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/activate')}`}>Kích hoạt</Link>
                    {user.role === 'admin' && (
-                     <Link to="/admin" className={`text-xs font-heading-bold text-white bg-ucmas-red uppercase px-4 py-2 rounded-lg hover:bg-ucmas-blue transition-all shadow-md ${isActive('/admin') ? 'ring-2 ring-ucmas-yellow' : ''}`}>
+                     <Link to="/admin" className={`text-xs font-heading-bold text-white bg-ucmas-red uppercase px-4 py-2 rounded-lg hover:bg-ucmas-blue transition-all shadow-md ${location.pathname === '/admin' ? 'ring-2 ring-ucmas-yellow' : ''}`}>
                        Quản trị viên
                      </Link>
                    )}
@@ -74,18 +86,18 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
             </div>
 
             {/* Auth / User block */}
-            <div>
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               {user ? (
-                <div className="flex items-center gap-3">
-                  <Link to="/dashboard" className="hidden sm:flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-ucmas-blue/20 flex items-center justify-center overflow-hidden">
+                <>
+                  <Link to="/dashboard" className="hidden sm:flex items-center gap-2 md:gap-3 rounded-xl border border-gray-200 px-2 py-1.5 md:px-3 md:py-2 hover:bg-gray-50 transition-colors">
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-ucmas-blue/20 flex items-center justify-center overflow-hidden">
                       {user.avatar_url ? (
                         <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <span className="text-ucmas-blue font-heading-bold text-lg">{user.full_name?.charAt(0) || '?'}</span>
+                        <span className="text-ucmas-blue font-heading-bold text-base md:text-lg">{user.full_name?.charAt(0) || '?'}</span>
                       )}
                     </div>
-                    <div className="flex flex-col items-start">
+                    <div className="hidden lg:flex flex-col items-start">
                       <span className="text-sm font-heading-bold text-gray-800">{user.full_name || 'Học sinh'}</span>
                       <span className="text-xs text-gray-500">Cấp độ: {user.level_symbol || '—'}</span>
                     </div>
@@ -97,41 +109,83 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                   )}
                   <button
                     onClick={handleLogout}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium transition"
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-medium transition"
                   >
                     Đăng xuất
                   </button>
-                </div>
+                </>
               ) : (
-                <div className="flex gap-3">
-                   <Link to="/login" className="px-6 py-2.5 rounded-lg text-sm font-heading-bold text-ucmas-blue border-2 border-ucmas-blue hover:bg-ucmas-blue hover:text-white transition-all shadow-sm">
+                <div className="flex gap-2 sm:gap-3">
+                   <Link to="/login" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold text-ucmas-blue border-2 border-ucmas-blue hover:bg-ucmas-blue hover:text-white transition-all shadow-sm">
                      Đăng nhập
                    </Link>
-                   <Link to="/register" className="px-6 py-2.5 rounded-lg text-sm font-heading-bold bg-ucmas-red text-white hover:bg-ucmas-blue shadow-lg transition-all transform hover:-translate-y-0.5 hover:shadow-xl">
+                   <Link to="/register" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold bg-ucmas-red text-white hover:bg-ucmas-blue shadow-lg transition-all transform hover:-translate-y-0.5 hover:shadow-xl">
                      Đăng ký
                    </Link>
                 </div>
               )}
+              {/* Hamburger - chỉ hiện trên mobile/tablet và khi KHÔNG ở trang admin */}
+              {showMobileNav && (
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen((o) => !o)}
+                  className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-ucmas-blue transition"
+                  aria-label="Mở menu"
+                >
+                  {mobileMenuOpen ? (
+                    <span className="text-2xl leading-none">✕</span>
+                  ) : (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Mobile drawer - chỉ cho trang học sinh */}
+        {showMobileNav && (
+          <div
+            className={`md:hidden overflow-hidden transition-all duration-200 ease-out ${
+              mobileMenuOpen ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
+            }`}
+          >
+            <div className="border-t border-gray-100 bg-white px-4 py-4 space-y-1">
+              <Link to="/" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Trang chủ</Link>
+              {user && (
+                <>
+                  <Link to="/training" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/training' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Luyện tập</Link>
+                  <Link to="/contests" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname.startsWith('/contests') ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Cuộc thi 🏆</Link>
+                  <Link to="/activate" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/activate' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Kích hoạt</Link>
+                  <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Trang cá nhân</Link>
+                </>
+              )}
+              {!user && (
+                <>
+                  <a href="#" className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Tin tức</a>
+                  <a href="#" className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Liên hệ</a>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
       <main className="flex-grow w-full">
         {children}
       </main>
 
-      <footer className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 text-white py-10 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <div className="mb-4">
-            <p className="text-lg font-heading-bold mb-2">UCMAS VIỆT NAM</p>
-            <p className="text-sm font-heading font-semibold opacity-90 uppercase tracking-widest">Education With A Difference</p>
+      <footer className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 text-white py-6 sm:py-10 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
+          <div className="mb-3 sm:mb-4">
+            <p className="text-base sm:text-lg font-heading-bold mb-1 sm:mb-2">UCMAS VIỆT NAM</p>
+            <p className="text-xs sm:text-sm font-heading font-semibold opacity-90 uppercase tracking-widest">Education With A Difference</p>
           </div>
-          <div className="border-t border-white/20 pt-4 mt-4">
-            <p className="text-xs opacity-75">
-              &copy; {new Date().getFullYear()} Bản quyền thuộc về UCMAS Vietnam. 
-              <span className="mx-2">|</span>
-              Phát triển bởi IECC
+          <div className="border-t border-white/20 pt-3 sm:pt-4 mt-3 sm:mt-4">
+            <p className="text-[10px] sm:text-xs opacity-75">
+              &copy; {new Date().getFullYear()} Bản quyền thuộc về UCMAS Vietnam.
+              <span className="mx-2 max-sm:hidden">|</span>
+              <span className="block sm:inline mt-1 sm:mt-0">Phát triển bởi IECC</span>
             </p>
           </div>
         </div>
