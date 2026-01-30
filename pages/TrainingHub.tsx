@@ -97,6 +97,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const [eliteSpeedDisplay, setEliteSpeedDisplay] = useState(1.0); // Tốc độ hiển thị (chỉ Flash)
   const [eliteLang, setEliteLang] = useState('vi-VN');
 
+  const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
+
   const settings = useMemo(() => practiceModeSettings.getSettings(), []);
 
   const hasAccess = (mode: Mode) => {
@@ -112,7 +114,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       navigate('/activate');
       return;
     }
-    const speed = mode === Mode.LISTENING ? modeSpeedRead : mode === Mode.FLASH ? modeSpeedDisplay : undefined;
+    const raw = mode === Mode.LISTENING ? modeSpeedRead : mode === Mode.FLASH ? modeSpeedDisplay : undefined;
+    const speed = typeof raw === 'number' ? clampSpeedSeconds(raw) : undefined;
     const config = {
       level_symbol: modeLevel,
       difficulty: modeDifficulty,
@@ -161,7 +164,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           digits: eliteDigits,
           rows: eliteRows,
           question_count: eliteQuestionCount,
-          speed_seconds: eliteSpeedRead,
+          speed_seconds: clampSpeedSeconds(eliteSpeedRead),
           language: eliteLang,
         },
       },
@@ -182,7 +185,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           digits: eliteDigits,
           rows: eliteRows,
           question_count: eliteQuestionCount,
-          speed_seconds: eliteSpeedDisplay,
+          speed_seconds: clampSpeedSeconds(eliteSpeedDisplay),
           language: eliteLang,
         },
       },
@@ -372,7 +375,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Tốc độ đọc (s): {modeSpeedRead.toFixed(1)}</label>
                         <div className="mt-1">
-                          <CustomSlider min={modeLimits?.speed_seconds_min ?? 0.1} max={modeLimits?.speed_seconds_max ?? 2.5} step={0.1} value={modeSpeedRead} onChange={setModeSpeedRead} />
+                          <CustomSlider min={0.1} max={1.5} step={0.1} value={modeSpeedRead} onChange={(v) => setModeSpeedRead(clampSpeedSeconds(v))} />
                         </div>
                       </div>
                     </div>
@@ -412,7 +415,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Tốc độ hiển thị (s): {modeSpeedDisplay.toFixed(1)}</label>
                         <div className="mt-1">
-                          <CustomSlider min={modeLimits?.speed_seconds_min ?? 0.1} max={modeLimits?.speed_seconds_max ?? 2.5} step={0.1} value={modeSpeedDisplay} onChange={setModeSpeedDisplay} />
+                          <CustomSlider min={0.1} max={1.5} step={0.1} value={modeSpeedDisplay} onChange={(v) => setModeSpeedDisplay(clampSpeedSeconds(v))} />
                         </div>
                       </div>
                     </div>
@@ -722,7 +725,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Tốc độ đọc (s): {eliteSpeedRead.toFixed(1)}</label>
-                        <div className="mt-1"><CustomSlider min={0.1} max={2.5} step={0.1} value={eliteSpeedRead} onChange={setEliteSpeedRead} /></div>
+                        <div className="mt-1"><CustomSlider min={0.1} max={1.5} step={0.1} value={eliteSpeedRead} onChange={(v) => setEliteSpeedRead(clampSpeedSeconds(v))} /></div>
                       </div>
                     </div>
                     <div className="px-6 pb-6">
@@ -754,7 +757,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Tốc độ hiển thị (s): {eliteSpeedDisplay.toFixed(1)}</label>
-                        <div className="mt-1"><CustomSlider min={0.1} max={2.5} step={0.1} value={eliteSpeedDisplay} onChange={setEliteSpeedDisplay} /></div>
+                        <div className="mt-1"><CustomSlider min={0.1} max={1.5} step={0.1} value={eliteSpeedDisplay} onChange={(v) => setEliteSpeedDisplay(clampSpeedSeconds(v))} /></div>
                       </div>
                     </div>
                     <div className="px-6 pb-6">

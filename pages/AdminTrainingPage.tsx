@@ -111,9 +111,9 @@ const AdminTrainingPage: React.FC = () => {
                             </td>
                             {(mode === 'audio' || mode === 'flash') && (
                               <td className="p-2">
-                                <input type="number" min={0.1} max={5} step={0.1} className="w-14 border rounded px-2 py-1 mr-1" value={row.speed_seconds_min ?? 0.1} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_min', Number(e.target.value) || 0.1)} />
+                                <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 mr-1" value={row.speed_seconds_min ?? 0.1} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_min', Number(e.target.value) || 0.1)} />
                                 –
-                                <input type="number" min={0.1} max={5} step={0.1} className="w-14 border rounded px-2 py-1 ml-1" value={row.speed_seconds_max ?? 2.5} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_max', Number(e.target.value) || 2.5)} />
+                                <input type="number" min={0.1} max={1.5} step={0.1} className="w-14 border rounded px-2 py-1 ml-1" value={row.speed_seconds_max ?? 1.5} onChange={e => updateModeSetting(mode, diff, 'speed_seconds_max', Number(e.target.value) || 1.5)} />
                               </td>
                             )}
                           </tr>

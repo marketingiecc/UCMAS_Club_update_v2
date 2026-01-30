@@ -19,11 +19,14 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
+
   // Filter State
   const [selectedMode, setSelectedMode] = useState<Mode | 'all'>('all');
   const [digits, setDigits] = useState<number>(2);
   const [rows, setRows] = useState<number>(3);
   const [speed, setSpeed] = useState<number>(1.0);
+  const [selectedLang, setSelectedLang] = useState<'vi-VN' | 'en-US'>('vi-VN');
 
   // Session State
   const [phase, setPhase] = useState<'setup' | 'playing' | 'result'>('setup');
@@ -138,9 +141,12 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
           });
       });
 
+      const base = selectedLang.split('-')[0];
+      const phrases = base === 'en' ? { ready: 'Get ready', equals: 'Equals' } : { ready: 'Chuẩn bị', equals: 'Bằng' };
+
       // Adjust rate based on speed
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-      await play(`Chuẩn bị. ${q.operands.join(', ')}. Bằng.`, rate);
+      await play(`${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`, rate);
       
       setIsPlayingAudio(false);
       inputRef.current?.focus();
@@ -270,9 +276,23 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tốc độ (s/số)</label>
-                            <input type="number" step="0.1" min="0.1" value={speed} onChange={e => setSpeed(parseFloat(e.target.value))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 border-2 border-transparent focus:border-purple-500 outline-none text-center" />
+                            <input type="number" step="0.1" min="0.1" max="1.5" value={speed} onChange={e => setSpeed(clampSpeedSeconds(parseFloat(e.target.value)))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 border-2 border-transparent focus:border-purple-500 outline-none text-center" />
                         </div>
                     </div>
+
+                    {(selectedMode === 'all' || selectedMode === Mode.LISTENING) && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ngôn ngữ (Nghe tính)</label>
+                        <select
+                          value={selectedLang}
+                          onChange={e => setSelectedLang(e.target.value as any)}
+                          className="w-full p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 border-2 border-transparent focus:border-purple-500 outline-none"
+                        >
+                          <option value="vi-VN">Tiếng Việt</option>
+                          <option value="en-US">Tiếng Anh</option>
+                        </select>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-6">
                         <div className="space-y-2">
@@ -312,14 +332,23 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                     </div>
 
                     <div className={`min-h-[250px] flex items-center justify-center relative ${currentQuestion.mode === Mode.FLASH ? 'min-h-[45vh]' : ''}`}>
-                        {currentQuestion.mode === Mode.VISUAL && (
-                            <div className="flex flex-col items-center">
-                                {currentQuestion.operands.map((n, i) => (
-                                    <div key={i} className="text-6xl font-black text-gray-800 font-mono leading-tight">{n}</div>
-                                ))}
-                                <div className="w-20 h-1 bg-gray-300 mt-4 mb-2"></div>
-                            </div>
-                        )}
+                        {currentQuestion.mode === Mode.VISUAL && (() => {
+                            const count = currentQuestion.operands.length;
+                            const textClass =
+                                count >= 14 ? 'text-xl md:text-2xl' :
+                                count >= 11 ? 'text-2xl md:text-3xl' :
+                                count >= 8 ? 'text-3xl md:text-4xl' :
+                                count >= 6 ? 'text-4xl md:text-5xl' :
+                                'text-5xl md:text-6xl';
+                            return (
+                              <div className="flex flex-col items-center">
+                                  {currentQuestion.operands.map((n, i) => (
+                                      <div key={i} className={`${textClass} font-black text-gray-800 font-mono leading-tight`}>{n}</div>
+                                  ))}
+                                  <div className="w-20 h-1 bg-gray-300 mt-4 mb-2"></div>
+                              </div>
+                            );
+                        })()}
 
                         {currentQuestion.mode === Mode.FLASH && (
                             <div className="font-black text-green-600 text-[clamp(5rem,20vw,14rem)] leading-none tracking-tighter text-center px-2">

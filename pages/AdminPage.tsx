@@ -685,10 +685,10 @@ const AdminPage: React.FC = () => {
                                 <input
                                     type="number"
                                     min={0.1}
-                                    max={5}
+                                    max={1.5}
                                     step={0.1}
                                     value={trackForm.speed_seconds}
-                                    onChange={e => setTrackForm(f => ({ ...f, speed_seconds: Math.max(0.1, Math.min(5, Number(e.target.value) || 0.1)) }))}
+                                    onChange={e => setTrackForm(f => ({ ...f, speed_seconds: Math.max(0.1, Math.min(1.5, Number(e.target.value) || 0.1)) }))}
                                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
                                 />
                             </div>

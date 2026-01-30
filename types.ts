@@ -31,6 +31,8 @@ export interface Question {
   id: string;
   operands: number[];
   correctAnswer: number;
+  /** Optional pre-formatted lines for rendering multi-line visual questions */
+  displayLines?: string[];
   mode?: Mode;
 }
 

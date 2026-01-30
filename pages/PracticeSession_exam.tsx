@@ -6,7 +6,8 @@ import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
-import { getLevelIndex } from '../config/levelsAndDifficulty';
+import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 
 interface PracticeSessionExamProps {
   user: UserProfile;
@@ -32,6 +33,10 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(600);
+
+  // For the 200-question sheet: 4 tabs x 50 questions.
+  const QUESTIONS_PER_TAB = 50;
+  const [questionTab, setQuestionTab] = useState(0);
   
   // Flash & Audio states
   const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
@@ -43,6 +48,19 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const parseUserNumber = (raw: string | undefined) => {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (s === '') return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const isCorrectAnswer = (userValue: number | null, correct: number) => {
+    if (userValue == null) return false;
+    return Math.abs(userValue - correct) < 1e-6;
+  };
 
   const theme = {
       [Mode.VISUAL]: { color: 'text-ucmas-blue', bg: 'bg-ucmas-blue', icon: '👁️', title: 'Nhìn Tính' },
@@ -60,25 +78,73 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     if (navState.predefinedQuestions && navState.predefinedQuestions.length > 0) {
         finalQuestions = navState.predefinedQuestions;
     } else {
-        const config = navState.customConfig;
-        const resolvedLevel =
-          typeof config?.level === 'string'
-            ? getLevelIndex(config.level)
-            : typeof config?.level === 'number'
-              ? config.level
-              : typeof config?.digits === 'number'
-                ? config.digits
-                : 1;
+        const config = navState.customConfig || {};
         const resolvedTimeLimit = typeof config?.timeLimit === 'number' ? config.timeLimit : 600;
-        finalQuestions = generateExam({
-            mode: currentMode,
-            level: resolvedLevel,
-            numQuestions: config.numQuestions || 10,
-            timeLimit: resolvedTimeLimit,
-            numOperandsRange: Array.isArray(config.numOperandsRange) ? config.numOperandsRange : [config.operands, config.operands],
-            digitRange: Array.isArray(config.digitRange) ? config.digitRange : [1, 9],
-            flashSpeed: config.flashSpeed || 1000
-        });
+
+        // Elite Visual (Nhìn tính) must follow the rulebook in ucmas_exam_generator.ts
+        if (currentMode === Mode.VISUAL && returnTo?.tab === 'elite' && (config.source ?? 'auto') === 'auto') {
+          const rawLevel = typeof config.level === 'string' ? config.level : (user.level_symbol || 'A');
+          const safeLevel = (LEVEL_SYMBOLS_ORDER.includes(rawLevel) ? rawLevel : 'A') as UcmasLevelSymbol;
+          const targetCount = typeof config.numQuestions === 'number' ? config.numQuestions : 200;
+
+          const exam = generateUcmasExam(safeLevel, { seed: `${user.id}-${Date.now()}` });
+          const mapped = exam.questions.map((q: UcmasGeneratedQuestion) => {
+            if (q.op === 'addsub') {
+              const terms = q.decimal ? q.terms.map(t => t / 100) : q.terms;
+              const answer = q.decimal ? q.answer / 100 : q.answer;
+              return {
+                id: `q-${q.no}`,
+                operands: terms,
+                correctAnswer: answer,
+                displayLines: q.displayTerms,
+              } as Question;
+            }
+            if (q.op === 'mul') {
+              return {
+                id: `q-${q.no}`,
+                operands: [q.a, q.b],
+                correctAnswer: q.answer,
+                displayLines: [String(q.a), `x ${q.b}`],
+              } as Question;
+            }
+            // div
+            return {
+              id: `q-${q.no}`,
+              operands: [q.dividend, q.divisor],
+              correctAnswer: q.answer,
+              displayLines: [`${q.dividend} ÷ ${q.divisor}`],
+            } as Question;
+          });
+
+          finalQuestions = mapped.slice(0, targetCount);
+        } else {
+          const resolvedLevel =
+            typeof config?.level === 'string'
+              ? getLevelIndex(config.level)
+              : typeof config?.level === 'number'
+                ? config.level
+                : typeof config?.digits === 'number'
+                  ? config.digits
+                  : 1;
+
+          const operands = typeof config.operands === 'number' ? config.operands : 5;
+          const digitRange =
+            Array.isArray(config.digitRange) ? config.digitRange :
+            typeof config.digits === 'number' && config.digits >= 1
+              ? [Math.pow(10, config.digits - 1), Math.pow(10, config.digits) - 1]
+              : [1, 9];
+          const numOperandsRange = Array.isArray(config.numOperandsRange) ? config.numOperandsRange : [operands, operands];
+
+          finalQuestions = generateExam({
+              mode: currentMode,
+              level: resolvedLevel,
+              numQuestions: config.numQuestions || 10,
+              timeLimit: resolvedTimeLimit,
+              numOperandsRange,
+              digitRange,
+              flashSpeed: config.flashSpeed || 1000
+          });
+        }
     }
     
     setQuestions(finalQuestions);
@@ -121,6 +187,15 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
           inputRef.current.focus();
       }
   }, [isFlashing, isPlayingAudio, currentQIndex]);
+
+  // Keep the question tab in sync with current question index.
+  useEffect(() => {
+    const totalTabs = Math.max(1, Math.ceil(questions.length / QUESTIONS_PER_TAB));
+    const nextTab = Math.min(totalTabs - 1, Math.floor(currentQIndex / QUESTIONS_PER_TAB));
+    // IMPORTANT: do not override manual tab switching via arrows.
+    // Only sync when the current question changes (or questions list changes).
+    setQuestionTab(nextTab);
+  }, [currentQIndex, questions.length]);
 
   const runFlashSequence = async (idx: number) => {
     if (isFlashing) return;
@@ -196,7 +271,8 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       try {
           let correct = 0;
           questions.forEach((q, idx) => {
-              if (parseInt(answers[idx]) === q.correctAnswer) correct++;
+              const userNum = parseUserNumber(answers[idx]);
+              if (isCorrectAnswer(userNum, q.correctAnswer)) correct++;
           });
 
           const result = await practiceService.savePracticeAttempt({
@@ -223,7 +299,14 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
   if (status === 'finished') {
     // ... (Result UI code - no changes needed)
-    const correctCount = questions.filter((q, i) => parseInt(answers[i]) === q.correctAnswer).length;
+    const correctCount = questions.filter((q, i) => {
+      const userNum = parseUserNumber(answers[i]);
+      return isCorrectAnswer(userNum, q.correctAnswer);
+    }).length;
+    const answeredCount = questions.filter((_, i) => {
+      const v = answers[i];
+      return v !== undefined && String(v).trim() !== '';
+    }).length;
     const percentage = Math.round((correctCount / questions.length) * 100);
     return (
       <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
@@ -234,7 +317,18 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
             <div className="bg-gray-50 rounded-[2.5rem] p-10 mb-10 shadow-inner">
                <div className="text-7xl font-black text-ucmas-blue mb-4">{correctCount}<span className="text-2xl text-gray-300 ml-1">/{questions.length}</span></div>
                <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden mb-4"><div className="bg-ucmas-green h-full transition-all duration-1000" style={{ width: `${percentage}%` }}></div></div>
-               <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Độ chính xác {percentage}%</p>
+               <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Độ chính xác {percentage}%</p>
+
+               <div className="grid grid-cols-1 gap-2 text-xs font-heading font-bold text-gray-700">
+                 <div className="flex justify-between">
+                   <span className="text-gray-500 uppercase tracking-wider">Đúng / Làm được</span>
+                   <span className="font-black text-gray-800">{correctCount}/{answeredCount}</span>
+                 </div>
+                 <div className="flex justify-between">
+                   <span className="text-gray-500 uppercase tracking-wider">Đúng / Tổng</span>
+                   <span className="font-black text-gray-800">{correctCount}/{questions.length}</span>
+                 </div>
+               </div>
             </div>
             <div className="flex flex-col gap-4">
                <button onClick={() => setIsReviewOpen(true)} className="w-full py-4 bg-white border-2 border-ucmas-blue text-ucmas-blue font-black rounded-2xl uppercase text-xs tracking-widest hover:bg-blue-50 transition">Xem chi tiết</button>
@@ -369,6 +463,31 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const currentQ = questions[currentQIndex];
   const isInputDisabled = isFlashing || isPlayingAudio;
 
+  // Visual mode: render pre-formatted lines (from rulebook generator) when present.
+  const visualLines =
+    currentMode === Mode.VISUAL && currentQ
+      ? (currentQ.displayLines ?? currentQ.operands.map((n) => String(n)))
+      : [];
+  const visualLineCount = visualLines.length;
+  const visualTextClass =
+    visualLineCount >= 14 ? 'text-xl md:text-2xl' :
+    visualLineCount >= 11 ? 'text-2xl md:text-3xl' :
+    visualLineCount >= 8 ? 'text-3xl md:text-4xl' :
+    visualLineCount >= 6 ? 'text-4xl md:text-5xl' :
+    'text-5xl md:text-6xl';
+
+  const totalTabs = Math.max(1, Math.ceil(questions.length / QUESTIONS_PER_TAB));
+  const tabStart = questionTab * QUESTIONS_PER_TAB;
+  const tabEnd = Math.min(tabStart + QUESTIONS_PER_TAB, questions.length);
+
+  // Sidebar level display (mainly for Elite Visual: level is a symbol like 'A', 'C', ...)
+  const rawLevel = (navState?.customConfig as any)?.level;
+  const levelSymbol =
+    typeof rawLevel === 'string'
+      ? rawLevel
+      : (user.level_symbol || 'A');
+  const levelLabel = getLevelLabel(levelSymbol);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
         {/* Left Sidebar (hide in Flash for max size) */}
@@ -390,34 +509,57 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                    <span className={`font-heading font-bold ${theme.color}`}>{theme.title}</span>
                </div>
                <div className="flex justify-between text-xs mb-2">
+                   <span className="text-gray-500 font-heading font-bold uppercase">Cấp độ</span>
+                   <span className="font-heading font-bold text-ucmas-green">{levelLabel}</span>
+               </div>
+               <div className="flex justify-between text-xs mb-2">
                    <span className="text-gray-500 font-heading font-bold uppercase">Câu hỏi</span>
                    <span className="font-heading font-black text-ucmas-blue text-lg">{currentQIndex + 1}/{questions.length}</span>
                </div>
-               <div className="flex justify-between text-xs pt-2 border-t border-gray-200 mt-2">
-                   <span className="text-gray-500 font-heading font-bold uppercase">Thời gian</span>
-                   <span className="font-heading font-mono font-black text-ucmas-red">
-                     {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
-                   </span>
-               </div>
            </div>
 
-           <div className="text-[10px] font-heading font-black text-gray-400 uppercase tracking-widest mb-3 px-1">Danh sách câu</div>
+           <div className="flex items-center justify-between mb-3 px-1">
+             <div className="text-[10px] font-heading font-black text-gray-400 uppercase tracking-widest">
+               Danh sách câu
+             </div>
+
+             {totalTabs > 1 && (
+               <div className="flex items-center gap-2">
+                 <button
+                   onClick={() => setQuestionTab(t => Math.max(0, t - 1))}
+                   disabled={questionTab === 0}
+                   className="w-9 h-9 rounded-xl bg-white border border-gray-200 text-gray-700 font-black disabled:opacity-40"
+                   title="Tab trước"
+                 >
+                   ‹
+                 </button>
+                 <button
+                   onClick={() => setQuestionTab(t => Math.min(totalTabs - 1, t + 1))}
+                   disabled={questionTab >= totalTabs - 1}
+                   className="w-9 h-9 rounded-xl bg-white border border-gray-200 text-gray-700 font-black disabled:opacity-40"
+                   title="Tab sau"
+                 >
+                   ›
+                 </button>
+               </div>
+             )}
+           </div>
+
            <div className="grid grid-cols-5 gap-2">
-              {questions.map((_, idx) => {
+              {questions.slice(tabStart, tabEnd).map((_, localIdx) => {
+                  const idx = tabStart + localIdx;
                   const isDone = answers[idx] !== undefined;
                   const isActive = currentQIndex === idx;
                   return (
                     <button 
                         key={idx}
                         onClick={() => {
-                            if (!isFlashing && !isInputDisabled && (isDone || isActive)) {
-                                setCurrentQIndex(idx);
-                            }
+                            if (!isFlashing && !isInputDisabled) setCurrentQIndex(idx);
                         }}
-                        disabled={isFlashing || isInputDisabled || (!isDone && !isActive)}
+                        disabled={isFlashing || isInputDisabled}
                         className={`w-8 h-8 rounded-lg text-xs font-heading font-bold transition shadow-sm ${
                             isActive ? `${theme.bg} text-white shadow-md transform scale-110` :
-                            isDone ? 'bg-blue-50 text-ucmas-blue border border-blue-100' : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                            isDone ? 'bg-blue-50 text-ucmas-blue border border-blue-100' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
                         }`}
                     >
                         {idx + 1}
@@ -444,12 +586,12 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                 <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
                     {/* VISUAL MODE DISPLAY */}
                     {currentMode === Mode.VISUAL && currentQ && (
-                       <div className="bg-gray-50 p-12 rounded-[2.5rem] min-w-[300px] text-center shadow-inner border border-gray-100">
-                          {currentQ.operands.map((num, i) => (
-                             <div key={i} className="text-7xl font-heading font-black text-ucmas-blue mb-4 font-mono tracking-tighter leading-tight">{num}</div>
+                       <div className="bg-gray-50 px-6 py-5 rounded-[2rem] min-w-[260px] text-center shadow-inner border border-gray-100">
+                          {visualLines.map((line, i) => (
+                             <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`}>{line}</div>
                           ))}
-                          <div className="border-t-4 border-gray-300 w-32 mx-auto mt-6 mb-6"></div>
-                          <div className="text-7xl font-heading font-black text-gray-300">?</div>
+                          <div className="border-t-4 border-gray-300 w-24 mx-auto mt-4 mb-4"></div>
+                          <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
                        </div>
                     )}
 
@@ -537,6 +679,19 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                             >
                                 Nộp bài làm 🏁
                             </button>
+                        )}
+
+                        {currentMode === Mode.VISUAL && (
+                          <button
+                            onClick={() => {
+                              if (isInputDisabled) return;
+                              if (window.confirm('Nộp bài sớm?')) submitExam();
+                            }}
+                            disabled={isInputDisabled}
+                            className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-ucmas-red text-ucmas-red font-heading font-black hover:bg-red-50 transition-all disabled:opacity-50 uppercase shadow-sm"
+                          >
+                            Nộp bài sớm
+                          </button>
                         )}
                     </div>
                 </div>

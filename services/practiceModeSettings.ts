@@ -21,6 +21,13 @@ export interface ModeDifficultyLimits {
 export type PracticeModeSettings = Record<ModeKey, Record<DifficultyKey, ModeDifficultyLimits>>;
 
 const STORAGE_KEY = 'ucmas_practice_mode_settings';
+const SPEED_MIN = 0.1;
+const SPEED_MAX = 1.5;
+
+function clampSpeed(v: number | undefined, fallback: number): number {
+  const n = typeof v === 'number' && !Number.isNaN(v) ? v : fallback;
+  return Math.min(SPEED_MAX, Math.max(SPEED_MIN, n));
+}
 
 function defaultSettings(): PracticeModeSettings {
   return {
@@ -30,12 +37,12 @@ function defaultSettings(): PracticeModeSettings {
       elite:   { digits_min: 3, digits_max: 6, rows_min: 8, rows_max: 25, question_count_min: 50, question_count_max: 120 },
     },
     audio: {
-      basic:   { digits_min: 1, digits_max: 2, rows_min: 3, rows_max: 10, question_count_min: 20, question_count_max: 50, speed_seconds_min: 1.5, speed_seconds_max: 2.5 },
+      basic:   { digits_min: 1, digits_max: 2, rows_min: 3, rows_max: 10, question_count_min: 20, question_count_max: 50, speed_seconds_min: 0.1, speed_seconds_max: 1.5 },
       advanced: { digits_min: 2, digits_max: 4, rows_min: 5, rows_max: 18, question_count_min: 30, question_count_max: 80, speed_seconds_min: 0.8, speed_seconds_max: 1.5 },
       elite:   { digits_min: 3, digits_max: 6, rows_min: 8, rows_max: 30, question_count_min: 50, question_count_max: 120, speed_seconds_min: 0.1, speed_seconds_max: 0.8 },
     },
     flash: {
-      basic:   { digits_min: 1, digits_max: 2, rows_min: 3, rows_max: 10, question_count_min: 20, question_count_max: 50, speed_seconds_min: 1.5, speed_seconds_max: 2.5 },
+      basic:   { digits_min: 1, digits_max: 2, rows_min: 3, rows_max: 10, question_count_min: 20, question_count_max: 50, speed_seconds_min: 0.1, speed_seconds_max: 1.5 },
       advanced: { digits_min: 2, digits_max: 4, rows_min: 5, rows_max: 18, question_count_min: 30, question_count_max: 80, speed_seconds_min: 0.8, speed_seconds_max: 1.5 },
       elite:   { digits_min: 3, digits_max: 6, rows_min: 8, rows_max: 30, question_count_min: 50, question_count_max: 120, speed_seconds_min: 0.1, speed_seconds_max: 0.8 },
     },
@@ -56,6 +63,17 @@ export const practiceModeSettings = {
       for (const mode of ['visual', 'audio', 'flash'] as ModeKey[]) {
         for (const diff of ['basic', 'advanced', 'elite'] as DifficultyKey[]) {
           if (!parsed[mode]?.[diff]) parsed[mode] = parsed[mode] || {} as any; (parsed[mode] as any)[diff] = defaults[mode][diff];
+          // Enforce global speed range for Audio/Flash
+          if (mode === 'audio' || mode === 'flash') {
+            const row = (parsed[mode] as any)[diff] as ModeDifficultyLimits;
+            row.speed_seconds_min = clampSpeed(row.speed_seconds_min, defaults[mode][diff].speed_seconds_min ?? SPEED_MIN);
+            row.speed_seconds_max = clampSpeed(row.speed_seconds_max, defaults[mode][diff].speed_seconds_max ?? SPEED_MAX);
+            // Ensure min <= max
+            if ((row.speed_seconds_min ?? SPEED_MIN) > (row.speed_seconds_max ?? SPEED_MAX)) {
+              row.speed_seconds_min = SPEED_MIN;
+              row.speed_seconds_max = SPEED_MAX;
+            }
+          }
         }
       }
       return parsed;

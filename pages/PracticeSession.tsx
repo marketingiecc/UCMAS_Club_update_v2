@@ -77,6 +77,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   
   const [speed, setSpeed] = useState(1.0);
   const [selectedLang, setSelectedLang] = useState('vi-VN');
+  const clampSpeedSeconds = (v: number) => Math.min(1.5, Math.max(0.1, v));
+  const getListeningPhrases = (langCode: string) => {
+      const base = (langCode || 'vi').split('-')[0];
+      if (base === 'en') return { ready: 'Get ready', equals: 'Equals' };
+      // Default Vietnamese
+      return { ready: 'Chuẩn bị', equals: 'Bằng' };
+  };
+
   const [isLoadingRule, setIsLoadingRule] = useState(false);
   
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -133,7 +141,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       const levelSymbol = hubConfig.level_symbol || selectedLevelSymbol;
       const levelNum = getLevelIndex(levelSymbol);
       const numQuestions = hubConfig.question_count || 20;
-      const speedSec = hubConfig.speed_seconds ?? 1.2;
+      const speedSec = clampSpeedSeconds(hubConfig.speed_seconds ?? 1.2);
       if (hubConfig.language) setSelectedLang(hubConfig.language);
       setSpeed(speedSec);
       setSelectedLevelSymbol(levelSymbol);
@@ -355,8 +363,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     
     const q = questions[currentQIndex];
     const rate = getSpeechRate(speed);
+    const phrases = getListeningPhrases(selectedLang);
     // Single TTS call: reduces autoplay-policy issues and Google blocking retries
-    const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
+    const text = `${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`;
     await playSingleAudio(text, rate);
 
     setIsPlayingAudio(false);
@@ -539,15 +548,15 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     <CustomSlider
                       label="⏱️ Tốc độ hiển thị"
                       value={speed}
-                      min={0.25}
-                      max={3.0}
-                      step={0.25}
-                      onChange={(val) => setSpeed(val)}
+                      min={0.1}
+                      max={1.5}
+                      step={0.1}
+                      onChange={(val) => setSpeed(clampSpeedSeconds(val))}
                       valueLabel={`${speed} giây/số`}
                       color={currentMode === Mode.FLASH ? 'green' : 'red'}
                       unit="s"
-                      minLabel="Siêu nhanh (0.25s)"
-                      maxLabel="Chậm (3s)"
+                      minLabel="Nhanh (0.1s)"
+                      maxLabel="Chậm (1.5s)"
                     />
 
                     {currentMode === Mode.LISTENING && (
@@ -588,8 +597,27 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   if (status === 'finished') {
      // ... (Keep existing results UI)
-    const correctCount = questions.filter((q, i) => parseInt(answers[i]) === q.correctAnswer).length;
-    const percentage = Math.round((correctCount / questions.length) * 100);
+    const parseUserNumber = (raw: string | undefined) => {
+      if (raw == null) return null;
+      const s = String(raw).trim();
+      if (s === '') return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+    const isCorrectAnswer = (userValue: number | null, correct: number) => {
+      if (userValue == null) return false;
+      return Math.abs(userValue - correct) < 1e-6;
+    };
+
+    const answeredCount = questions.filter((_, i) => {
+      const v = answers[i];
+      return v !== undefined && String(v).trim() !== '';
+    }).length;
+    const correctCount = questions.filter((q, i) => {
+      const userNum = parseUserNumber(answers[i]);
+      return isCorrectAnswer(userNum, q.correctAnswer);
+    }).length;
+    const percentage = Math.round((correctCount / Math.max(1, questions.length)) * 100);
 
     return (
       <div className="min-h-[80vh] flex items-center justify-center py-12">
@@ -626,7 +654,18 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                <div className="w-full bg-gray-200 rounded-full h-3 mt-4 mb-3 overflow-hidden">
                   <div className={`h-3 rounded-full transition-all duration-1000 ${percentage >= 80 ? 'bg-ucmas-green' : percentage >= 50 ? 'bg-ucmas-blue' : 'bg-ucmas-red'}`} style={{ width: `${percentage}%` }}></div>
                </div>
-               <p className="text-xs text-gray-600 font-heading-bold uppercase tracking-wider">Số câu đúng ({percentage}%)</p>
+               <p className="text-xs text-gray-600 font-heading-bold uppercase tracking-wider mb-3">Số câu đúng ({percentage}%)</p>
+
+               <div className="grid grid-cols-1 gap-2 text-xs font-heading font-bold text-gray-700">
+                 <div className="flex justify-between">
+                   <span className="text-gray-500 uppercase tracking-wider">Đúng / Làm được</span>
+                   <span className="font-black text-gray-800">{correctCount}/{answeredCount}</span>
+                 </div>
+                 <div className="flex justify-between">
+                   <span className="text-gray-500 uppercase tracking-wider">Đúng / Tổng</span>
+                   <span className="font-black text-gray-800">{correctCount}/{questions.length}</span>
+                 </div>
+               </div>
             </div>
 
             <button 
@@ -792,6 +831,15 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     );
   }
 
+  // Visual mode: keep the whole multi-line calculation visible without scrolling.
+  const visualLineCount = currentMode === Mode.VISUAL ? (currentQ?.operands?.length ?? 0) : 0;
+  const visualTextClass =
+    visualLineCount >= 14 ? 'text-xl md:text-2xl' :
+    visualLineCount >= 11 ? 'text-2xl md:text-3xl' :
+    visualLineCount >= 8 ? 'text-3xl md:text-4xl' :
+    visualLineCount >= 6 ? 'text-4xl md:text-5xl' :
+    'text-5xl md:text-6xl';
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
         {/* Left Sidebar (hide in Flash for max size) */}
@@ -866,12 +914,12 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     
                     {/* VISUAL MODE DISPLAY */}
                     {currentMode === Mode.VISUAL && (
-                       <div className="bg-gray-50 p-12 rounded-[2.5rem] min-w-[300px] text-center shadow-inner border border-gray-100">
+                       <div className="bg-gray-50 px-6 py-5 rounded-[2rem] min-w-[220px] text-center shadow-inner border border-gray-100">
                           {currentQ.operands.map((num, i) => (
-                             <div key={i} className="text-7xl font-heading font-black text-ucmas-blue mb-4 font-mono tracking-tighter leading-tight">{num}</div>
+                             <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`}>{num}</div>
                           ))}
-                          <div className="border-t-4 border-gray-300 w-32 mx-auto mt-6 mb-6"></div>
-                          <div className="text-7xl font-heading font-black text-gray-300">?</div>
+                          <div className="border-t-4 border-gray-300 w-24 mx-auto mt-4 mb-4"></div>
+                          <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
                        </div>
                     )}
 
@@ -976,6 +1024,19 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                             >
                                 Nộp bài làm 🏁
                             </button>
+                        )}
+
+                        {currentMode === Mode.VISUAL && (
+                          <button
+                            onClick={() => {
+                              if (isInputDisabled) return;
+                              if (window.confirm('Nộp bài sớm?')) submitExam();
+                            }}
+                            disabled={isInputDisabled}
+                            className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-ucmas-red text-ucmas-red font-heading font-black hover:bg-red-50 transition-all disabled:opacity-50 uppercase shadow-sm"
+                          >
+                            Nộp bài sớm
+                          </button>
                         )}
                     </div>
                 </div>

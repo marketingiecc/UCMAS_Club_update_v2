@@ -24,6 +24,8 @@ export interface Question {
   operands: number[];
   correctAnswer: number;
   mode?: Mode; // Optional for mixed exams
+  /** Optional pre-formatted lines for rendering multi-line visual questions */
+  displayLines?: string[];
 }
 
 export interface Contest {

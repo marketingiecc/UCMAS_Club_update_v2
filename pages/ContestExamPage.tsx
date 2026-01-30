@@ -348,18 +348,28 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
             
             {/* Question Area */}
             <div className="flex-1 bg-white rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center p-10 min-h-[500px] relative overflow-hidden">
-                {currentMode === Mode.VISUAL && (
-                    <div className="text-center">
-                        <div className="text-gray-400 text-sm mb-4">Câu {currentQIndex + 1}</div>
-                        <div className="text-6xl font-bold text-ucmas-blue font-mono space-y-2">
-                            {questions[currentQIndex].operands.map((op, i) => (
-                                <div key={i}>{op}</div>
-                            ))}
-                        </div>
-                        <div className="w-20 h-1 bg-gray-300 mx-auto my-6"></div>
-                        <div className="text-6xl font-black text-gray-300">?</div>
-                    </div>
-                )}
+                {currentMode === Mode.VISUAL && (() => {
+                    const q = questions[currentQIndex];
+                    const count = q.operands.length;
+                    const textClass =
+                      count >= 14 ? 'text-xl md:text-2xl' :
+                      count >= 11 ? 'text-2xl md:text-3xl' :
+                      count >= 8 ? 'text-3xl md:text-4xl' :
+                      count >= 6 ? 'text-4xl md:text-5xl' :
+                      'text-5xl md:text-6xl';
+                    return (
+                      <div className="text-center">
+                          <div className="text-gray-400 text-sm mb-4">Câu {currentQIndex + 1}</div>
+                          <div className={`${textClass} font-bold text-ucmas-blue font-mono space-y-1.5`}>
+                              {q.operands.map((op, i) => (
+                                  <div key={i}>{op}</div>
+                              ))}
+                          </div>
+                          <div className="w-20 h-1 bg-gray-300 mx-auto my-5"></div>
+                          <div className={`${textClass} font-black text-gray-300`}>?</div>
+                      </div>
+                    );
+                })()}
                 {currentMode === Mode.FLASH && (
                     <div className="text-center w-full h-full flex items-center justify-center">
                          {flashOverlay ? (

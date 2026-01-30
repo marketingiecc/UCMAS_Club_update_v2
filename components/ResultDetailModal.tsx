@@ -13,9 +13,23 @@ interface ResultDetailModalProps {
 const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, questions, userAnswers, title }) => {
   if (!isOpen) return null;
 
+  const parseUserNumber = (raw: string | undefined) => {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (s === '') return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const isCorrectAnswer = (userValue: number | null, correct: number) => {
+    if (userValue == null) return false;
+    // Tolerate small float differences (decimal questions may exist).
+    return Math.abs(userValue - correct) < 1e-6;
+  };
+
   const correctCount = questions.filter((q, i) => {
-      const ans = userAnswers[i];
-      return ans && parseInt(ans) === q.correctAnswer;
+      const n = parseUserNumber(userAnswers[i]);
+      return isCorrectAnswer(n, q.correctAnswer);
   }).length;
 
   return (
@@ -47,7 +61,9 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
               {questions.map((q, idx) => {
                   const userAns = userAnswers[idx];
                   const isAnswered = userAns !== undefined && userAns !== '';
-                  const isCorrect = isAnswered && parseInt(userAns) === q.correctAnswer;
+                  const userNum = parseUserNumber(userAns);
+                  const isCorrect = isAnswered && isCorrectAnswer(userNum, q.correctAnswer);
+                  const displayLines = q.displayLines ?? q.operands.map((op) => String(op));
                   
                   return (
                       <div 
@@ -61,8 +77,8 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
                               <span className="text-xs font-heading font-bold text-gray-400 uppercase mb-2 block">Câu {idx + 1}</span>
                               <div className="flex justify-center bg-gray-50 rounded-lg py-2">
                                 <div className="text-gray-800 font-heading font-bold text-lg tracking-widest flex flex-col items-end">
-                                    {q.operands.map((op, i) => (
-                                        <div key={i}>{op}</div>
+                                    {displayLines.map((line, i) => (
+                                        <div key={i}>{line}</div>
                                     ))}
                                     <div className="w-full h-px bg-gray-400 mt-1"></div>
                                 </div>
