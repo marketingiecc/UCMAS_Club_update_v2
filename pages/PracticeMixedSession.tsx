@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Mode, Question, UserProfile } from '../types';
+import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
 
 interface PracticeMixedSessionProps {
   user: UserProfile;
@@ -105,8 +106,6 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
       for (const num of q.operands) {
           setFlashNumber(num);
           await new Promise(r => setTimeout(r, speed * 1000));
-          setFlashNumber(null);
-          await new Promise(r => setTimeout(r, 200));
       }
       setFlashNumber('=');
       setIsFlashing(false);
@@ -116,24 +115,32 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
   // -- AUDIO LOGIC --
   const runAudioSequence = async (q: Question) => {
       setIsPlayingAudio(true);
+      cancelBrowserSpeechSynthesis();
       const play = (text: string, rate: number) => new Promise<void>(resolve => {
-          const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+          const url = getGoogleTranslateTtsUrl(text, 'vi');
           const audio = new Audio(url);
           audio.playbackRate = rate;
           audioRef.current = audio;
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
-          audio.play().catch(() => resolve());
+          audio.onended = () => finish();
+          audio.onerror = async () => {
+            await speakWithBrowserTts(text, 'vi-VN', rate);
+            finish();
+          };
+          audio.play().catch(async () => {
+            await speakWithBrowserTts(text, 'vi-VN', rate);
+            finish();
+          });
       });
 
       // Adjust rate based on speed
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-
-      await play("Chuẩn bị", 1.2);
-      await new Promise(r => setTimeout(r, 300));
-      await play(q.operands.join(', '), rate);
-      await new Promise(r => setTimeout(r, 300));
-      await play("Bằng", 1.2);
+      await play(`Chuẩn bị. ${q.operands.join(', ')}. Bằng.`, rate);
       
       setIsPlayingAudio(false);
       inputRef.current?.focus();
@@ -152,6 +159,89 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
           <button onClick={() => navigate('/contests')} className="px-6 py-2 bg-gray-200 rounded-lg font-bold">Quay lại</button>
       </div>
   );
+
+  // FLASH MODE: full-screen white focus view (when playing)
+  if (phase === 'playing' && currentQuestion?.mode === Mode.FLASH) {
+    const showAnswerArea = !flashOverlay && !isFlashing && flashNumber === '=';
+    const showStart = !flashOverlay && !isFlashing && flashNumber === null;
+    const isInputDisabled = !!flashOverlay || isFlashing;
+
+    return (
+      <div className="fixed inset-0 bg-white z-50">
+        <button
+          onClick={() => navigate('/contests')}
+          className="absolute top-4 left-4 text-gray-500 hover:text-gray-900 font-bold uppercase text-xs tracking-widest"
+        >
+          ← Thoát
+        </button>
+        <div className="absolute top-4 right-4 text-xs font-black uppercase tracking-widest text-gray-500">
+          {examName} • Flash
+        </div>
+
+        <div className="h-full w-full flex flex-col items-center justify-center px-4">
+          {flashOverlay ? (
+            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+              {flashOverlay}
+            </div>
+          ) : (
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+              {flashNumber ?? ''}
+            </div>
+          )}
+
+          {showStart && (
+            <div className="mt-10 text-center">
+              <button
+                onClick={() => runFlashSequence(currentQuestion)}
+                className="px-10 py-5 rounded-2xl font-heading font-black uppercase tracking-widest shadow-lg transition bg-ucmas-blue text-white hover:bg-ucmas-red"
+              >
+                Bắt đầu
+              </button>
+            </div>
+          )}
+
+          {showAnswerArea && (
+            <div className="w-full max-w-xl mt-10">
+              <div className="text-center text-xs font-heading font-black uppercase tracking-widest text-gray-400 mb-3">
+                Nhập đáp án
+              </div>
+
+              <input
+                ref={inputRef}
+                type="number"
+                autoFocus
+                disabled={isInputDisabled}
+                value={userAnswer}
+                onChange={e => setUserAnswer(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="?"
+                className="w-full border-4 border-ucmas-blue bg-white rounded-[2rem] py-6 px-6 text-center text-6xl font-heading font-black text-ucmas-blue outline-none shadow-xl"
+              />
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setFlashNumber(null);
+                    runFlashSequence(currentQuestion);
+                  }}
+                  className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm"
+                >
+                  Xem lại
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!userAnswer}
+                  className="w-full px-8 py-5 rounded-2xl bg-ucmas-blue text-white font-heading font-black text-xl hover:bg-ucmas-red transition-all disabled:opacity-50 uppercase shadow-lg"
+                >
+                  Trả lời ➜
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 animate-fade-in">

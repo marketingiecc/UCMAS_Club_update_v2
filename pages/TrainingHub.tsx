@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { UserProfile, Mode } from '../types';
 import CustomSlider from '../components/CustomSlider';
 import { practiceModeSettings, type DifficultyKey } from '../services/practiceModeSettings';
-import { LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
 
 const LANGUAGES = [
   { code: 'vi-VN', label: 'Tiếng Việt' },
@@ -29,10 +29,16 @@ const PATH_STORAGE_KEY = 'ucmas_track_exercises';
 const PATH_COMPLETED_KEY = 'ucmas_path_day_completed';
 const PATH_MODE_LABELS: Record<'visual' | 'audio' | 'flash', string> = { visual: 'Nhìn tính', audio: 'Nghe tính', flash: 'Flash' };
 
+const PATH_TOTAL_DAYS = 96;
+const PATH_DAYS_PER_WEEK = 6;
+const PATH_TOTAL_WEEKS = 16;
+
 function loadPathExercises(): PathExerciseEntry[] {
   try {
     const raw = localStorage.getItem(PATH_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const all: PathExerciseEntry[] = raw ? JSON.parse(raw) : [];
+    // Keep only days within the new roadmap (1–96)
+    return all.filter(e => e?.day_no >= 1 && e?.day_no <= PATH_TOTAL_DAYS);
   } catch { return []; }
 }
 
@@ -67,7 +73,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   }, [location.state]);
 
   // Lộ trình: tab con (0-3 = 1-30, 31-60, 61-90, 91-120), ngày đang xem chi tiết
-  const [pathTabIndex, setPathTabIndex] = useState(0);
+  const [pathWeekIndex, setPathWeekIndex] = useState(0);
   const [selectedPathDay, setSelectedPathDay] = useState<number | null>(null);
   const pathExercises = useMemo(() => loadPathExercises(), []);
 
@@ -219,11 +225,13 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     });
   };
 
-  const PATH_TABS = [
-    { label: 'Ngày 1–30', start: 1, end: 30 },
-    { label: 'Ngày 31–60', start: 31, end: 60 },
-    { label: 'Ngày 61–90', start: 61, end: 90 },
-    { label: 'Ngày 91–120', start: 91, end: 120 },
+  const ROAD_POINTS: Array<{ x: string; y: string }> = [
+    { x: '8%', y: '72%' },
+    { x: '22%', y: '38%' },
+    { x: '40%', y: '62%' },
+    { x: '58%', y: '34%' },
+    { x: '76%', y: '58%' },
+    { x: '92%', y: '28%' },
   ];
 
   return (
@@ -308,7 +316,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ</label>
                         <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                         </select>
                       </div>
                       <div>
@@ -342,7 +350,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Cấp độ</label>
                         <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:border-ucmas-red focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                         </select>
                       </div>
                       <div>
@@ -388,7 +396,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Cấp độ</label>
                         <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-green focus:border-ucmas-green focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                         </select>
                       </div>
                       <div>
@@ -424,10 +432,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           <div className="space-y-6">
             <h2 className="text-2xl font-heading-bold text-ucmas-blue">Luyện theo lộ trình</h2>
             <p className="text-gray-600">
-              Lộ trình theo cấp độ <strong>{userLevel}</strong> (cài đặt tại Profile). Click vào từng ngày để xem bài và luyện tập.
+              Lộ trình theo <strong>{getLevelLabel(userLevel)}</strong> (cài đặt tại Profile). Click vào từng ngày để xem bài và luyện tập.
             </p>
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
-              Hiển thị dạng đường đua – ngày 1 đến 120. Mỗi ngày tối đa 3 bài (Nhìn tính, Nghe tính, Flash). Kết quả lưu theo ngày.
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-5 text-indigo-900 text-sm">
+              Lộ trình mới gồm <strong>{PATH_TOTAL_DAYS} ngày</strong>, chia thành <strong>{PATH_TOTAL_WEEKS} tuần</strong> (mỗi tuần <strong>{PATH_DAYS_PER_WEEK} ngày</strong>). Mỗi ngày có thể có nhiều bài luyện tập (Nhìn tính, Nghe tính, Flash).
             </div>
 
             {selectedPathDay != null ? (
@@ -443,7 +451,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   </button>
                 </div>
                 <div className="p-6">
-                  <h3 className="text-xl font-heading-bold text-ucmas-blue mb-4">Ngày {selectedPathDay} – Cấp {userLevel}</h3>
+                  <h3 className="text-xl font-heading-bold text-ucmas-blue mb-1">
+                    Tuần {Math.ceil(selectedPathDay / PATH_DAYS_PER_WEEK)} • Ngày {((selectedPathDay - 1) % PATH_DAYS_PER_WEEK) + 1}
+                  </h3>
+                  <p className="text-gray-500 text-sm mb-4">Tổng ngày {selectedPathDay} – {getLevelLabel(userLevel)}</p>
                   {(() => {
                     const dayExercises = exercisesForLevel.filter((e) => e.day_no === selectedPathDay);
                     if (dayExercises.length === 0) {
@@ -485,55 +496,128 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               </div>
             ) : (
               <>
-                {/* Tab con: 1–30, 31–60, 61–90, 91–120 */}
-                <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
-                  {PATH_TABS.map((tab, idx) => (
-                    <button
-                      key={tab.label}
-                      type="button"
-                      onClick={() => setPathTabIndex(idx)}
-                      className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors ${
-                        pathTabIndex === idx
-                          ? 'bg-ucmas-blue text-white shadow'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-                {/* Lưới ngày theo tab hiện tại */}
-                <div className="grid grid-cols-10 sm:grid-cols-12 gap-2">
-                  {Array.from(
-                    { length: PATH_TABS[pathTabIndex].end - PATH_TABS[pathTabIndex].start + 1 },
-                    (_, i) => PATH_TABS[pathTabIndex].start + i
-                  ).map((day) => {
-                    const dayExs = exercisesForLevel.filter((e) => e.day_no === day);
-                    const hasExercises = dayExs.length > 0;
-                    const hasCompleted = pathDaysCompleted[userLevel]?.[day] === true;
-                    const summary = hasExercises
-                      ? dayExs.map((e) => PATH_MODE_LABELS[e.mode]).join(', ')
-                      : '';
-                    return (
+                {/* Week selector */}
+                <div className="flex gap-2 flex-wrap items-center">
+                  <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mr-2">
+                    Chọn tuần
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {Array.from({ length: PATH_TOTAL_WEEKS }, (_, i) => i).map((wIdx) => (
                       <button
-                        key={day}
+                        key={wIdx}
                         type="button"
-                        onClick={() => setSelectedPathDay(day)}
-                        className={`aspect-square rounded-xl font-heading font-bold text-sm transition-all flex flex-col items-center justify-center gap-0.5 ${
-                          hasCompleted
-                            ? 'bg-emerald-100 border-2 border-emerald-400 text-emerald-800 hover:bg-emerald-200 hover:border-ucmas-blue hover:shadow-md'
-                            : hasExercises
-                              ? 'bg-blue-50 border-2 border-ucmas-blue/60 text-ucmas-blue hover:bg-blue-100 hover:shadow-md'
-                              : 'bg-gray-100 border border-gray-300 text-gray-600 hover:bg-ucmas-blue/20 hover:border-ucmas-blue hover:text-ucmas-blue'
+                        onClick={() => setPathWeekIndex(wIdx)}
+                        className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${
+                          pathWeekIndex === wIdx
+                            ? 'bg-ucmas-blue text-white shadow'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
-                        title={hasExercises ? `Ngày ${day}: ${summary}` : `Ngày ${day}`}
                       >
-                        <span>{day}</span>
-                        {hasCompleted && <span className="text-xs text-emerald-600">✓</span>}
+                        Tuần {wIdx + 1}
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
+
+                {/* Road infographic */}
+                {(() => {
+                  const weekNo = pathWeekIndex + 1;
+                  const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
+                  const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
+
+                  return (
+                    <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-white rounded-[2.5rem] border border-indigo-100 shadow-sm p-6 overflow-hidden">
+                      <div className="flex items-start justify-between gap-4 mb-6">
+                        <div>
+                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-indigo-600">
+                            Roadmap lộ trình
+                          </div>
+                          <h3 className="text-2xl font-heading-extrabold text-ucmas-blue mt-1">
+                            Tuần {weekNo}
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Chọn 1 ngày để xem bài và luyện tập.
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
+                            {getLevelLabel(userLevel)}
+                          </div>
+                          <div className="text-sm font-heading font-bold text-gray-700">
+                            Ngày {startDay}–{Math.min(startDay + PATH_DAYS_PER_WEEK - 1, PATH_TOTAL_DAYS)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative w-full h-[360px] sm:h-[420px] rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden">
+                        {/* Road */}
+                        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 420" preserveAspectRatio="none">
+                          <path
+                            d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
+                            fill="none"
+                            stroke="rgba(99,102,241,0.55)"
+                            strokeWidth="70"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M70,310 C180,140 340,380 450,250 C560,120 700,340 920,170"
+                            fill="none"
+                            stroke="rgba(255,255,255,0.85)"
+                            strokeWidth="6"
+                            strokeDasharray="16 14"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+
+                        {/* Nodes */}
+                        {days.map((day, idx) => {
+                          const dayExs = exercisesForLevel.filter((e) => e.day_no === day);
+                          const hasExercises = dayExs.length > 0;
+                          const hasCompleted = pathDaysCompleted[userLevel]?.[day] === true;
+                          const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
+
+                          const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };
+                          const ringCls = hasCompleted
+                            ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
+                            : hasExercises
+                              ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue'
+                              : 'border-gray-300 bg-gray-100 text-gray-600';
+
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => setSelectedPathDay(day)}
+                              className="absolute group"
+                              style={{ left: point.x, top: point.y, transform: 'translate(-50%, -50%)' }}
+                              title={`Ngày ${day}: ${modeSummary}`}
+                            >
+                              <div className={`w-16 h-16 rounded-full border-4 shadow-lg flex items-center justify-center font-heading font-black text-lg ${ringCls} transition-transform group-hover:scale-105`}>
+                                {((day - 1) % PATH_DAYS_PER_WEEK) + 1}
+                              </div>
+                              <div className="mt-2 bg-white/95 border border-gray-100 shadow-md rounded-2xl px-3 py-2 min-w-[160px] opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 transition-all">
+                                <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">
+                                  Ngày {day}
+                                </div>
+                                <div className="text-sm font-heading font-bold text-gray-800 mt-0.5">
+                                  {hasExercises ? `${dayExs.length} bài` : 'Chưa có bài'}
+                                </div>
+                                <div className="text-xs text-gray-600 mt-0.5 truncate">
+                                  {modeSummary}
+                                </div>
+                              </div>
+                              {hasCompleted && (
+                                <div className="absolute -right-1 -top-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs shadow">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -592,7 +676,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ</label>
                         <select value={eliteLevel} onChange={(e) => setEliteLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                         </select>
                       </div>
                       <div>

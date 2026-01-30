@@ -6,7 +6,8 @@ import { generateExam, getExamConfig } from '../services/examService';
 import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
-import { getLevelIndex, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
 
 interface PracticeSessionProps {
   user: UserProfile;
@@ -108,6 +109,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
               audioRef.current.pause();
               audioRef.current = null;
           }
+          cancelBrowserSpeechSynthesis();
       };
   }, []);
 
@@ -183,8 +185,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   }, [fromHub, hubConfig, user.full_name]);
 
   const getGoogleTTSUrl = (text: string, lang: string) => {
-      const langCode = lang.split('-')[0];
-      return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${langCode}&q=${encodeURIComponent(text)}`;
+      return getGoogleTranslateTtsUrl(text, lang);
   };
 
   const startExam = async () => {
@@ -247,12 +248,15 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           audioRef.current.pause();
           audioRef.current = null;
       }
+      cancelBrowserSpeechSynthesis();
       setIsPlayingAudio(false); 
 
       const url = getGoogleTTSUrl(langConfig.sample, selectedLang);
       const audio = new Audio(url);
       audio.playbackRate = getSpeechRate(speed);
-      audio.play().catch(e => alert("Không thể phát âm thanh. Kiểm tra kết nối mạng."));
+      audio.play().catch(async () => {
+        await speakWithBrowserTts(langConfig.sample, selectedLang, getSpeechRate(speed));
+      });
   };
 
   const canPlay = (idx: number) => {
@@ -280,6 +284,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           audioRef.current.pause();
           audioRef.current = null;
       }
+      cancelBrowserSpeechSynthesis();
 
       const count = playCounts[currentQIndex] || 0;
       if (count === 0 && currentMode === Mode.FLASH) {
@@ -307,8 +312,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, speed * 1000));
-      setFlashNumber(null);
-      await new Promise(r => setTimeout(r, 200)); 
     }
 
     // --- 3. End with Equals Sign ---
@@ -318,15 +321,28 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   const playSingleAudio = (text: string, rate: number): Promise<void> => {
       return new Promise((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+
           const url = getGoogleTTSUrl(text, selectedLang);
           const audio = new Audio(url);
           audio.playbackRate = rate;
           audioRef.current = audio;
           
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve(); // Bỏ qua lỗi để chạy tiếp
+          audio.onended = () => finish();
+          audio.onerror = async () => {
+            await speakWithBrowserTts(text, selectedLang, rate);
+            finish();
+          };
           
-          audio.play().catch(() => resolve());
+          audio.play().catch(async () => {
+            await speakWithBrowserTts(text, selectedLang, rate);
+            finish();
+          });
       });
   };
 
@@ -339,18 +355,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     
     const q = questions[currentQIndex];
     const rate = getSpeechRate(speed);
-
-    // 1. Đọc "Chuẩn bị"
-    await playSingleAudio("Chuẩn bị", 1.2);
-    
-    // 2. Đọc dãy số (nghỉ 1 chút)
-    await new Promise(r => setTimeout(r, 300));
-    const text = q.operands.join(', ');
+    // Single TTS call: reduces autoplay-policy issues and Google blocking retries
+    const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
     await playSingleAudio(text, rate);
-
-    // 3. Đọc "Bằng"
-    await new Promise(r => setTimeout(r, 300));
-    await playSingleAudio("Bằng", 1.2);
 
     setIsPlayingAudio(false);
     audioRef.current = null;
@@ -477,7 +484,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                    onChange={e => setSelectedLevelSymbol(e.target.value)}
                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition appearance-none"
                  >
-                    {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>Cấp {s}</option>)}
+                   {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                  </select>
               </div>
 
@@ -504,7 +511,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                           className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                       >
                           {availableExams.length === 0 ? (
-                              <option value="">-- Không có bài nào cho Cấp {selectedLevelSymbol} --</option>
+                              <option value="">-- Không có bài nào cho {getLevelLabel(selectedLevelSymbol)} --</option>
                           ) : (
                               availableExams.map(ex => (
                                   <option key={ex.id} value={ex.id}>{ex.name} ({ex.questions.length} câu)</option>
@@ -603,7 +610,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             </div>
             
             <h2 className="text-2xl font-heading-extrabold text-ucmas-blue mb-2 uppercase tracking-tight">Kết Quả Luyện Tập</h2>
-            <p className="text-gray-600 text-sm mb-6 font-medium">{formName} • Cấp {selectedLevelSymbol}</p>
+            <p className="text-gray-600 text-sm mb-6 font-medium">{formName} • {getLevelLabel(selectedLevelSymbol)}</p>
 
             <div className="flex justify-center gap-1 mb-3 text-ucmas-yellow text-3xl">
                {[1,2,3,4,5].map(s => <span key={s} className="transform hover:scale-110 transition-transform">{percentage >= s*20 ? '★' : '☆'}</span>)}
@@ -673,6 +680,118 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   const currentQ = questions[currentQIndex];
 
+  // FLASH MODE: full-screen white focus view
+  if (currentMode === Mode.FLASH) {
+    const showAnswerArea = !flashOverlay && !isFlashing && flashNumber === '=';
+    const showStart = !flashOverlay && !isFlashing && (flashNumber === null);
+    const timeText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+
+    return (
+      <div className="fixed inset-0 bg-white z-50">
+        <div className="absolute top-4 left-4 text-xs font-heading font-black uppercase tracking-widest text-gray-500">
+          Câu {currentQIndex + 1}/{questions.length}
+        </div>
+        <div className="absolute top-4 right-4 text-sm font-heading font-mono font-black text-ucmas-red bg-white/90 px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+          {timeText}
+        </div>
+
+        <div className="h-full w-full flex flex-col items-center justify-center px-4">
+          {flashOverlay ? (
+            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+              {flashOverlay}
+            </div>
+          ) : (
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+              {flashNumber ?? ''}
+            </div>
+          )}
+
+          {showStart && (
+            <div className="mt-10 text-center">
+              <button
+                onClick={() => runFlashSequence(currentQIndex)}
+                className={`px-10 py-5 rounded-2xl font-heading font-black uppercase tracking-widest shadow-lg transition ${
+                  canPlay(currentQIndex)
+                    ? 'bg-ucmas-blue text-white hover:bg-ucmas-red'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                disabled={!canPlay(currentQIndex)}
+              >
+                Bắt đầu
+              </button>
+              <p className="mt-3 text-[10px] font-heading font-bold uppercase tracking-widest text-gray-400">
+                {canPlay(currentQIndex) ? 'Tối đa 2 lần xem' : 'Hết lượt xem'}
+              </p>
+            </div>
+          )}
+
+          {showAnswerArea && (
+            <div className="w-full max-w-xl mt-10">
+              <div className="text-center text-xs font-heading font-black uppercase tracking-widest text-gray-400 mb-3">
+                Nhập đáp án
+              </div>
+
+              <input
+                ref={inputRef}
+                type="number"
+                autoFocus
+                disabled={isInputDisabled}
+                value={answers[currentQIndex] || ''}
+                onChange={(e) => setAnswers(prev => ({ ...prev, [currentQIndex]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (isInputDisabled) return;
+                    if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
+                    if (currentQIndex < questions.length - 1) {
+                      setCurrentQIndex(p => p + 1);
+                      setFlashNumber(null);
+                    } else submitExam();
+                  }
+                }}
+                className="w-full border-4 border-ucmas-blue bg-white rounded-[2rem] py-6 px-6 text-center text-6xl font-heading font-black text-ucmas-blue outline-none shadow-xl"
+                placeholder="?"
+              />
+
+              <div className="mt-6 flex flex-col gap-3">
+                {canPlay(currentQIndex) && (
+                  <button
+                    onClick={() => {
+                      setFlashNumber(null);
+                      runFlashSequence(currentQIndex);
+                    }}
+                    className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm"
+                  >
+                    Xem lại
+                  </button>
+                )}
+
+                {currentQIndex < questions.length - 1 ? (
+                  <button
+                    onClick={() => {
+                      if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
+                      setCurrentQIndex(p => p + 1);
+                      setFlashNumber(null);
+                    }}
+                    className="w-full px-8 py-5 rounded-2xl bg-ucmas-blue text-white font-heading font-black text-xl hover:bg-ucmas-red transition-all uppercase shadow-lg"
+                  >
+                    Câu tiếp theo ➜
+                  </button>
+                ) : (
+                  <button
+                    onClick={submitExam}
+                    className="w-full px-8 py-5 rounded-2xl bg-ucmas-red text-white font-heading font-black text-xl hover:bg-red-700 shadow-2xl transition-all uppercase tracking-widest"
+                  >
+                    Nộp bài làm 🏁
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
         {/* Left Sidebar (hide in Flash for max size) */}
@@ -689,7 +808,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
            <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
                <div className="flex justify-between text-xs mb-2">
                    <span className="text-gray-500 font-heading font-bold uppercase">Cấp độ</span>
-                   <span className="font-heading font-bold text-ucmas-green">Cấp {selectedLevelSymbol}</span>
+                   <span className="font-heading font-bold text-ucmas-green">{getLevelLabel(selectedLevelSymbol)}</span>
                </div>
                {currentMode !== Mode.VISUAL && (
                  <div className="flex justify-between text-xs mb-2">
@@ -765,8 +884,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                                         {flashOverlay}
                                     </div>
                                 </div>
-                            ) : isFlashing ? (
-                                <div className="font-heading font-black text-ucmas-blue leading-none tracking-tighter animate-pulse text-[clamp(6rem,22vw,16rem)]">
+                            ) : (isFlashing || flashNumber !== null) ? (
+                                <div className="font-heading font-black text-ucmas-blue leading-none tracking-tighter text-[clamp(6rem,22vw,16rem)]">
                                    {flashNumber}
                                 </div>
                             ) : (

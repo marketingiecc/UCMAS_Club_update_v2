@@ -7,7 +7,7 @@ import {
   type DifficultyKey,
   type ModeDifficultyLimits,
 } from '../services/practiceModeSettings';
-import { LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
 
 const MODE_LABELS: Record<ModeKey, string> = { visual: 'Nhìn tính', audio: 'Nghe tính', flash: 'Flash' };
 const DIFF_LABELS: Record<DifficultyKey, string> = { basic: 'Cơ bản', advanced: 'Nâng cao', elite: 'Vượt trội' };
@@ -142,9 +142,13 @@ const AdminTrainingPage: React.FC = () => {
               <div className="p-4">
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Thứ tự tăng dần</p>
                 <div className="flex flex-wrap gap-2">
-                  {LEVEL_SYMBOLS_ORDER.map((s, i) => (
-                    <span key={s} className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-ucmas-blue/10 text-ucmas-blue font-bold text-sm">
-                      {s}
+                  {LEVEL_SYMBOLS_ORDER.map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-ucmas-blue/10 text-ucmas-blue font-bold text-sm"
+                      title={getLevelLabel(s)}
+                    >
+                      {getLevelLabel(s)}
                     </span>
                   ))}
                 </div>

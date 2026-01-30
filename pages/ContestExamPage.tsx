@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
 import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
+import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
 
 interface ContestExamPageProps {
     user: UserProfile;
@@ -42,6 +43,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
               audioRef.current.pause();
               audioRef.current = null;
           }
+          cancelBrowserSpeechSynthesis();
       };
   }, []);
 
@@ -120,6 +122,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
           setFlashOverlay(null);
           setIsFlashing(false);
           setIsPlayingAudio(false);
+          cancelBrowserSpeechSynthesis();
 
           if (currentMode === Mode.FLASH) {
               runFlashSequence(currentQIndex);
@@ -154,8 +157,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       for (const num of q.operands) {
           setFlashNumber(num);
           await new Promise(r => setTimeout(r, interval));
-          setFlashNumber(null);
-          await new Promise(r => setTimeout(r, 200));
       }
 
       // 3. Equals
@@ -170,15 +171,28 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
 
   const playSingleAudio = (text: string, rate: number): Promise<void> => {
     return new Promise((resolve) => {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+
+        const url = getGoogleTranslateTtsUrl(text, 'vi');
         const audio = new Audio(url);
         audio.playbackRate = rate;
         audioRef.current = audio;
         
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
+        audio.onended = () => finish();
+        audio.onerror = async () => {
+          await speakWithBrowserTts(text, 'vi-VN', rate);
+          finish();
+        };
         
-        audio.play().catch(() => resolve());
+        audio.play().catch(async () => {
+          await speakWithBrowserTts(text, 'vi-VN', rate);
+          finish();
+        });
     });
   };
 
@@ -192,18 +206,8 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       const q = questions[qIndex];
       const readSpeed = exam?.read_seconds_per_number || exam?.config?.read_speed || 2.0;
       const rate = getSpeechRate(readSpeed);
-      
-      // 1. "Chuẩn bị"
-      await playSingleAudio("Chuẩn bị", 1.2);
-      
-      // 2. Numbers
-      await new Promise(r => setTimeout(r, 300));
-      const text = q.operands.join(', ');
+      const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
       await playSingleAudio(text, rate);
-
-      // 3. "Bằng"
-      await new Promise(r => setTimeout(r, 300));
-      await playSingleAudio("Bằng", 1.2);
 
       setIsPlayingAudio(false);
   };
@@ -232,6 +236,100 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">Đang tải đề thi...</div>;
+
+  // FLASH MODE: full-screen white focus view
+  if (currentMode === Mode.FLASH && status === 'running') {
+    const showAnswerArea = !flashOverlay && !isFlashing && flashNumber === '=';
+    const isInputDisabled = !!flashOverlay || isFlashing;
+    const timeText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+
+    return (
+      <div className="fixed inset-0 bg-white z-50">
+        <div className="absolute top-4 left-4 text-xs font-heading font-black uppercase tracking-widest text-gray-500">
+          {contest?.name || 'Cuộc thi'} • Câu {currentQIndex + 1}/{questions.length}
+        </div>
+        <div className="absolute top-4 right-4 text-sm font-heading font-mono font-black text-ucmas-red bg-white/90 px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+          {timeText}
+        </div>
+
+        <div className="h-full w-full flex flex-col items-center justify-center px-4">
+          {flashOverlay ? (
+            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+              {flashOverlay}
+            </div>
+          ) : (
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+              {flashNumber ?? ''}
+            </div>
+          )}
+
+          {showAnswerArea && (
+            <div className="w-full max-w-xl mt-10">
+              <div className="text-center text-xs font-heading font-black uppercase tracking-widest text-gray-400 mb-3">
+                Nhập đáp án
+              </div>
+
+              <input
+                ref={inputRef}
+                type="number"
+                autoFocus
+                disabled={isInputDisabled}
+                value={answers[currentQIndex] || ''}
+                onChange={e => setAnswers({ ...answers, [currentQIndex]: e.target.value })}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (isInputDisabled) return;
+                    if (currentQIndex < questions.length - 1) {
+                      setCurrentQIndex(p => p + 1);
+                    } else {
+                      if (window.confirm('Nộp bài ngay?')) submitExam();
+                    }
+                  }
+                }}
+                className="w-full border-4 border-ucmas-blue bg-white rounded-[2rem] py-6 px-6 text-center text-6xl font-heading font-black text-ucmas-blue outline-none shadow-xl"
+                placeholder="?"
+              />
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  disabled={currentQIndex === 0 || isInputDisabled}
+                  onClick={() => setCurrentQIndex(p => Math.max(0, p - 1))}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm disabled:opacity-50"
+                >
+                  ← Trước
+                </button>
+                {currentQIndex < questions.length - 1 ? (
+                  <button
+                    disabled={isInputDisabled}
+                    onClick={() => setCurrentQIndex(p => p + 1)}
+                    className="flex-1 px-6 py-4 rounded-2xl bg-ucmas-blue text-white font-heading font-black hover:bg-ucmas-red transition uppercase shadow-lg disabled:opacity-50"
+                  >
+                    Tiếp ➜
+                  </button>
+                ) : (
+                  <button
+                    disabled={isInputDisabled}
+                    onClick={() => {
+                      if (window.confirm('Nộp bài ngay?')) submitExam();
+                    }}
+                    className="flex-1 px-6 py-4 rounded-2xl bg-ucmas-red text-white font-heading font-black hover:bg-red-700 transition uppercase shadow-lg disabled:opacity-50"
+                  >
+                    Nộp bài 🏁
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!flashOverlay && !isFlashing && flashNumber !== '=' && (
+            <div className="mt-6 text-[10px] font-heading font-bold uppercase tracking-widest text-gray-300">
+              Đang chuẩn bị...
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -268,7 +366,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                             <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
                                 <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
                             </div>
-                         ) : isFlashing ? (
+                         ) : (isFlashing || flashNumber !== null) ? (
                             <div className="text-[150px] font-black text-ucmas-green leading-none tracking-tighter">
                                 {flashNumber}
                             </div>

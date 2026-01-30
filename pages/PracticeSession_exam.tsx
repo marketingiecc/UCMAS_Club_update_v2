@@ -5,6 +5,8 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
+import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, speakWithBrowserTts } from '../services/googleTts';
+import { getLevelIndex } from '../config/levelsAndDifficulty';
 
 interface PracticeSessionExamProps {
   user: UserProfile;
@@ -20,8 +22,10 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const navState = location.state as { 
     customConfig?: any, 
     examId?: string, 
-    predefinedQuestions?: Question[] 
+    predefinedQuestions?: Question[];
+    returnTo?: { tab: 'elite' | 'mode' | 'path'; mode?: 'visual' | 'audio' | 'flash'; pathDay?: number };
   } | null;
+  const returnTo = navState?.returnTo;
 
   const [status, setStatus] = useState<'setup' | 'running' | 'finished'>('setup');
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -57,11 +61,20 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         finalQuestions = navState.predefinedQuestions;
     } else {
         const config = navState.customConfig;
+        const resolvedLevel =
+          typeof config?.level === 'string'
+            ? getLevelIndex(config.level)
+            : typeof config?.level === 'number'
+              ? config.level
+              : typeof config?.digits === 'number'
+                ? config.digits
+                : 1;
+        const resolvedTimeLimit = typeof config?.timeLimit === 'number' ? config.timeLimit : 600;
         finalQuestions = generateExam({
             mode: currentMode,
-            level: config.digits || 1,
+            level: resolvedLevel,
             numQuestions: config.numQuestions || 10,
-            timeLimit: 600,
+            timeLimit: resolvedTimeLimit,
             numOperandsRange: Array.isArray(config.numOperandsRange) ? config.numOperandsRange : [config.operands, config.operands],
             digitRange: Array.isArray(config.digitRange) ? config.digitRange : [1, 9],
             flashSpeed: config.flashSpeed || 1000
@@ -69,7 +82,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     }
     
     setQuestions(finalQuestions);
-    setTimeLeft(600);
+    setTimeLeft(typeof navState.customConfig?.timeLimit === 'number' ? navState.customConfig.timeLimit : 600);
     setStatus('running');
   }, [navState, currentMode, navigate]);
 
@@ -95,6 +108,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         setIsFlashing(false);
         setIsPlayingAudio(false);
         if (audioRef.current) audioRef.current.pause();
+        cancelBrowserSpeechSynthesis();
 
         if (currentMode === Mode.FLASH) runFlashSequence(currentQIndex);
         if (currentMode === Mode.LISTENING) playAudio(currentQIndex);
@@ -127,8 +141,6 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, configSpeed));
-      setFlashNumber(null);
-      await new Promise(r => setTimeout(r, 150));
     }
 
     // 3. Equals
@@ -138,14 +150,27 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
   const playSingleAudio = (text: string, rate: number): Promise<void> => {
     return new Promise((resolve) => {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(text)}`;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+
+        const url = getGoogleTranslateTtsUrl(text, 'vi');
         const audio = new Audio(url);
         audio.playbackRate = rate;
         audioRef.current = audio;
         
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
-        audio.play().catch(() => resolve());
+        audio.onended = () => finish();
+        audio.onerror = async () => {
+          await speakWithBrowserTts(text, 'vi-VN', rate);
+          finish();
+        };
+        audio.play().catch(async () => {
+          await speakWithBrowserTts(text, 'vi-VN', rate);
+          finish();
+        });
     });
   };
 
@@ -156,18 +181,8 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       const speed = navState?.customConfig?.speed || 1.0;
       
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-
-      // 1. "Chuẩn bị"
-      await playSingleAudio("Chuẩn bị", 1.2);
-      
-      // 2. Numbers
-      await new Promise(r => setTimeout(r, 300));
-      const text = q.operands.join(', ');
+      const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
       await playSingleAudio(text, rate);
-
-      // 3. "Bằng"
-      await new Promise(r => setTimeout(r, 300));
-      await playSingleAudio("Bằng", 1.2);
 
       setIsPlayingAudio(false);
       audioRef.current = null;
@@ -223,94 +238,308 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
             </div>
             <div className="flex flex-col gap-4">
                <button onClick={() => setIsReviewOpen(true)} className="w-full py-4 bg-white border-2 border-ucmas-blue text-ucmas-blue font-black rounded-2xl uppercase text-xs tracking-widest hover:bg-blue-50 transition">Xem chi tiết</button>
-               <button onClick={() => navigate('/contests')} className="w-full py-4 bg-ucmas-blue text-white font-black rounded-2xl uppercase text-xs tracking-widest hover:bg-blue-800 transition shadow-lg">Quay lại</button>
+               <button
+                 onClick={() => {
+                   if (returnTo?.tab === 'elite') {
+                     navigate('/training', { state: { openTab: 'elite' as const, openMode: returnTo.mode } });
+                     return;
+                   }
+                   if (returnTo?.tab === 'mode') {
+                     navigate('/training', { state: { openTab: 'mode' as const, openMode: returnTo.mode } });
+                     return;
+                   }
+                   if (returnTo?.tab === 'path' && returnTo.pathDay != null) {
+                     navigate('/training', { state: { openTab: 'path' as const, pathDay: returnTo.pathDay } });
+                     return;
+                   }
+                   navigate('/training');
+                 }}
+                 className="w-full py-4 bg-ucmas-blue text-white font-black rounded-2xl uppercase text-xs tracking-widest hover:bg-blue-800 transition shadow-lg"
+               >
+                 Quay lại
+               </button>
             </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-12 min-h-[85vh] flex flex-col items-center justify-center animate-fade-in">
-        <div className="w-full max-w-4xl bg-white rounded-[3.5rem] shadow-2xl border border-gray-100 p-8 lg:p-16 relative">
-            <div className="absolute top-10 right-10 flex items-center gap-4">
-                 <div className="bg-red-50 text-ucmas-red px-6 py-2.5 rounded-2xl font-mono font-black text-2xl shadow-sm border border-red-100">
-                    {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
-                 </div>
+  // FLASH MODE: full-screen white focus view (same as PracticeSession)
+  if (currentMode === Mode.FLASH) {
+    const showAnswerArea = !flashOverlay && !isFlashing && flashNumber === '=';
+    const showStart = !flashOverlay && !isFlashing && (flashNumber === null);
+    const timeText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+
+    return (
+      <div className="fixed inset-0 bg-white z-50">
+        <div className="absolute top-4 left-4 text-xs font-heading font-black uppercase tracking-widest text-gray-500">
+          Câu {currentQIndex + 1}/{questions.length}
+        </div>
+        <div className="absolute top-4 right-4 text-sm font-heading font-mono font-black text-ucmas-red bg-white/90 px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+          {timeText}
+        </div>
+
+        <div className="h-full w-full flex flex-col items-center justify-center px-4">
+          {flashOverlay ? (
+            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+              {flashOverlay}
             </div>
-            
-            <div className="text-center mb-16">
-                <span className="bg-blue-50 text-ucmas-blue px-4 py-1.5 rounded-full font-black text-[10px] uppercase tracking-widest border border-blue-100">Câu {currentQIndex + 1} / {questions.length}</span>
-                <h3 className="mt-4 text-gray-400 font-bold uppercase text-xs tracking-widest">{theme.title} - {navState?.customConfig?.name || 'Bài tập'}</h3>
+          ) : (
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+              {flashNumber ?? ''}
+            </div>
+          )}
+
+          {showStart && (
+            <div className="mt-10 text-center">
+              <button
+                onClick={() => runFlashSequence(currentQIndex)}
+                className="px-10 py-5 rounded-2xl font-heading font-black uppercase tracking-widest shadow-lg transition bg-ucmas-blue text-white hover:bg-ucmas-red"
+              >
+                Bắt đầu
+              </button>
+            </div>
+          )}
+
+          {showAnswerArea && (
+            <div className="w-full max-w-xl mt-10">
+              <div className="text-center text-xs font-heading font-black uppercase tracking-widest text-gray-400 mb-3">
+                Nhập đáp án
+              </div>
+
+              <input
+                ref={inputRef}
+                type="number"
+                autoFocus
+                disabled={isFlashing || isPlayingAudio}
+                value={answers[currentQIndex] || ''}
+                onChange={(e) => setAnswers(prev => ({ ...prev, [currentQIndex]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (isFlashing || isPlayingAudio) return;
+                    if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
+                    if (currentQIndex < questions.length - 1) {
+                      setCurrentQIndex(p => p + 1);
+                      setFlashNumber(null);
+                    } else submitExam();
+                  }
+                }}
+                className="w-full border-4 border-ucmas-blue bg-white rounded-[2rem] py-6 px-6 text-center text-6xl font-heading font-black text-ucmas-blue outline-none shadow-xl"
+                placeholder="?"
+              />
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setFlashNumber(null);
+                    runFlashSequence(currentQIndex);
+                  }}
+                  className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm"
+                >
+                  Xem lại
+                </button>
+
+                {currentQIndex < questions.length - 1 ? (
+                  <button
+                    onClick={() => {
+                      if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
+                      setCurrentQIndex(p => p + 1);
+                      setFlashNumber(null);
+                    }}
+                    className="w-full px-8 py-5 rounded-2xl bg-ucmas-blue text-white font-heading font-black text-xl hover:bg-ucmas-red transition-all uppercase shadow-lg"
+                  >
+                    Câu tiếp theo ➜
+                  </button>
+                ) : (
+                  <button
+                    onClick={submitExam}
+                    className="w-full px-8 py-5 rounded-2xl bg-ucmas-red text-white font-heading font-black text-xl hover:bg-red-700 shadow-2xl transition-all uppercase tracking-widest"
+                  >
+                    Nộp bài làm 🏁
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const currentQ = questions[currentQIndex];
+  const isInputDisabled = isFlashing || isPlayingAudio;
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
+        {/* Left Sidebar (hide in Flash for max size) */}
+        {currentMode !== Mode.FLASH && (
+        <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit shrink-0">
+           <div className="flex items-center gap-3 mb-6">
+              <div className={`w-10 h-10 rounded-full ${theme.bg} text-white flex items-center justify-center shadow-md`}>{theme.icon}</div>
+              <div>
+                 <div className="text-[10px] text-gray-400 font-heading font-black uppercase tracking-widest">
+                   {returnTo?.tab === 'elite' ? 'Luyện thi HSG' : 'Làm bài'}
+                 </div>
+                 <div className="font-heading font-bold text-gray-800 leading-tight">{user.full_name || user.email}</div>
+              </div>
+           </div>
+           
+           <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
+               <div className="flex justify-between text-xs mb-2">
+                   <span className="text-gray-500 font-heading font-bold uppercase">Chế độ</span>
+                   <span className={`font-heading font-bold ${theme.color}`}>{theme.title}</span>
+               </div>
+               <div className="flex justify-between text-xs mb-2">
+                   <span className="text-gray-500 font-heading font-bold uppercase">Câu hỏi</span>
+                   <span className="font-heading font-black text-ucmas-blue text-lg">{currentQIndex + 1}/{questions.length}</span>
+               </div>
+               <div className="flex justify-between text-xs pt-2 border-t border-gray-200 mt-2">
+                   <span className="text-gray-500 font-heading font-bold uppercase">Thời gian</span>
+                   <span className="font-heading font-mono font-black text-ucmas-red">
+                     {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
+                   </span>
+               </div>
+           </div>
+
+           <div className="text-[10px] font-heading font-black text-gray-400 uppercase tracking-widest mb-3 px-1">Danh sách câu</div>
+           <div className="grid grid-cols-5 gap-2">
+              {questions.map((_, idx) => {
+                  const isDone = answers[idx] !== undefined;
+                  const isActive = currentQIndex === idx;
+                  return (
+                    <button 
+                        key={idx}
+                        onClick={() => {
+                            if (!isFlashing && !isInputDisabled && (isDone || isActive)) {
+                                setCurrentQIndex(idx);
+                            }
+                        }}
+                        disabled={isFlashing || isInputDisabled || (!isDone && !isActive)}
+                        className={`w-8 h-8 rounded-lg text-xs font-heading font-bold transition shadow-sm ${
+                            isActive ? `${theme.bg} text-white shadow-md transform scale-110` :
+                            isDone ? 'bg-blue-50 text-ucmas-blue border border-blue-100' : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                        }`}
+                    >
+                        {idx + 1}
+                    </button>
+                  );
+              })}
+           </div>
+        </div>
+        )}
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+            <div className="lg:hidden flex justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+               <span className="font-heading font-bold text-gray-700">Câu {currentQIndex + 1}/{questions.length}</span>
+               <span className="text-ucmas-red font-heading font-mono font-black text-xl">{Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}</span>
             </div>
 
-            <div className={`min-h-[250px] flex items-center justify-center mb-16 relative overflow-hidden ${currentMode === Mode.FLASH ? 'min-h-[45vh]' : ''}`}>
-                {currentMode === Mode.VISUAL && (
-                   <div className="text-center animate-fade-in">
-                      {questions[currentQIndex]?.operands.map((num, i) => (
-                         <div key={i} className="text-7xl font-black text-gray-800 mb-2 font-mono tracking-tighter leading-tight">{num}</div>
-                      ))}
-                      <div className="w-32 h-2 bg-gray-100 mx-auto my-8 rounded-full"></div>
-                      <div className="text-7xl font-black text-gray-200">?</div>
-                   </div>
-                )}
-                {currentMode === Mode.FLASH && (
-                    <div className="text-center w-full h-full flex items-center justify-center px-2">
-                        {flashOverlay ? (
-                            <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
-                                <div className="text-white font-black text-[clamp(2.5rem,10vw,6rem)] uppercase animate-bounce">
-                                    {flashOverlay}
+            <div className={`flex-grow bg-white rounded-3xl shadow-sm border border-gray-100 relative flex ${currentMode === Mode.FLASH ? 'flex-col' : 'flex-col lg:flex-row'} overflow-hidden min-h-[500px]`}>
+                <div className="hidden lg:flex absolute top-6 right-6 bg-ucmas-blue text-white px-5 py-2.5 rounded-2xl items-center gap-2 shadow-xl z-20">
+                   <span className="text-[10px] font-heading uppercase font-black tracking-widest opacity-80">Còn lại</span>
+                   <span className="text-2xl font-heading font-mono font-black">{Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}</span>
+                </div>
+                
+                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
+                    {/* VISUAL MODE DISPLAY */}
+                    {currentMode === Mode.VISUAL && currentQ && (
+                       <div className="bg-gray-50 p-12 rounded-[2.5rem] min-w-[300px] text-center shadow-inner border border-gray-100">
+                          {currentQ.operands.map((num, i) => (
+                             <div key={i} className="text-7xl font-heading font-black text-ucmas-blue mb-4 font-mono tracking-tighter leading-tight">{num}</div>
+                          ))}
+                          <div className="border-t-4 border-gray-300 w-32 mx-auto mt-6 mb-6"></div>
+                          <div className="text-7xl font-heading font-black text-gray-300">?</div>
+                       </div>
+                    )}
+
+                    {/* FLASH MODE DISPLAY */}
+                    {currentMode === Mode.FLASH && (
+                        <div className="text-center w-full h-full flex items-center justify-center min-h-[50vh] px-2">
+                            {flashOverlay ? (
+                                <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
+                                    <div className="text-white font-heading font-black text-[clamp(2.5rem,10vw,6rem)] uppercase animate-bounce">
+                                        {flashOverlay}
+                                    </div>
                                 </div>
+                            ) : (isFlashing || flashNumber !== null) ? (
+                                <div className="font-heading font-black text-ucmas-blue leading-none tracking-tighter text-[clamp(6rem,22vw,16rem)]">
+                                   {flashNumber}
+                                </div>
+                            ) : (
+                                <div className="text-gray-400 font-medium">Đang chuẩn bị...</div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* LISTENING MODE DISPLAY */}
+                    {currentMode === Mode.LISTENING && (
+                        <div className="text-center">
+                            <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-10 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
+                                🎧
                             </div>
+                            <button 
+                               onClick={() => playAudio(currentQIndex)}
+                               disabled={isPlayingAudio}
+                               className="bg-gradient-to-r from-ucmas-red to-red-600 text-white px-12 py-5 rounded-2xl font-heading font-black shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xl uppercase tracking-widest"
+                            >
+                               {isPlayingAudio ? 'Đang đọc...' : 'Nghe lại'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Input Area */}
+                <div className={`w-full ${currentMode === Mode.FLASH ? 'lg:w-full' : 'lg:w-[400px]'} border-t lg:border-t-0 lg:border-l border-gray-100 p-6 lg:p-10 flex flex-col justify-center bg-gray-50/50 z-10`}>
+                    <div className="text-center mb-8">
+                         <h3 className="text-gray-400 font-heading font-black uppercase text-xs tracking-widest mb-2">Nhập đáp án</h3>
+                         <div className="text-ucmas-blue font-heading font-bold">Câu số {currentQIndex + 1}</div>
+                    </div>
+
+                    <div className="relative w-full mb-8">
+                        <input 
+                          ref={inputRef}
+                          type="number" 
+                          autoFocus
+                          disabled={isInputDisabled}
+                          value={answers[currentQIndex] || ''}
+                          onChange={(e) => setAnswers(prev => ({...prev, [currentQIndex]: e.target.value}))}
+                          onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                  if (isInputDisabled) return;
+                                  if (answers[currentQIndex] === undefined) setAnswers(prev => ({...prev, [currentQIndex]: ''}));
+                                  if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1);
+                                  else submitExam();
+                              }
+                          }}
+                          className={`w-full border-4 ${isInputDisabled ? 'bg-gray-100 text-gray-300 border-gray-100' : answers[currentQIndex] ? 'border-ucmas-blue bg-white shadow-xl' : 'border-gray-200 bg-white'} rounded-[2rem] py-8 px-6 text-center text-6xl font-heading font-black text-ucmas-blue focus:border-ucmas-blue outline-none transition-all`}
+                          placeholder={isInputDisabled ? "..." : "?"}
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        {currentQIndex < questions.length - 1 ? (
+                            <button 
+                                onClick={() => {
+                                    if (answers[currentQIndex] === undefined) setAnswers(prev => ({...prev, [currentQIndex]: ''}));
+                                    setCurrentQIndex(p => p+1);
+                                }}
+                                disabled={isInputDisabled}
+                                className="w-full px-8 py-5 rounded-2xl bg-white border-2 border-ucmas-blue text-ucmas-blue font-heading font-black text-xl hover:bg-blue-50 transition-all disabled:opacity-50 uppercase shadow-md"
+                            >
+                                Câu tiếp theo ➜
+                            </button>
                         ) : (
-                            <div className="font-black text-ucmas-blue leading-none tracking-tighter transition-all text-[clamp(5rem,20vw,14rem)]">
-                               {flashNumber || <span className="text-gray-100">...</span>}
-                            </div>
+                            <button 
+                                onClick={submitExam}
+                                disabled={isInputDisabled}
+                                className="w-full px-8 py-5 rounded-2xl bg-ucmas-red text-white font-heading font-black text-xl hover:bg-red-700 shadow-2xl transition-all disabled:opacity-50 uppercase tracking-widest"
+                            >
+                                Nộp bài làm 🏁
+                            </button>
                         )}
                     </div>
-                )}
-                {currentMode === Mode.LISTENING && (
-                    <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl text-white shadow-2xl transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red/50'}`}>🎧</div>
-                )}
-            </div>
-
-            <div className="max-w-md mx-auto relative">
-                <input 
-                  ref={inputRef} type="number" autoFocus disabled={isFlashing || isPlayingAudio}
-                  value={answers[currentQIndex] || ''}
-                  onChange={(e) => setAnswers(prev => ({...prev, [currentQIndex]: e.target.value}))}
-                  onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                          if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1);
-                          else submitExam();
-                      }
-                  }}
-                  className="w-full h-24 border-4 border-gray-100 focus:border-ucmas-blue rounded-[2.5rem] text-center text-6xl font-black text-ucmas-blue bg-gray-50 focus:bg-white outline-none transition shadow-inner"
-                  placeholder="..."
-                />
-                <p className="text-center text-[10px] font-bold text-gray-400 uppercase mt-4 tracking-widest">Nhấn Enter để chuyển câu</p>
-            </div>
-            
-            <div className="mt-16 flex justify-between items-center px-10">
-                <button 
-                    disabled={isFlashing || isPlayingAudio}
-                    onClick={() => setCurrentQIndex(p => Math.max(0, p-1))} 
-                    className="text-gray-400 font-black uppercase text-xs hover:text-gray-800 transition disabled:opacity-50"
-                >
-                    ← Trước
-                </button>
-                <div className="flex gap-2">
-                    {questions.map((_, i) => (
-                        <div key={i} className={`w-2.5 h-2.5 rounded-full transition-all ${currentQIndex === i ? 'bg-ucmas-blue w-8' : answers[i] ? 'bg-blue-200' : 'bg-gray-100'}`}></div>
-                    ))}
                 </div>
-                <button 
-                    disabled={isFlashing || isPlayingAudio}
-                    onClick={() => { if(currentQIndex < questions.length - 1) setCurrentQIndex(p => p+1); else submitExam(); }} 
-                    className="text-ucmas-blue font-black uppercase text-xs hover:scale-105 transition disabled:opacity-50"
-                >
-                    {currentQIndex < questions.length - 1 ? 'Tiếp ➜' : 'Nộp bài 🏁'}
-                </button>
             </div>
         </div>
     </div>

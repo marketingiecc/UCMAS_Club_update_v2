@@ -2,13 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
 import { UserProfile, AttemptResult, Question } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
 
 const MODES = [
   { id: 'visual', label: 'Nhìn tính' },
   { id: 'audio', label: 'Nghe tính' },
   { id: 'flash', label: 'Flash' },
 ] as const;
+
+const TRACK_TOTAL_DAYS = 96;
+const TRACK_DAYS_PER_WEEK = 6;
+const TRACK_TOTAL_WEEKS = 16;
 
 /** Bài luyện tập trong lộ trình (1 bài = 1 ngày, 1 chế độ, có thể kèm JSON) */
 export interface TrackExerciseEntry {
@@ -61,6 +65,7 @@ const AdminPage: React.FC = () => {
   const [modalPresetLevel, setModalPresetLevel] = useState<string | null>(null);
   /** Khi set: hiển thị danh sách 120 ngày để thiết lập cho cấp này */
   const [selectedLevelForDays, setSelectedLevelForDays] = useState<string | null>(null);
+  const [selectedTrackWeekIndex, setSelectedTrackWeekIndex] = useState(0);
   const [trackForm, setTrackForm] = useState({
     level_symbol: 'A',
     day_no: 1,
@@ -72,6 +77,7 @@ const AdminPage: React.FC = () => {
     speed_seconds: 1.2,
     jsonFile: null as File | null,
     questionsFromJson: null as Question[] | null,
+    editingId: null as string | null,
   });
 
   const saveTrackExercises = (list: TrackExerciseEntry[]) => {
@@ -79,21 +85,24 @@ const AdminPage: React.FC = () => {
     localStorage.setItem('ucmas_track_exercises', JSON.stringify(list));
   };
 
-  const openCreateModal = (levelSymbol: string, dayNo?: number) => {
+  const openCreateModal = (levelSymbol: string, dayNo?: number, editId?: string) => {
     setModalPresetLevel(levelSymbol);
     const day = dayNo ?? 1;
-    const existing = trackExercises.find(e => e.level_symbol === levelSymbol && e.day_no === day);
+    const byDay = trackExercises.filter(e => e.level_symbol === levelSymbol && e.day_no === day);
+    const existing = editId ? byDay.find(e => e.id === editId) : null;
+    const defaultsFrom = existing ?? byDay[byDay.length - 1] ?? null;
     setTrackForm({
       level_symbol: levelSymbol,
       day_no: day,
-      mode: (existing?.mode as 'visual' | 'audio' | 'flash') ?? 'visual',
-      question_count: existing?.question_count ?? 20,
-      difficulty: existing?.difficulty ?? 'basic',
-      digits: existing?.digits ?? 2,
-      rows: existing?.rows ?? 5,
-      speed_seconds: existing?.speed_seconds ?? 1.2,
+      mode: (defaultsFrom?.mode as 'visual' | 'audio' | 'flash') ?? 'visual',
+      question_count: defaultsFrom?.question_count ?? 20,
+      difficulty: defaultsFrom?.difficulty ?? 'basic',
+      digits: defaultsFrom?.digits ?? 2,
+      rows: defaultsFrom?.rows ?? 5,
+      speed_seconds: defaultsFrom?.speed_seconds ?? 1.2,
       jsonFile: null,
       questionsFromJson: existing?.questions ?? null,
+      editingId: editId ?? null,
     });
     setModalOpen(true);
   };
@@ -109,7 +118,7 @@ const AdminPage: React.FC = () => {
       ? trackForm.questionsFromJson
       : undefined;
     const entry: TrackExerciseEntry = {
-      id: `te-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: trackForm.editingId || `te-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       level_symbol: trackForm.level_symbol,
       day_no: trackForm.day_no,
       mode: trackForm.mode,
@@ -122,11 +131,16 @@ const AdminPage: React.FC = () => {
       questions,
       created_at: new Date().toISOString(),
     };
-    const rest = trackExercises.filter(
-      e => !(e.level_symbol === trackForm.level_symbol && e.day_no === trackForm.day_no)
-    );
-    saveTrackExercises([...rest, entry]);
+    const next = trackForm.editingId
+      ? trackExercises.map(e => (e.id === trackForm.editingId ? entry : e))
+      : [...trackExercises, entry];
+    saveTrackExercises(next);
     closeModal();
+  };
+
+  const deleteTrackExercise = (id: string) => {
+    if (!window.confirm('Xóa bài luyện tập này?')) return;
+    saveTrackExercises(trackExercises.filter(e => e.id !== id));
   };
 
   const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,14 +382,20 @@ const AdminPage: React.FC = () => {
                 {selectedLevelForDays == null ? (
                     <>
                         <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">Thiết kế lộ trình luyện tập</h3>
-                        <p className="text-gray-500 text-sm mb-8 px-2">Chọn cấp độ và bấm Thiết lập để cấu hình bài luyện tập cho từng ngày (1–120). Bài từ file JSON sẽ giao đúng đề cho học sinh.</p>
+                        <p className="text-gray-500 text-sm mb-8 px-2">Chọn cấp độ và bấm Thiết lập để cấu hình bài luyện tập cho lộ trình mới (1–96), chia 16 tuần (mỗi tuần 6 ngày). Có thể thêm nhiều bài trong 1 ngày.</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 px-2">
                             {LEVEL_SYMBOLS_ORDER.map((symbol) => {
-                                const count = trackExercises.filter(e => e.level_symbol === symbol).length;
+                                const daysConfigured = new Set(
+                                  trackExercises
+                                    .filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS)
+                                    .map(e => e.day_no)
+                                ).size;
+                                const totalExercises = trackExercises.filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS).length;
                                 return (
                                     <div key={symbol} className="bg-gray-50 rounded-2xl border-2 border-gray-100 p-6 flex flex-col items-center justify-center min-h-[140px] hover:border-ucmas-blue/30 transition-colors">
-                                        <div className="text-2xl font-heading font-black text-ucmas-blue mb-2">Cấp {symbol}</div>
-                                        {count > 0 && <div className="text-xs text-gray-500 mb-3">{count} ngày đã thiết lập</div>}
+                                        <div className="text-2xl font-heading font-black text-ucmas-blue mb-2">{getLevelLabel(symbol)}</div>
+                                        {daysConfigured > 0 && <div className="text-xs text-gray-500 mb-1">{daysConfigured} ngày đã thiết lập</div>}
+                                        {totalExercises > 0 && <div className="text-[10px] text-gray-400 mb-3">{totalExercises} bài</div>}
                                         <button
                                             type="button"
                                             onClick={() => setSelectedLevelForDays(symbol)}
@@ -397,34 +417,107 @@ const AdminPage: React.FC = () => {
                         >
                             ← Quay lại chọn cấp độ
                         </button>
-                        <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">Cấp {selectedLevelForDays} — 120 ngày</h3>
-                        <p className="text-gray-500 text-sm mb-6 px-2">Bấm vào từng ngày để thiết lập bài luyện tập. Ngày đã thiết lập hiển thị tích xanh và tóm tắt.</p>
-                        <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-12 gap-2 px-2">
-                            {Array.from({ length: 120 }, (_, i) => i + 1).map((day) => {
-                                const ex = trackExercises.find(e => e.level_symbol === selectedLevelForDays && e.day_no === day);
-                                const modeLabel = ex ? (MODES.find(m => m.id === ex.mode)?.label ?? ex.mode) : '';
-                                const diffLabel = ex ? (DIFFICULTIES.find(d => d.id === ex.difficulty)?.label ?? ex.difficulty) : '';
-                                const summary = ex ? `${modeLabel}, ${ex.question_count} câu, ${diffLabel}` : '';
-                                return (
-                                    <button
-                                        key={day}
-                                        type="button"
-                                        onClick={() => openCreateModal(selectedLevelForDays, day)}
-                                        className={`rounded-xl border-2 p-3 text-left min-h-[72px] flex flex-col justify-center transition ${
-                                            ex
-                                                ? 'border-ucmas-green bg-green-50/80 hover:bg-green-50'
-                                                : 'border-gray-200 bg-gray-50 hover:border-ucmas-blue hover:bg-ucmas-blue/5'
-                                        }`}
-                                    >
-                                        <span className="flex items-center gap-1.5 font-heading font-bold text-gray-800">
-                                            {ex && <span className="text-ucmas-green text-lg" title="Đã thiết lập">✓</span>}
-                                            Ngày {day}
-                                        </span>
-                                        {summary && <span className="text-[10px] text-gray-600 mt-0.5 truncate" title={summary}>{summary}</span>}
-                                    </button>
-                                );
-                            })}
+                        <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">{getLevelLabel(selectedLevelForDays)} — 16 tuần (96 ngày)</h3>
+                        <p className="text-gray-500 text-sm mb-6 px-2">Chọn tuần, sau đó bấm vào ngày để thêm bài. Mỗi ngày có thể có nhiều bài (nhấn “+ Thêm bài”).</p>
+
+                        <div className="flex gap-2 flex-wrap items-center px-2 mb-5">
+                          <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mr-2">Chọn tuần</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1">
+                            {Array.from({ length: TRACK_TOTAL_WEEKS }, (_, i) => i).map((wIdx) => (
+                              <button
+                                key={wIdx}
+                                type="button"
+                                onClick={() => setSelectedTrackWeekIndex(wIdx)}
+                                className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${
+                                  selectedTrackWeekIndex === wIdx
+                                    ? 'bg-ucmas-blue text-white shadow'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                Tuần {wIdx + 1}
+                              </button>
+                            ))}
+                          </div>
                         </div>
+
+                        {(() => {
+                          const startDay = selectedTrackWeekIndex * TRACK_DAYS_PER_WEEK + 1;
+                          const days = Array.from({ length: TRACK_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= TRACK_TOTAL_DAYS);
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
+                              {days.map((day) => {
+                                const dayList = trackExercises.filter(e => e.level_symbol === selectedLevelForDays && e.day_no === day);
+                                const summary = dayList.length
+                                  ? dayList
+                                      .map(ex => `${MODES.find(m => m.id === ex.mode)?.label ?? ex.mode} • ${ex.question_count} câu`)
+                                      .slice(0, 2)
+                                      .join(' · ')
+                                  : 'Chưa có bài';
+                                return (
+                                  <div
+                                    key={day}
+                                    className={`rounded-2xl border-2 p-5 bg-white shadow-sm ${
+                                      dayList.length ? 'border-ucmas-blue/30' : 'border-gray-100'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-400">
+                                          Tuần {selectedTrackWeekIndex + 1} • Ngày {((day - 1) % TRACK_DAYS_PER_WEEK) + 1}
+                                        </div>
+                                        <div className="text-lg font-heading font-black text-gray-800 mt-1">Tổng ngày {day}</div>
+                                        <div className="text-xs text-gray-600 mt-1 truncate" title={summary}>{summary}</div>
+                                        {dayList.length > 2 && <div className="text-[10px] text-gray-400 mt-1">+{dayList.length - 2} bài khác</div>}
+                                      </div>
+                                      <div className="flex flex-col gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => openCreateModal(selectedLevelForDays, day)}
+                                          className="px-4 py-2 bg-ucmas-blue text-white rounded-xl text-[10px] font-heading font-black uppercase shadow hover:bg-blue-700 transition"
+                                        >
+                                          + Thêm bài
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {dayList.length > 0 && (
+                                      <div className="mt-4 space-y-2">
+                                        {dayList.map(ex => (
+                                          <div key={ex.id} className="flex items-center justify-between gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                                            <div className="min-w-0">
+                                              <div className="text-xs font-heading font-bold text-gray-800 truncate">
+                                                {MODES.find(m => m.id === ex.mode)?.label ?? ex.mode} • {ex.question_count} câu
+                                              </div>
+                                              <div className="text-[10px] text-gray-500 truncate">
+                                                {DIFFICULTIES.find(d => d.id === ex.difficulty)?.label ?? ex.difficulty} • {ex.digits} chữ số • {ex.rows} dòng • {ex.source === 'json_upload' ? 'JSON' : 'Tự sinh'}
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-2 shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => openCreateModal(selectedLevelForDays, day, ex.id)}
+                                                className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
+                                              >
+                                                Sửa
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => deleteTrackExercise(ex.id)}
+                                                className="px-3 py-1.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100"
+                                              >
+                                                Xóa
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                     </>
                 )}
                 {trackExercises.length > 0 && selectedLevelForDays == null && (
@@ -466,10 +559,44 @@ const AdminPage: React.FC = () => {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeModal}>
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                     <div className="sticky top-0 bg-white border-b border-gray-100 px-8 py-6 flex justify-between items-center rounded-t-3xl z-10">
-                        <h3 className="text-xl font-heading font-black text-gray-800 uppercase tracking-tight">Thiết lập ngày {trackForm.day_no} — Cấp {trackForm.level_symbol}</h3>
+                        <h3 className="text-xl font-heading font-black text-gray-800 uppercase tracking-tight">Thiết lập ngày {trackForm.day_no} — {getLevelLabel(trackForm.level_symbol)}</h3>
                         <button type="button" onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
                     </div>
                     <form onSubmit={handleTrackFormSubmit} className="p-8 space-y-5">
+                        {(() => {
+                          const list = trackExercises.filter(e => e.level_symbol === trackForm.level_symbol && e.day_no === trackForm.day_no);
+                          if (list.length === 0) return null;
+                          return (
+                            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                              <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500 mb-3">
+                                Bài đã có trong ngày {trackForm.day_no} ({list.length})
+                              </div>
+                              <div className="space-y-2">
+                                {list.map(ex => (
+                                  <div key={ex.id} className="flex items-center justify-between gap-2 bg-white border border-gray-100 rounded-xl px-3 py-2">
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-heading font-bold text-gray-800 truncate">
+                                        {MODES.find(m => m.id === ex.mode)?.label ?? ex.mode} • {ex.question_count} câu
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 truncate">
+                                        {DIFFICULTIES.find(d => d.id === ex.difficulty)?.label ?? ex.difficulty} • {ex.digits} chữ số • {ex.rows} dòng
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                      <button type="button" onClick={() => openCreateModal(trackForm.level_symbol, trackForm.day_no, ex.id)} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50">
+                                        Sửa
+                                      </button>
+                                      <button type="button" onClick={() => deleteTrackExercise(ex.id)} className="px-3 py-1.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100">
+                                        Xóa
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Cấp độ</label>
@@ -478,17 +605,17 @@ const AdminPage: React.FC = () => {
                                     onChange={e => setTrackForm(f => ({ ...f, level_symbol: e.target.value }))}
                                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
                                 >
-                                    {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>Cấp {s}</option>)}
+                                    {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Ngày (1–120)</label>
+                                <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Ngày (1–96)</label>
                                 <input
                                     type="number"
                                     min={1}
-                                    max={120}
+                                    max={TRACK_TOTAL_DAYS}
                                     value={trackForm.day_no}
-                                    onChange={e => setTrackForm(f => ({ ...f, day_no: Math.max(1, Math.min(120, Number(e.target.value) || 1)) }))}
+                                    onChange={e => setTrackForm(f => ({ ...f, day_no: Math.max(1, Math.min(TRACK_TOTAL_DAYS, Number(e.target.value) || 1)) }))}
                                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
                                 />
                             </div>
@@ -591,7 +718,7 @@ const AdminPage: React.FC = () => {
                                 Hủy
                             </button>
                             <button type="submit" className="flex-1 py-3 bg-ucmas-blue text-white font-heading font-black rounded-xl uppercase text-sm hover:bg-blue-700 shadow-lg">
-                                Lưu bài luyện tập
+                                {trackForm.editingId ? 'Cập nhật bài' : 'Lưu bài luyện tập'}
                             </button>
                         </div>
                     </form>

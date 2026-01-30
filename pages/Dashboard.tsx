@@ -5,7 +5,7 @@ import { backend } from '../services/mockBackend';
 import { AttemptResult } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import { practiceService } from '../src/features/practice/services/practiceService';
-import { LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import { getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 
 interface DashboardProps {
   user: UserProfile;
@@ -156,7 +156,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               >
                 <option value="">— Chọn cấp độ —</option>
                 {LEVEL_SYMBOLS_ORDER.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{getLevelLabel(s)}</option>
                 ))}
               </select>
             </div>

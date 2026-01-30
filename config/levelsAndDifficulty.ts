@@ -8,6 +8,24 @@ export const LEVEL_SYMBOLS_ORDER: readonly string[] = ['Z', 'A', 'C', 'D', 'E', 
 
 export type LevelSymbol = (typeof LEVEL_SYMBOLS_ORDER)[number];
 
+/** Nhãn hiển thị tiếng Việt cho cấp độ */
+export function getLevelLabel(symbol: string | undefined | null): string {
+  if (symbol == null || symbol === '') return 'Chưa chọn cấp độ';
+  const map: Record<string, string> = {
+    Z: 'Cơ bản mở rộng',
+    A: 'Cơ bản',
+    C: 'Sơ cấp A',
+    D: 'Sơ cấp B',
+    E: 'Trung cấp A',
+    F: 'Trung cấp B',
+    G: 'Cao cấp A',
+    H: 'Cao cấp B',
+    I: 'Nâng cao',
+    K: 'Xuất sắc',
+  };
+  return map[symbol] ?? 'Cấp độ (không xác định)';
+}
+
 /** Chuyển ký hiệu cấp độ → chỉ số 1–10 (dùng cho API/rule cũ) */
 export function getLevelIndex(symbol: string | undefined | null): number {
   if (symbol == null || symbol === '') return 1;
