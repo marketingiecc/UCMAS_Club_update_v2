@@ -251,7 +251,13 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
+            <div
+              className={`text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center ${
+                flashOverlay === 'Bắt đầu'
+                  ? 'text-[clamp(5.76rem,20.8vw,17.28rem)]'
+                  : 'text-[clamp(7.2rem,26vw,21.6rem)]'
+              } select-none tabular-nums uppercase`}
+            >
               {flashOverlay}
             </div>
           ) : (

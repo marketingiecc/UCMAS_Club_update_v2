@@ -173,7 +173,13 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
+            <div
+              className={`text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center ${
+                flashOverlay === 'Bắt đầu'
+                  ? 'text-[clamp(5.76rem,20.8vw,17.28rem)]'
+                  : 'text-[clamp(7.2rem,26vw,21.6rem)]'
+              } select-none tabular-nums uppercase`}
+            >
               {flashOverlay}
             </div>
           ) : (
@@ -328,7 +334,13 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         {currentQuestion.mode === Mode.FLASH && (
                             <div className="font-heading font-bold text-green-600 text-[clamp(6rem,24vw,16.8rem)] leading-none tracking-[0.06em] text-center px-2 tabular-nums">
                                 {flashOverlay ? (
-                                    <span className="text-purple-600 text-[clamp(6rem,24vw,16.8rem)] uppercase font-heading font-black leading-none tracking-[0.06em] tabular-nums">
+                                    <span
+                                        className={`text-purple-600 ${
+                                            flashOverlay === 'Bắt đầu'
+                                                ? 'text-[clamp(4.8rem,19.2vw,13.44rem)]'
+                                                : 'text-[clamp(6rem,24vw,16.8rem)]'
+                                        } uppercase font-heading font-black leading-none tracking-[0.06em] tabular-nums`}
+                                    >
                                         {flashOverlay}
                                     </span>
                                 ) : flashNumber !== null ? (

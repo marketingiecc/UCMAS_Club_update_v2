@@ -812,7 +812,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
+            <div
+              className={`text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center ${
+                flashOverlay === 'Bắt đầu'
+                  ? 'text-[clamp(5.76rem,20.8vw,17.28rem)]'
+                  : 'text-[clamp(7.2rem,26vw,21.6rem)]'
+              } select-none tabular-nums uppercase`}
+            >
               {flashOverlay}
             </div>
           ) : (
@@ -1004,7 +1010,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                         <div className="text-center w-full h-full flex items-center justify-center min-h-[50vh] px-2">
                             {flashOverlay ? (
                                 <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
-                                    <div className="text-white font-heading font-black text-[clamp(2.5rem,10vw,6rem)] uppercase animate-bounce">
+                                    <div
+                                        className={`text-white font-heading font-black ${
+                                            flashOverlay === 'Bắt đầu'
+                                                ? 'text-[clamp(2rem,8vw,4.8rem)]'
+                                                : 'text-[clamp(2.5rem,10vw,6rem)]'
+                                        } uppercase animate-bounce`}
+                                    >
                                         {flashOverlay}
                                     </div>
                                 </div>
