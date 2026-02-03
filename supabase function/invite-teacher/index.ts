@@ -1,5 +1,17 @@
 /// <reference lib="deno.ns" />
 
+/**
+ * Supabase Edge Function: invite-teacher
+ *
+ * Purpose:
+ * - Admin creates a Teacher account directly (email + password)
+ * - Sets profile.role = 'teacher'
+ *
+ * Required Secrets:
+ * - SUPABASE_URL
+ * - SUPABASE_SERVICE_ROLE_KEY
+ */
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
@@ -9,7 +21,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type InviteTeacherBody = {
+type CreateTeacherBody = {
   email: string;
   full_name: string;
   password: string;
@@ -44,14 +56,9 @@ Deno.serve(async (req) => {
   // 1) Verify caller and enforce admin-only access.
   const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
   if (userErr || !userData?.user) {
-    const msg = userErr?.message ?? "Unknown auth error";
-    const isJwt = /jwt|expired|invalid.*token/i.test(msg);
     return json(401, {
       error: "Invalid token",
-      details: msg,
-      hint: isJwt
-        ? "Token hết hạn hoặc không thuộc project này. Đăng xuất, đăng nhập lại Admin; kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY trùng project với Edge Function."
-        : undefined,
+      details: userErr?.message ?? "Unknown auth error",
     });
   }
 
@@ -68,9 +75,9 @@ Deno.serve(async (req) => {
   }
 
   // 2) Parse and validate body.
-  let body: InviteTeacherBody;
+  let body: CreateTeacherBody;
   try {
-    body = (await req.json()) as InviteTeacherBody;
+    body = (await req.json()) as CreateTeacherBody;
   } catch {
     return json(400, { error: "Invalid JSON body" });
   }
@@ -93,7 +100,6 @@ Deno.serve(async (req) => {
   });
 
   if (createdErr) return json(409, { error: createdErr.message });
-
   const createdUser = createdData.user;
   if (!createdUser) return json(500, { error: "Create user succeeded but no user returned" });
 

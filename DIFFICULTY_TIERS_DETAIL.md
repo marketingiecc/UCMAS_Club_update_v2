@@ -25,6 +25,10 @@ Nhin tinh (visual)
 - Nang cao: digits 2-4, rows 6-15, question_count 30-80
 - Vuot troi: digits 3-6, rows 8-25, question_count 50-120
 
+Ghi chu (Nhin tinh):
+- `difficulty` la khung goi y theo `digits/rows/question_count`. Khi sinh de thuc te can ap dung **quy tac theo cap do** (phan bo phep tru theo cau, rang buoc tong tich luy/ket qua).
+- Cac rule dac thu (vi du: danh sach cau khong co phep tru; UCMAS50 guard theo hang don vi cua tong tich luy) lam tang do kho va can duoc tinh den khi phan loai.
+
 Nghe tinh (audio)
 - Co ban: digits 1-2, rows 3-10, question_count 20-50, speed_seconds 1.50-2.50
 - Nang cao: digits 2-4, rows 5-18, question_count 30-80, speed_seconds 0.80-1.50

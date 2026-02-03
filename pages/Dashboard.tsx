@@ -22,6 +22,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   const [phone, setPhone] = useState(user.phone || '');
   const [levelSymbol, setLevelSymbol] = useState<LevelSymbol | ''>((user.level_symbol as LevelSymbol) || '');
   const [className, setClassName] = useState(user.class_name || '');
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+  const [classQuery, setClassQuery] = useState(user.class_name || '');
   const [centerId, setCenterId] = useState(user.center_id || '');
   const [centerName, setCenterName] = useState(user.center_name || '');
   const [centers, setCenters] = useState<Array<{ id: string; name: string }>>([]);
@@ -43,6 +45,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
     setPhone(user.phone || '');
     setLevelSymbol((user.level_symbol as LevelSymbol) || '');
     setClassName(user.class_name || '');
+    setClassQuery(user.class_name || '');
     setCenterId(user.center_id || '');
     setCenterName(user.center_name || '');
     setCenterQuery(user.center_name || '');
@@ -53,6 +56,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       .getCenters()
       .then((list) => setCenters(list.map((c: any) => ({ id: c.id, name: c.name }))))
       .catch(() => setCenters([]));
+  }, []);
+
+  useEffect(() => {
+    backend
+      .getClasses()
+      .then((list: any[]) => setClasses((list || []).map((c: any) => ({ id: c.id, name: c.name }))))
+      .catch(() => setClasses([]));
   }, []);
 
   useEffect(() => {
@@ -177,11 +187,41 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Lớp</label>
               <input
                 type="text"
-                value={className}
-                onChange={(e) => setClassName(e.target.value)}
+                value={classQuery}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setClassQuery(v);
+                  setClassName(v);
+                }}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                placeholder="Lớp"
+                placeholder="Tìm lớp..."
+                list="ucmas-classes"
               />
+              <datalist id="ucmas-classes">
+                {classes.map((c) => (
+                  <option key={c.id} value={c.name} />
+                ))}
+              </datalist>
+              <div className="mt-2">
+                <select
+                  value={classes.find((c) => c.name === className)?.id || ''}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = classes.find((c) => c.id === id);
+                    const name = found?.name || '';
+                    setClassName(name);
+                    setClassQuery(name);
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white"
+                >
+                  <option value="">— Chọn từ danh sách —</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Trung tâm</label>

@@ -80,3 +80,6 @@ for all
 using (public.is_admin())
 with check (public.is_admin());
 
+-- If you added new columns/tables, refresh PostgREST schema cache:
+-- notify pgrst, 'reload schema';
+

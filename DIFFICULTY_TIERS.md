@@ -30,6 +30,10 @@ Ba muc do kho: Co ban, Nang cao, Vuot troi.
   - rows: 8-25
   - question_count: 50-120
 
+Ghi chu:
+- Nhon tinh khong chi phu thuoc `digits/rows` ma con phu thuoc **quy tac ra de theo cap do** (phan bo phep tru theo tung cau, rang buoc tong tich luy/ket qua).
+- Mot so cap do/nhom cau co quy tac **mot so cau khong co phep tru** (cac cau con lai co so phep tru co dinh), va quy tac **UCMAS50 guard** (cam mot so so hang tiep theo theo hang don vi cua tong tich luy). Nhung quy tac nay co the lam de kho hon du du `digits/rows` tuong duong.
+
 ### Nghe tinh (audio)
 
 - Co ban:

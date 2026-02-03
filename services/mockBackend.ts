@@ -70,18 +70,66 @@ export const backend = {
     return await backend.register(email, password, fullName);
   },
 
-  inviteTeacher: async (payload: { email: string; full_name: string; phone?: string }) => {
-    const redirectTo = `${window.location.origin}/auth/resetpass`;
-    const { data, error } = await supabase.functions.invoke('invite-teacher', {
-      body: {
+  createTeacherAccount: async (payload: { email: string; password: string; full_name: string; phone?: string }) => {
+    // Bắt buộc làm mới phiên và chỉ dùng token từ refresh — tránh gửi token hết hạn (401 Invalid JWT).
+    const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+    if (refreshErr) {
+      return { success: false, message: `Phiên hết hạn hoặc lỗi: ${refreshErr.message}. Vui lòng đăng xuất rồi đăng nhập lại bằng tài khoản Admin.` };
+    }
+    const session = refreshData?.session;
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      return {
+        success: false,
+        message: 'Không lấy được token sau khi làm mới phiên. Vui lòng đăng xuất rồi đăng nhập lại bằng tài khoản Admin.',
+      };
+    }
+
+    // Call Edge Function via fetch so we always get response body (useful for 401 root-cause).
+    const endpoint = `${SUPABASE_URL}/functions/v1/invite-teacher`;
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
         email: payload.email,
+        password: payload.password,
         full_name: payload.full_name,
         phone: payload.phone ?? null,
-        redirectTo,
-      },
+      }),
     });
-    if (error) return { success: false, message: error.message };
-    if (!data?.ok) return { success: false, message: data?.error || 'Invite failed' };
+
+    const text = await resp.text().catch(() => '');
+    let parsed: any = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!resp.ok) {
+      const detail = parsed ? JSON.stringify(parsed) : text;
+      // 401: gateway trả {"code":401,"message":"Invalid JWT"} khi token hết hạn; function trả { error, details }
+      if (resp.status === 401) {
+        const isJwtError = (parsed?.message || parsed?.error || parsed?.details || '').toString().toLowerCase().includes('jwt');
+        const shortDetail = parsed?.error || parsed?.message || parsed?.details || '';
+        const serverHint = parsed?.hint;
+        const hint = serverHint || (isJwtError
+          ? ' Đăng xuất, đăng nhập lại bằng tài khoản Admin. Nếu vẫn lỗi: kiểm tra app dùng đúng Supabase project (cùng URL với Edge Function, đúng VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY).'
+          : (shortDetail ? ` Chi tiết: ${shortDetail}.` : ' Đăng xuất rồi đăng nhập lại.'));
+        return {
+          success: false,
+          message: `Lỗi xác thực (401).${shortDetail ? ` ${shortDetail}.` : ''} ${hint}`,
+        };
+      }
+      return { success: false, message: `(${resp.status}) ${detail || resp.statusText}` };
+    }
+
+    const data = parsed;
+    if (!data?.ok) return { success: false, message: data?.error || 'Tạo giáo viên thất bại' };
     return { success: true, user: data.user as { id: string; email?: string } };
   },
 
@@ -266,34 +314,90 @@ export const backend = {
   },
 
   getClasses: async (): Promise<Array<{ id: string; name: string; center_id?: string | null }>> => {
-      const { data, error } = await supabase
+      // Prefer extended columns; fall back if DB/schema cache doesn't have them yet.
+      const full = await supabase
         .from('classes')
         .select('id, name, center_id, start_date, end_date')
         .order('name', { ascending: true });
-      if (error) throw error;
-      return (data || []) as any;
+      if (!full.error) return (full.data || []) as any;
+
+      const msg = full.error.message || '';
+      const missingCol =
+        msg.includes("column classes.start_date does not exist") ||
+        msg.includes("column classes.end_date does not exist") ||
+        msg.includes("Could not find the 'start_date' column") ||
+        msg.includes("Could not find the 'end_date' column");
+      if (!missingCol) throw full.error;
+
+      const basic = await supabase
+        .from('classes')
+        .select('id, name, center_id')
+        .order('name', { ascending: true });
+      if (basic.error) throw basic.error;
+      return (basic.data || []) as any;
   },
 
   // --- Centers (Info management) ---
   getCenters: async (): Promise<Array<{ id: string; name: string; address?: string | null; hotline?: string | null; google_map_url?: string | null; facebook_url?: string | null }>> => {
-      const { data, error } = await supabase
+      // Prefer full projection; if schema cache isn't updated (missing columns), fall back to base columns
+      const full = await supabase
         .from('centers')
         .select('id, name, address, hotline, google_map_url, facebook_url')
         .order('name', { ascending: true });
-      if (error) throw error;
-      return (data || []) as any;
+
+      if (!full.error) return (full.data || []) as any;
+
+      const msg = full.error.message || '';
+      const missingCol =
+        msg.includes("Could not find the 'hotline' column") ||
+        msg.includes("Could not find the 'google_map_url' column") ||
+        msg.includes("Could not find the 'facebook_url' column");
+
+      if (!missingCol) throw full.error;
+
+      const basic = await supabase
+        .from('centers')
+        .select('id, name, address')
+        .order('name', { ascending: true });
+      if (basic.error) throw basic.error;
+      return (basic.data || []) as any;
   },
 
   adminCreateCenter: async (payload: { name: string; hotline?: string; google_map_url?: string; address?: string; facebook_url?: string }) => {
-      const { error } = await supabase.from('centers').insert({
-        name: payload.name,
-        hotline: payload.hotline || null,
-        google_map_url: payload.google_map_url || null,
-        address: payload.address || null,
-        facebook_url: payload.facebook_url || null,
-      } as any);
-      if (error) return { success: false, message: error.message };
-      return { success: true };
+      // Insert and return the created row for immediate UI update.
+      const inserted = await supabase
+        .from('centers')
+        .insert({
+          name: payload.name,
+          hotline: payload.hotline || null,
+          google_map_url: payload.google_map_url || null,
+          address: payload.address || null,
+          facebook_url: payload.facebook_url || null,
+        } as any)
+        .select('id, name, address, hotline, google_map_url, facebook_url')
+        .single();
+
+      if (inserted.error) return { success: false, message: inserted.error.message };
+      return { success: true, center: inserted.data as any };
+  },
+
+  adminUpdateCenter: async (centerId: string, payload: { name?: string; hotline?: string; google_map_url?: string; address?: string; facebook_url?: string }) => {
+      const updatePayload: any = {};
+      if (payload.name !== undefined) updatePayload.name = payload.name;
+      if (payload.hotline !== undefined) updatePayload.hotline = payload.hotline || null;
+      if (payload.google_map_url !== undefined) updatePayload.google_map_url = payload.google_map_url || null;
+      if (payload.address !== undefined) updatePayload.address = payload.address || null;
+      if (payload.facebook_url !== undefined) updatePayload.facebook_url = payload.facebook_url || null;
+
+      const updated = await supabase
+        .from('centers')
+        .update(updatePayload)
+        .eq('id', centerId)
+        .select('id, name, address, hotline, google_map_url, facebook_url')
+        .single();
+
+      if (updated.error) return { success: false, message: updated.error.message };
+      return { success: true, center: updated.data as any };
   },
 
   adminCreateClass: async (payload: {
@@ -303,7 +407,7 @@ export const backend = {
       end_date?: string | null;   // YYYY-MM-DD
       schedule: Array<{ day_of_week: number; start_time: string; end_time: string }>;
   }) => {
-      const { data: created, error } = await supabase
+      const insertFull = await supabase
         .from('classes')
         .insert({
           name: payload.name,
@@ -313,6 +417,33 @@ export const backend = {
         } as any)
         .select('id')
         .single();
+
+      let created = insertFull.data as any;
+      let error = insertFull.error as any;
+
+      // If date columns not present yet, retry without them.
+      if (error) {
+        const msg = error.message || '';
+        const missingCol =
+          msg.includes("column classes.start_date does not exist") ||
+          msg.includes("column classes.end_date does not exist") ||
+          msg.includes("Could not find the 'start_date' column") ||
+          msg.includes("Could not find the 'end_date' column");
+
+        if (missingCol) {
+          const insertBasic = await supabase
+            .from('classes')
+            .insert({
+              name: payload.name,
+              center_id: payload.center_id || null,
+            } as any)
+            .select('id')
+            .single();
+          created = insertBasic.data as any;
+          error = insertBasic.error as any;
+        }
+      }
+
       if (error) return { success: false, message: error.message };
       const classId = (created as any)?.id as string | undefined;
       if (!classId) return { success: false, message: 'Không tạo được lớp (missing id)' };
@@ -326,10 +457,177 @@ export const backend = {
             end_time: s.end_time,
           })),
         );
-        if (schedErr) return { success: false, message: schedErr.message };
+        if (schedErr) {
+          const msg = schedErr.message || '';
+          const missingTable =
+            msg.includes("Could not find the table 'public.class_schedules'") ||
+            msg.includes("relation \"public.class_schedules\" does not exist") ||
+            msg.includes("relation \"class_schedules\" does not exist");
+          if (!missingTable) return { success: false, message: schedErr.message };
+
+          // If schedule table isn't available yet, still succeed creating the class.
+          return {
+            success: true,
+            id: classId,
+            warning:
+              "Lớp đã được tạo nhưng chưa lưu được lịch học vì bảng `class_schedules` chưa tồn tại hoặc schema cache chưa reload. Hãy chạy SQL tạo bảng và reload schema cache.",
+          };
+        }
       }
 
       return { success: true, id: classId };
+  },
+
+  adminUpdateClass: async (classId: string, payload: {
+      name: string;
+      center_id?: string | null;
+      start_date?: string | null;
+      end_date?: string | null;
+      schedule: Array<{ day_of_week: number; start_time: string; end_time: string }>;
+  }) => {
+      // Update class (prefer with dates; fall back if columns missing)
+      const updateFull = await supabase
+        .from('classes')
+        .update({
+          name: payload.name,
+          center_id: payload.center_id || null,
+          start_date: payload.start_date || null,
+          end_date: payload.end_date || null,
+        } as any)
+        .eq('id', classId)
+        .select('id')
+        .single();
+
+      let error = updateFull.error as any;
+      if (error) {
+        const msg = error.message || '';
+        const missingCol =
+          msg.includes("column classes.start_date does not exist") ||
+          msg.includes("column classes.end_date does not exist") ||
+          msg.includes("Could not find the 'start_date' column") ||
+          msg.includes("Could not find the 'end_date' column");
+        if (missingCol) {
+          const updateBasic = await supabase
+            .from('classes')
+            .update({
+              name: payload.name,
+              center_id: payload.center_id || null,
+            } as any)
+            .eq('id', classId)
+            .select('id')
+            .single();
+          error = updateBasic.error as any;
+        }
+      }
+      if (error) return { success: false, message: error.message };
+
+      // Replace schedules (best-effort)
+      if (payload.schedule) {
+        // If table missing, return warning but keep class update success
+        const del = await supabase.from('class_schedules').delete().eq('class_id', classId);
+        if (del.error) {
+          const msg = del.error.message || '';
+          const missingTable =
+            msg.includes("Could not find the table 'public.class_schedules'") ||
+            msg.includes("relation \"public.class_schedules\" does not exist") ||
+            msg.includes("relation \"class_schedules\" does not exist");
+          if (!missingTable) return { success: false, message: del.error.message };
+          return {
+            success: true,
+            warning:
+              "Đã cập nhật lớp nhưng chưa lưu được lịch học vì bảng `class_schedules` chưa tồn tại hoặc schema cache chưa reload.",
+          };
+        }
+
+        if (payload.schedule.length > 0) {
+          const ins = await supabase.from('class_schedules').insert(
+            payload.schedule.map((s) => ({
+              class_id: classId,
+              day_of_week: s.day_of_week,
+              start_time: s.start_time,
+              end_time: s.end_time,
+            })),
+          );
+          if (ins.error) return { success: false, message: ins.error.message };
+        }
+      }
+
+      return { success: true };
+  },
+
+  adminUpdateTeacherProfile: async (teacherId: string, payload: { full_name: string; phone?: string | null }) => {
+      const updated = await supabase
+        .from('profiles')
+        .update({ full_name: payload.full_name, phone: payload.phone || null } as any)
+        .eq('id', teacherId)
+        .select('id')
+        .single();
+      if (updated.error) return { success: false, message: updated.error.message };
+      return { success: true };
+  },
+
+  // --- Admin helper queries (for dashboard lists) ---
+  getActiveClassStudentsRows: async (classIds: string[]): Promise<Array<{ class_id: string; student_id: string }>> => {
+      if (!classIds.length) return [];
+      const { data, error } = await supabase
+        .from('class_students')
+        .select('class_id, student_id, left_at')
+        .in('class_id', classIds)
+        .is('left_at', null);
+      if (error) {
+        const msg = error.message || '';
+        const missingTable =
+          msg.includes("Could not find the table 'public.class_students'") ||
+          msg.includes("relation \"public.class_students\" does not exist") ||
+          msg.includes("relation \"class_students\" does not exist");
+        if (missingTable) return [];
+        throw error;
+      }
+      return (data || []).map((r: any) => ({ class_id: r.class_id, student_id: r.student_id }));
+  },
+
+  getClassSchedulesByClassIds: async (classIds: string[]): Promise<Array<{ class_id: string; day_of_week: number; start_time: string; end_time: string }>> => {
+      if (!classIds.length) return [];
+      const { data, error } = await supabase
+        .from('class_schedules')
+        .select('class_id, day_of_week, start_time, end_time')
+        .in('class_id', classIds);
+      if (error) {
+        const msg = error.message || '';
+        const missingTable =
+          msg.includes("Could not find the table 'public.class_schedules'") ||
+          msg.includes("relation \"public.class_schedules\" does not exist") ||
+          msg.includes("relation \"class_schedules\" does not exist");
+        if (missingTable) return [];
+        throw error;
+      }
+      return (data || []) as any;
+  },
+
+  getActiveTeacherClassLinksByClassIds: async (classIds: string[]): Promise<Array<{ class_id: string; teacher_id: string }>> => {
+      if (!classIds.length) return [];
+      const { data, error } = await supabase
+        .from('teacher_classes')
+        .select('class_id, teacher_id, unassigned_at')
+        .in('class_id', classIds)
+        .is('unassigned_at', null);
+      if (error) throw error;
+      return (data || []).map((r: any) => ({ class_id: r.class_id, teacher_id: r.teacher_id }));
+  },
+
+  getTeacherNamesByIds: async (teacherIds: string[]): Promise<Array<{ id: string; full_name: string; email?: string }>> => {
+      if (!teacherIds.length) return [];
+      // Prefer full_name + email; fall back to just full_name if email column doesn't exist.
+      const full = await supabase.from('profiles').select('id, full_name, email').in('id', teacherIds);
+      if (!full.error) return (full.data || []) as any;
+
+      const msg = full.error.message || '';
+      const missingEmail = msg.includes('column "email" does not exist') || msg.includes("Could not find the 'email' column");
+      if (!missingEmail) throw full.error;
+
+      const basic = await supabase.from('profiles').select('id, full_name').in('id', teacherIds);
+      if (basic.error) throw basic.error;
+      return (basic.data || []) as any;
   },
 
   getTeacherActiveClassIds: async (teacherId: string): Promise<string[]> => {

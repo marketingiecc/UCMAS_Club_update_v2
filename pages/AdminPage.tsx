@@ -319,10 +319,6 @@ const AdminPage: React.FC = () => {
                 <span>Quản lý Luyện Tập</span>
                 <span>🛠️</span>
             </button>
-            <button onClick={() => navigate('/admin/teachers')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-sm flex items-center justify-between">
-                <span>Quản lý Giáo viên</span>
-                <span>👩‍🏫</span>
-            </button>
             <button onClick={() => navigate('/admin/progress')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100 shadow-sm flex items-center justify-between">
                 <span>Tiến trình Học sinh</span>
                 <span>📌</span>

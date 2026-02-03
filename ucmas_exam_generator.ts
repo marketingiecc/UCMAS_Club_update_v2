@@ -89,7 +89,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 51 - 75",
         "form": "1 chữ số 4 dòng (4 chữ số)",
-        "minus": "Phép trừ xuất hiện 1 lần/ câu ở 5 câu liên tiếp sau câu 51, 57, 63, 69.",
+        "minus": "Câu 51, 57, 63, 69 không xuất hiện phép trừ, các câu còn lại phép trừ xuất hiện 1 lần/ câu.",
         "principles": {
           "1": "Tổng tích luỹ luôn <10 và không xảy ra trường hợp: \n  - Trừ: 5-4, 6-4, 7-4, 8-4, 5-3, 6-3, 7-3, 5-2, 6-2, 5-1.\n  \n  Kết quả: 0<kết quả<10",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
@@ -98,7 +98,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 76 - 100",
         "form": "1 chữ số 4 dòng (4 chữ số)",
-        "minus": "Phép trừ xuất hiện 1 lần/ câu ở 5 câu liên tiếp sau câu 76, 82, 88, 94.",
+        "minus": "Câu 76, 82, 88, 94 không xuất hiện phép trừ, các câu còn lại phép trừ xuất hiện 1 lần/ câu.",
         "principles": {
           "1": "Tổng tích luỹ luôn <10\n  Kết quả: 0<kết quả<10",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
@@ -107,16 +107,16 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 101 - 125",
         "form": "1 chữ số 3 dòng (3 chữ số)",
-        "minus": "Phép trừ xuất hiện ở câu chẵn.Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 1 lần ở những câu chẵn.",
         "principles": {
           "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
-        "title": "Từ câu 125 - 150",
+        "title": "Từ câu 126 - 150",
         "form": "1 chữ số 4 dòng (4 chữ số)",
-        "minus": "Phép trừ xuất hiện 1 lần/ câu ở 5 câu liên tiếp sau câu 126, 132, 138, 144. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Câu 126, 132, 138, 144 không xuất hiện phép trừ, các câu còn lại phép trừ xuất hiện 2 lần/ câu và Không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
@@ -153,7 +153,7 @@ const RULEBOOK_RAW: Array<{
         "form": "1 chữ số 3 dòng (3 chữ số)",
         "minus": "Phép trừ xuất hiện 1 lần ở những câu chẵn.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<50",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
@@ -162,61 +162,61 @@ const RULEBOOK_RAW: Array<{
         "form": "1 chữ số 4 dòng (4 chữ số)",
         "minus": "Phép trừ xuất hiện 1 lần ở những câu lẻ.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<51",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 51 - 75",
         "form": "1 chữ số 5 dòng (5 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<52",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 76 - 100",
         "form": "1 chữ số 5 dòng (5 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<53",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 101 - 125",
         "form": "1 chữ số 6 dòng (6 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<54",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 125 - 150",
         "form": "1 chữ số 6 dòng (6 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<55",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 151 - 175",
         "form": "1 chữ số 6 dòng (6 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<56",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       },
       {
         "title": "Từ câu 176 - 200",
         "form": "1 chữ số 7 dòng (7 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
-          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,7,8,9.\n  2. Kết quả: 0<kết quả<57",
+          "1": "Tổng tích luỹ luôn <50 và: \n  - Khi tổng tích luỹ có hàng đơn vị bằng 5 thì số hạng tiếp theo khác 6,7,8,9. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 6 thì số hạng tiếp theo khác 6,7,8. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 7 thì số hạng tiếp theo khác 6,7. \n  - Khi tổng tích luỹ có hàng đơn vị bằng 8 thì số hạng tiếp theo khác 6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 1 thì số hạng tiếp theo sẽ không phải là -6.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 2 thì số hạng tiếp theo sẽ không phải là -6, -7.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 3 thì số hạng tiếp theo sẽ không phải là -6, -7,-8.\n  - Khi tổng tích luỹ là một số có 2 chữ số có số cuối là 4 thì số hạng tiếp theo sẽ không phải là -6,-7, -8, -9.\n  2. Kết quả: 0<kết quả<50",
           "3": "Số hạng đầu tiên luôn dương\nKhông xuất hiện dấu \"-\" ở các số hạng liên tiếp"
         }
       }
@@ -251,7 +251,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 51 - 75",
         "form": "1 đến 2 chữ số 5 dòng (6 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -261,7 +261,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 76 - 100",
         "form": "1 đến 2 chữ số 5 dòng (6 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -271,7 +271,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 101 - 125",
         "form": "1 đến 2 chữ số 6 dòng (7 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -281,7 +281,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 126 - 150",
         "form": "1đến 2 chữ số 7 dòng (8 chữ số)",
-        "minus": "Phép trừ xuất hiện 2 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 2 lần ở những câu lẻ và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -291,7 +291,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 151 - 175",
         "form": "1 đến 2 chữ số 8 dòng (9 chữ số)",
-        "minus": "Phép trừ xuất hiện 3 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 3 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -301,7 +301,7 @@ const RULEBOOK_RAW: Array<{
       {
         "title": "Từ câu 175 - 200",
         "form": "1 đến 2 chữ số 9 dòng (10 chữ số)",
-        "minus": "Phép trừ xuất hiện 3 lần ở những câu chẵn. Không xuất hiện 2 dấu \"-\" liên tiếp.",
+        "minus": "Phép trừ xuất hiện 3 lần ở những câu chẵn và không xuất hiện 2 phép trừ liên tiếp trong câu đó.",
         "principles": {
           "1": "Số có 2 chữ số xuất hiện 1 lần/ câu, vị trí không cố định.\n Kết quả luôn dương",
           "2": "Không xuất hiện 2 dấu \"-\" liên tiếp.\n Kết quả luôn dương",
@@ -1088,7 +1088,7 @@ function parseConstraints(principles: Record<string, string>): AddSubConstraints
     c.resultMaxExclusive = parseInt(rr[2], 10);
   }
 
-  if (/Khi\s+tổng\s*tích\s*luỹ\s*bằng\s*5\s*thì\s*số\s*hạng\s*tiếp\s*theo\s*khác/i.test(p1)) {
+  if (/Khi\s+tổng\s*tích\s*luỹ\s*(?:có\s*hàng\s*đơn\s*vị\s*)?bằng\s*5\s*thì\s*số\s*hạng\s*tiếp\s*theo\s*khác/i.test(p1)) {
     c.cumulativeMax = 50;
     c.ucmas50Guard = true;
   }
@@ -1101,6 +1101,17 @@ function parseConstraints(principles: Record<string, string>): AddSubConstraints
 
 function parseMinusCountFn(minusText: string, groupRange: Range): MinusCountFn {
   const text = minusText.replace(/\s+/g, " ").trim();
+
+  // Pattern: "Câu 51, 57... không xuất hiện phép trừ, các câu còn lại phép trừ xuất hiện 1 lần/ câu."
+  const mZeroList = text.match(/Câu\s*([\d,\s]+)\s*không\s*xuất\s*hiện\s*phép\s*trừ[^.]*các\s*câu\s*còn\s*lại[^.]*xuất\s*hiện\s*(\d+)\s*lần\s*\/\s*câu/i);
+  if (mZeroList) {
+    const list = mZeroList[1].split(",").map(s => parseInt(s.trim(), 10)).filter(n => !Number.isNaN(n));
+    const base = parseInt(mZeroList[2], 10);
+    return (qNo: number) => {
+      if (qNo < groupRange.start || qNo > groupRange.end) return 0;
+      return list.includes(qNo) ? 0 : base;
+    };
+  }
 
   const mParity = text.match(/xuất\s*hiện\s*(\d+)\s*lần[^.]*câu\s*(chẵn|lẻ)/i);
   if (mParity) {
@@ -1121,7 +1132,7 @@ function parseMinusCountFn(minusText: string, groupRange: Range): MinusCountFn {
     return (qNo: number) => intervals.some(([a,b]) => qNo >= a && qNo <= b) ? cnt : 0;
   }
 
-  const mList = text.match(/Các\s*câu\s*([\d,\s]+)\s*xuất\s*hiện\s*(\d+)\s*dấu\s*trừ\/\s*câu[^,]*,\s*còn\s*lại[^\d]*(\d+)\s*dấu\s*trừ/i);
+  const mList = text.match(/Các\s*câu\s*([\d,\s]+)\s*xuất\s*hiện\s*(\d+)\s*(?:dấu|phép)\s*trừ\/\s*câu[^,]*,\s*còn\s*lại[^\d]*(\d+)\s*(?:dấu|phép)\s*trừ/i);
   if (mList) {
     const list = mList[1].split(",").map(s => parseInt(s.trim(), 10)).filter(n => !Number.isNaN(n));
     const special = parseInt(mList[2], 10);
@@ -1195,17 +1206,18 @@ function digitRange(digits: number): [number, number] {
 
 function applyUCMAS50Guard(partial: number, nextTerm: number): boolean {
   const abs = Math.abs(nextTerm);
-  if (partial === 5 && [6,7,8,9].includes(abs)) return false;
-  if (partial === 6 && [6,7,8].includes(abs)) return false;
-  if (partial === 7 && [6,7].includes(abs)) return false;
-  if (partial === 8 && [6].includes(abs)) return false;
+  const last = Math.abs(partial) % 10;
+  // PDF rule: "Khi tổng tích luỹ có hàng đơn vị bằng X thì số hạng tiếp theo khác ...".
+  if (last === 5 && [6,7,8,9].includes(abs)) return false;
+  if (last === 6 && [6,7,8].includes(abs)) return false;
+  if (last === 7 && [6,7].includes(abs)) return false;
+  if (last === 8 && [6].includes(abs)) return false;
 
-  const last = partial % 10;
   if (partial >= 10) {
     if (last === 1 && nextTerm === -6) return false;
     if (last === 2 && (nextTerm === -6 || nextTerm === -7)) return false;
     if (last === 3 && (nextTerm === -6 || nextTerm === -7 || nextTerm === -8)) return false;
-    if (last === 4 && (nextTerm === -6 || nextTerm === -7 || nextTerm === -8 || nextTerm === -9 || nextTerm === 7 || nextTerm === 8 || nextTerm === 9)) return false;
+    if (last === 4 && (nextTerm === -6 || nextTerm === -7 || nextTerm === -8 || nextTerm === -9)) return false;
   }
   return true;
 }
@@ -1277,15 +1289,26 @@ function generateAddSubQuestion(rng: RNG, qNo: number, spec: AddSubGenSpec): Add
   const negPositions = new Set<number>();
   if (minusRequired > 0) {
     const candidates = Array.from({ length: lines - 1 }, (_, i) => i + 1);
-    const picked = rng.shuffle(candidates).slice(0, Math.min(minusRequired, candidates.length));
-    for (const p of picked) negPositions.add(p);
-  }
-  // repair consecutive minus
-  if (constraints.noConsecutiveMinus) {
-    for (let pos = 1; pos < lines; pos++) {
-      if (negPositions.has(pos) && negPositions.has(pos - 1)) {
-        negPositions.delete(pos);
+    if (constraints.noConsecutiveMinus) {
+      // pick EXACTLY minusRequired positions with no adjacency (if possible)
+      let best: number[] = [];
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const picked: number[] = [];
+        for (const p of rng.shuffle(candidates)) {
+          if (picked.length >= minusRequired) break;
+          if (picked.includes(p - 1) || picked.includes(p + 1)) continue;
+          picked.push(p);
+        }
+        if (picked.length === minusRequired) {
+          best = picked;
+          break;
+        }
+        if (picked.length > best.length) best = picked;
       }
+      for (const p of best) negPositions.add(p);
+    } else {
+      const picked = rng.shuffle(candidates).slice(0, Math.min(minusRequired, candidates.length));
+      for (const p of picked) negPositions.add(p);
     }
   }
 
@@ -1448,6 +1471,11 @@ function buildLevelRules(level: LevelSymbol): ParsedLevelRules {
     const p1 = g.principles["1"];
     const constraints = parseConstraints(g.principles);
     const minusFn = parseMinusCountFn(g.minus || "", range);
+    // Yellow-only rule: some rows specify "Không xuất hiện 2 phép trừ liên tiếp..." in the minus column.
+    // Some sources use the wording "2 dấu '-' liên tiếp" in the minus column.
+    if (/Không\s*xuất\s*hiện\s*2\s*(?:phép\s*trừ|dấu)[\s"\\-]*liên\s*tiếp/i.test(g.minus || "")) {
+      constraints.noConsecutiveMinus = true;
+    }
 
     if (isMulDivForm(form)) {
       const mg = parseMulDivGroup(form, g.title);
