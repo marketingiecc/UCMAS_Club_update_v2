@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 import { canUseTrial, consumeTrial } from '../services/trialUsage';
@@ -13,6 +13,9 @@ import { canUseTrial, consumeTrial } from '../services/trialUsage';
 interface PracticeSessionExamProps {
   user: UserProfile;
 }
+
+const PER_QUESTION_SECONDS = 30;
+const HSG_VISUAL_FIXED_SECONDS = 8 * 60;
 
 const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const { mode } = useParams<{ mode: string }>();
@@ -34,6 +37,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(600);
+  const [initialTimeLimit, setInitialTimeLimit] = useState(600);
 
   // For the 200-question sheet: 4 tabs x 50 questions.
   const QUESTIONS_PER_TAB = 50;
@@ -47,6 +51,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const [audioPlayCounts, setAudioPlayCounts] = useState<Record<number, number>>({});
   const audioPlayCountsRef = useRef<Record<number, number>>({});
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const trialConsumedRef = useRef(false);
   
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -98,21 +103,10 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
   useEffect(() => {
     if (!navState) {
-        navigate('/contests');
-        return;
+      navigate('/contests');
+      return;
     }
 
-    // Consume elite trial on enter (only once per attempt). Contest/assigned/creative are not limited.
-    if (user.role !== 'admin') {
-      const now = new Date();
-      const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
-      const hasActiveLicense = !!(expiry && expiry > now);
-      const isElite = returnTo?.tab === 'elite';
-      if (!hasActiveLicense && isElite) {
-        consumeTrial(user.id, 'elite', currentMode);
-      }
-    }
-    
     let finalQuestions: Question[] = [];
     if (navState.predefinedQuestions && navState.predefinedQuestions.length > 0) {
         finalQuestions = navState.predefinedQuestions;
@@ -187,7 +181,14 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     }
     
     setQuestions(finalQuestions);
-    setTimeLeft(typeof navState.customConfig?.timeLimit === 'number' ? navState.customConfig.timeLimit : 600);
+    const questionCount = finalQuestions.length || (typeof navState.customConfig?.numQuestions === 'number' ? navState.customConfig.numQuestions : 0);
+    const resolvedLimit =
+      (currentMode === Mode.VISUAL && returnTo?.tab === 'elite')
+        ? HSG_VISUAL_FIXED_SECONDS
+        : Math.max(PER_QUESTION_SECONDS, Math.floor(questionCount) * PER_QUESTION_SECONDS);
+
+    setTimeLeft(resolvedLimit);
+    setInitialTimeLimit(resolvedLimit);
     setStatus('running');
   }, [navState, currentMode, navigate]);
 
@@ -289,7 +290,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
       const speed = navState?.customConfig?.speed || 1.0;
       
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-      const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
+      const text = buildListeningPhraseVi(q.operands);
       await playSingleAudio(text, rate);
 
       setIsPlayingAudio(false);
@@ -308,13 +309,26 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
               if (isCorrectAnswer(userNum, q.correctAnswer)) correct++;
           });
 
+          // Consume elite trial only AFTER the user completes the attempt.
+          // This prevents losing the only trial just by navigating into the session.
+          if (!trialConsumedRef.current && user.role !== 'admin') {
+            const now = new Date();
+            const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+            const hasActiveLicense = !!(expiry && expiry > now);
+            const isElite = returnTo?.tab === 'elite';
+            if (!hasActiveLicense && isElite) {
+              consumeTrial(user.id, 'elite', currentMode);
+              trialConsumedRef.current = true;
+            }
+          }
+
           const result = await practiceService.savePracticeAttempt({
               userId: user.id,
               examId: navState?.examId,
               mode: currentMode,
               config: navState?.customConfig || {},
               score: { correct, total: questions.length },
-              duration: 600 - timeLeft,
+              duration: Math.max(0, (initialTimeLimit || 0) - (timeLeft || 0)),
               isCreative: !!navState?.customConfig?.isCreative
           });
 
@@ -408,11 +422,11 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -649,9 +663,9 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
                     {/* LISTENING MODE DISPLAY */}
                     {currentMode === Mode.LISTENING && (
-                        <div className="text-center">
+                        <div className="flex flex-col items-center justify-center text-center">
                             <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-10 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
-                                🎧
+                                🔊
                             </div>
                             <button 
                                onClick={() => playAudio(currentQIndex, true)}

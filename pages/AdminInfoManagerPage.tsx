@@ -35,9 +35,9 @@ const AdminInfoManagerPage: React.FC = () => {
   const location = useLocation();
   const getTabFromQuery = () => {
     const tab = new URLSearchParams(location.search).get('tab');
-    return tab === 'classes' ? tab : 'centers';
+    return tab === 'classes' || tab === 'teachers' ? tab : 'centers';
   };
-  const [activeTab, setActiveTab] = useState<'centers' | 'classes'>(getTabFromQuery());
+  const [activeTab, setActiveTab] = useState<'centers' | 'classes' | 'teachers'>(getTabFromQuery());
   useEffect(() => {
     setActiveTab(getTabFromQuery());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -337,12 +337,9 @@ const AdminInfoManagerPage: React.FC = () => {
     }
   };
 
-  // Optional: support deep link to teacher section via #teachers
-  useEffect(() => {
-    if (location.hash !== '#teachers') return;
-    const el = document.getElementById('teachers');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [location.hash]);
+  const goTab = (tab: 'centers' | 'classes' | 'teachers') => {
+    navigate(`/admin/info?tab=${tab}`);
+  };
 
   const onCreateCenter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -642,7 +639,7 @@ const AdminInfoManagerPage: React.FC = () => {
 
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-2 mb-6 inline-flex">
           <button
-            onClick={() => setActiveTab('centers')}
+            onClick={() => goTab('centers')}
             className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
               activeTab === 'centers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
             }`}
@@ -650,12 +647,20 @@ const AdminInfoManagerPage: React.FC = () => {
             Trung tâm
           </button>
           <button
-            onClick={() => setActiveTab('classes')}
+            onClick={() => goTab('classes')}
             className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
               activeTab === 'classes' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
             Lớp học
+          </button>
+          <button
+            onClick={() => goTab('teachers')}
+            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
+              activeTab === 'teachers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Giáo viên
           </button>
         </div>
 
@@ -812,12 +817,12 @@ const AdminInfoManagerPage: React.FC = () => {
           </div>
         )}
 
-        {/* Teachers section (not a tab) */}
-        <div id="teachers" className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mt-6">
+        {activeTab === 'teachers' && (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-heading font-black text-gray-800">Giáo viên</h2>
-              <div className="text-xs text-gray-500 mt-1">Tạo và quản lý danh sách giáo viên ngay trong trang này.</div>
+              <h2 className="text-lg font-heading font-black text-gray-800">Danh sách giáo viên</h2>
+              <div className="text-xs text-gray-500 mt-1">Danh sách là thông tin chính. Bấm “Thêm giáo viên” để tạo mới.</div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -895,6 +900,7 @@ const AdminInfoManagerPage: React.FC = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* Create Center modal */}
         {createCenterOpen && (

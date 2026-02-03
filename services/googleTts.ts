@@ -2,6 +2,73 @@ function baseLang(lang: string) {
   return (lang || 'vi').split('-')[0]; // vi-VN -> vi
 }
 
+/** Digits 0-9 in Vietnamese (for reading numbers). */
+const VI_DIGITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'] as const;
+
+/**
+ * Convert a number to Vietnamese words for TTS (so "12" is read as "mười hai" not "twelve").
+ * Handles integers and decimals (e.g. 3.5 -> "ba phẩy năm").
+ */
+export function numberToVietnameseWords(n: number): string {
+  if (!Number.isFinite(n)) return 'không';
+  if (n < 0) return 'âm ' + numberToVietnameseWords(-n);
+
+  const intPart = Math.floor(n);
+  const fracPart = n - intPart;
+
+  if (fracPart > 1e-9) {
+    const fracStr = fracPart.toFixed(6).replace(/^0\./, '').replace(/0+$/, '');
+    const intWords = numberToVietnameseWords(intPart);
+    const fracWords = fracStr.split('').map(d => VI_DIGITS[parseInt(d, 10)]).join(' ');
+    return fracWords ? `${intWords} phẩy ${fracWords}` : intWords;
+  }
+
+  const x = intPart;
+  if (x <= 9) return VI_DIGITS[x];
+  if (x <= 19) {
+    if (x === 10) return 'mười';
+    const u = x % 10;
+    if (u === 5) return 'mười lăm';
+    return 'mười ' + VI_DIGITS[u];
+  }
+  if (x <= 99) {
+    const tens = Math.floor(x / 10);
+    const u = x % 10;
+    const t = tens === 1 ? 'mười' : VI_DIGITS[tens] + ' mươi';
+    if (u === 0) return t;
+    if (u === 1) return t + ' mốt';
+    if (u === 5) return t + ' lăm';
+    return t + ' ' + VI_DIGITS[u];
+  }
+  if (x <= 999) {
+    const hundreds = Math.floor(x / 100);
+    const rest = x % 100;
+    const h = VI_DIGITS[hundreds] + ' trăm';
+    if (rest === 0) return h;
+    if (rest <= 9) return h + ' linh ' + VI_DIGITS[rest];
+    return h + ' ' + numberToVietnameseWords(rest);
+  }
+  if (x <= 999_999) {
+    const thousands = Math.floor(x / 1000);
+    const rest = x % 1000;
+    const k = thousands <= 9 ? VI_DIGITS[thousands] + ' nghìn' : numberToVietnameseWords(thousands) + ' nghìn';
+    if (rest === 0) return k;
+    if (rest <= 99) return k + ' linh ' + numberToVietnameseWords(rest);
+    return k + ' ' + numberToVietnameseWords(rest);
+  }
+  // Fallback for very large numbers: spell digits
+  return String(x).split('').map(d => VI_DIGITS[parseInt(d, 10)]).join(' ');
+}
+
+/**
+ * Build the Vietnamese listening phrase for Nghe tính: "Chuẩn bị. [numbers in words]. Bằng."
+ * Use this so TTS reads numbers in Vietnamese instead of English.
+ */
+export function buildListeningPhraseVi(operands: number[]): string {
+  const parts = operands.map(numberToVietnameseWords);
+  return `Chuẩn bị. ${parts.join(', ')}. Bằng.`;
+}
+
 function getBrowserApiKey(): string | null {
   // This project already injects GEMINI_API_KEY into process.env via Vite config.
   // We reuse it (optionally) for Google Cloud Text-to-Speech if that API is enabled.
@@ -37,16 +104,18 @@ function getFptAiApiKey(): string | null {
 function buildGoogleTranslateTtsUrl(
   text: string,
   lang: string,
-  opts?: { host?: 'translate.google.com' | 'translate.googleapis.com'; client?: string }
+  opts?: { host?: 'translate.google.com' | 'translate.googleapis.com'; client?: string; ttsspeed?: number }
 ) {
   const tl = baseLang(lang);
   const host = opts?.host ?? 'translate.google.com';
   const client = opts?.client ?? 'tw-ob';
+  // ttsspeed: 0.24 (slow) to 1.0 (normal) - Google Translate's internal speed param
+  const ttsspeed = opts?.ttsspeed ?? 1.0;
   // Unofficial Google Translate TTS endpoint.
   // NOTE: Some environments block certain hosts/clients; callers should try fallbacks.
   return `https://${host}/translate_tts?ie=UTF-8&client=${encodeURIComponent(client)}&tl=${encodeURIComponent(
     tl
-  )}&q=${encodeURIComponent(text)}`;
+  )}&ttsspeed=${ttsspeed}&q=${encodeURIComponent(text)}`;
 }
 
 export function getGoogleTranslateTtsUrl(text: string, lang: string) {
@@ -463,6 +532,62 @@ export async function playStableTts(
   }
 }
 
+/**
+ * Play TTS using unofficial Google Translate TTS endpoint first.
+ * Falls back to browser SpeechSynthesis when audio playback is blocked/failed.
+ *
+ * IMPORTANT: playbackRate is kept at 1.0 to preserve natural Vietnamese voice.
+ * Changing playbackRate causes the voice to sound distorted (like English reading Vietnamese).
+ */
+export async function playGoogleTranslateTts(
+  text: string,
+  lang: string,
+  _rate: number, // ignored - kept for API compatibility; use ttsspeed in URL instead
+  opts?: { onAudio?: (audio: HTMLAudioElement | null) => void }
+): Promise<void> {
+  const chunks = splitTtsText(text, 160);
+  if (chunks.length === 0) return;
+
+  const onAudio = opts?.onAudio;
+
+  const playAudioElement = (audio: HTMLAudioElement) =>
+    new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(ok);
+      };
+      audio.onended = () => finish(true);
+      audio.onerror = () => finish(false);
+      audio.play().then(() => void 0).catch(() => finish(false));
+    });
+
+  for (const chunk of chunks) {
+    const urls = getGoogleTranslateTtsUrls(chunk, lang);
+    let ok = false;
+    for (const url of urls) {
+      const audio = new Audio(url);
+      // CRITICAL: Keep playbackRate = 1.0 to preserve natural Vietnamese pronunciation.
+      // Setting playbackRate ≠ 1.0 causes pitch shift → sounds like English reading Vietnamese.
+      audio.playbackRate = 1.0;
+      onAudio?.(audio);
+      // eslint-disable-next-line no-await-in-loop
+      ok = await playAudioElement(audio);
+      onAudio?.(null);
+      if (ok) break;
+      try { audio.pause(); } catch { /* ignore */ }
+    }
+
+    if (!ok) {
+      onAudio?.(null);
+      // Browser TTS fallback (prefers Vietnamese female voices when possible)
+      // eslint-disable-next-line no-await-in-loop
+      await speakWithBrowserTts(chunk, lang, 1.0);
+    }
+  }
+}
+
 export function speakWithBrowserTts(text: string, lang: string, rate: number): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -486,6 +611,8 @@ export function speakWithBrowserTts(text: string, lang: string, rate: number): P
         const voices = window.speechSynthesis.getVoices();
         if (!voices || voices.length === 0) return null;
 
+        const name = (v: SpeechSynthesisVoice) => (v.name || '').toLowerCase();
+
         const byLangExact = voices.find(v => (v.lang || '').toLowerCase() === desired) || null;
         if (byLangExact) return byLangExact;
 
@@ -493,8 +620,23 @@ export function speakWithBrowserTts(text: string, lang: string, rate: number): P
         if (byLangBase) return byLangBase;
 
         // Heuristics: sometimes voice.lang is generic or missing but name hints the language.
-        const name = (v: SpeechSynthesisVoice) => (v.name || '').toLowerCase();
         if (desiredBase === 'vi') {
+          // Prefer common Vietnamese female voices on Windows/Edge/Chrome.
+          // Examples: "Microsoft HoaiMy", "HoaiMy", "Mai", etc.
+          const femaleHints = [
+            'hoaimy', // Microsoft HoaiMy - Vietnamese (Vietnam)
+            'hoài', // in case of diacritics in some environments
+            'mai',
+            'female',
+            'woman',
+            'nữ',
+            'nu ',
+          ];
+          for (const h of femaleHints) {
+            const v = voices.find(vv => name(vv).includes(h));
+            if (v) return v;
+          }
+
           return (
             voices.find(v => name(v).includes('vietnam')) ||
             voices.find(v => name(v).includes('việt')) ||

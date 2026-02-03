@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
 import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playGoogleTranslateTts } from '../services/googleTts';
 
 interface ContestExamPageProps {
     user: UserProfile;
@@ -173,7 +173,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
 
   const playSingleAudio = async (text: string, rate: number): Promise<void> => {
     const lang = 'vi-VN';
-    await playStableTts(text, lang, rate, {
+    await playGoogleTranslateTts(text, lang, rate, {
       onAudio: (a) => {
         audioRef.current = a;
       },
@@ -203,7 +203,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
       const q = questions[qIndex];
       const readSpeed = exam?.read_seconds_per_number || exam?.config?.read_speed || 2.0;
       const rate = getSpeechRate(readSpeed);
-      const text = `Chuẩn bị. ${q.operands.join(', ')}. Bằng.`;
+      const text = buildListeningPhraseVi(q.operands);
       await playSingleAudio(text, rate);
 
       setIsPlayingAudio(false);
@@ -251,11 +251,11 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(6rem,22vw,18rem)] select-none">
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -384,8 +384,8 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                 )}
                  {currentMode === Mode.LISTENING && (
                     <div className="text-center">
-                         <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-6 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
-                             🎧
+                         <div className={`w-48 h-48 mx-auto rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-6 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
+                             🔊
                          </div>
                          <p className="text-gray-500 font-bold">{isPlayingAudio ? 'Đang đọc số...' : 'Đã đọc xong'}</p>
                          {!isPlayingAudio && (

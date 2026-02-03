@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Mode, Question, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
 
 interface PracticeMixedSessionProps {
   user: UserProfile;
@@ -126,11 +126,9 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
       setIsPlayingAudio(true);
       cancelBrowserSpeechSynthesis();
 
-      const phrases = { ready: 'Chuẩn bị', equals: 'Bằng' };
-
-      // Adjust rate based on speed
+      // Adjust rate based on speed; use Vietnamese number words so TTS reads in Vietnamese
       const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-      const fullText = `${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`;
+      const fullText = buildListeningPhraseVi(q.operands);
       await playStableTts(fullText, TTS_LANG, rate, {
         onAudio: (a) => {
           audioRef.current = a;
@@ -175,11 +173,11 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-700 font-heading font-bold text-[clamp(2rem,8vw,5rem)] uppercase">
+            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -328,9 +326,9 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
                         })()}
 
                         {currentQuestion.mode === Mode.FLASH && (
-                            <div className="font-heading font-bold text-green-600 text-[clamp(5rem,20vw,14rem)] leading-none tracking-[0.06em] text-center px-2 tabular-nums">
+                            <div className="font-heading font-bold text-green-600 text-[clamp(6rem,24vw,16.8rem)] leading-none tracking-[0.06em] text-center px-2 tabular-nums">
                                 {flashOverlay ? (
-                                    <span className="text-purple-600 text-[clamp(2.5rem,10vw,6rem)] uppercase">
+                                    <span className="text-purple-600 text-[clamp(6rem,24vw,16.8rem)] uppercase font-heading font-black leading-none tracking-[0.06em] tabular-nums">
                                         {flashOverlay}
                                     </span>
                                 ) : flashNumber !== null ? (

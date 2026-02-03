@@ -151,7 +151,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   // Keep inputs within the configured ranges for current selection
   useEffect(() => {
     if (!modeLimits) return;
-    setModeQuestionCount((prev) => clampInt(prev, modeLimits.question_count_min, modeLimits.question_count_max));
+    // Hard rule for "Luyện theo chế độ": 5–30 câu
+    setModeQuestionCount((prev) => clampInt(prev, 5, 30));
 
     const min = modeLimits.speed_seconds_min ?? 0.1;
     const max = modeLimits.speed_seconds_max ?? 1.5;
@@ -182,7 +183,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     const limits = practiceModeSettings.getLimits(levelSym, key, modeDifficulty as DifficultyKey);
     const digits = randInt(clampInt(limits.digits_min, 1, 10), clampInt(limits.digits_max, 1, 10));
     const rows = randInt(clampInt(limits.rows_min, 1, 100), clampInt(limits.rows_max, 1, 100));
-    const qCount = clampInt(modeQuestionCount, limits.question_count_min, limits.question_count_max);
+    // Hard rule for "Luyện theo chế độ": 5–30 câu
+    const qCount = clampInt(modeQuestionCount, 5, 30);
 
     const speedMin = limits.speed_seconds_min ?? 0.1;
     const speedMax = limits.speed_seconds_max ?? 1.5;
@@ -534,7 +536,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Số câu</label>
-                        <input type="number" min={modeLimits?.question_count_min ?? 10} max={modeLimits?.question_count_max ?? 120} value={modeQuestionCount} onChange={(e) => setModeQuestionCount(Number(e.target.value) || 20)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:outline-none transition font-medium" />
+                        <input
+                          type="number"
+                          min={5}
+                          max={30}
+                          value={modeQuestionCount}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setModeQuestionCount(Number.isFinite(n) ? clampInt(n, 5, 30) : 20);
+                          }}
+                          className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:outline-none transition font-medium"
+                        />
                       </div>
                     </div>
                     <div className="px-6 pb-6">
@@ -576,7 +588,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Số câu</label>
-                        <input type="number" min={modeLimits?.question_count_min ?? 10} max={modeLimits?.question_count_max ?? 120} value={modeQuestionCount} onChange={(e) => setModeQuestionCount(Number(e.target.value) || 20)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium" />
+                        <input
+                          type="number"
+                          min={5}
+                          max={30}
+                          value={modeQuestionCount}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setModeQuestionCount(Number.isFinite(n) ? clampInt(n, 5, 30) : 20);
+                          }}
+                          className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:outline-none transition font-medium"
+                        />
                       </div>
                       <div className="text-xs font-heading-bold text-ucmas-red uppercase tracking-wider">Ngôn ngữ: Tiếng Việt</div>
                       <div>
@@ -631,7 +653,17 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Số câu</label>
-                        <input type="number" min={modeLimits?.question_count_min ?? 10} max={modeLimits?.question_count_max ?? 120} value={modeQuestionCount} onChange={(e) => setModeQuestionCount(Number(e.target.value) || 20)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-green focus:outline-none transition font-medium" />
+                        <input
+                          type="number"
+                          min={5}
+                          max={30}
+                          value={modeQuestionCount}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setModeQuestionCount(Number.isFinite(n) ? clampInt(n, 5, 30) : 20);
+                          }}
+                          className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-green focus:outline-none transition font-medium"
+                        />
                       </div>
                       <div>
                         <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Tốc độ hiển thị (s): {modeSpeedDisplay.toFixed(1)}</label>

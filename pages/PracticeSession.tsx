@@ -7,13 +7,19 @@ import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
-import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, playFptAiTts, playStableTts, speakWithBrowserTts, splitTtsText } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, getGoogleTranslateTtsUrl, playGoogleTranslateTts, playStableTts, speakWithBrowserTts, splitTtsText } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 import { trainingTrackService } from '../services/trainingTrackService';
 
 interface PracticeSessionProps {
   user: UserProfile;
 }
+
+const PER_QUESTION_SECONDS = 30;
+const calcTimeLimitSeconds = (questionCount: number) => {
+  const safe = Number.isFinite(questionCount) ? Math.max(0, Math.floor(questionCount)) : 0;
+  return Math.max(PER_QUESTION_SECONDS, safe * PER_QUESTION_SECONDS);
+};
 
 const LANGUAGES = [
     // Ngôn ngữ cố định: Tiếng Việt
@@ -52,6 +58,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const fromHub = locationState?.fromHub;
   const returnTo = locationState?.returnTo;
   const origin = locationState?.origin;
+  const trialConsumedRef = useRef(false);
 
   useEffect(() => {
      if (user.role === 'admin') return;
@@ -91,7 +98,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
      if (!canUseTrial(user.id, area, currentMode, limit)) {
        navigate('/activate');
      }
-  }, [user, currentMode, navigate]);
+  }, [currentMode, navigate, origin, returnTo?.tab, user.allowed_modes, user.id, user.license_expiry, user.role, locationState?.elite]);
 
   const getTheme = (m: Mode) => {
       switch(m) {
@@ -173,21 +180,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     if (!hubConfig) return;
     setIsLoadingRule(true);
     try {
-      // Consume trial attempt (if user has no active license and this is a training flow)
-      if (user.role !== 'admin') {
-        const now = new Date();
-        const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
-        const hasActiveLicense = !!(expiry && expiry > now);
-        if (!hasActiveLicense && origin !== 'contests_creative') {
-          const area: TrialArea | null =
-            returnTo?.tab === 'mode' ? 'mode' :
-            (locationState?.elite ? 'elite' : null);
-          if (area) {
-            consumeTrial(user.id, area, currentMode);
-          }
-        }
-      }
-
       const levelSymbol = hubConfig.level_symbol || selectedLevelSymbol;
       const levelNum = getLevelIndex(levelSymbol);
       const numQuestions = hubConfig.question_count || 20;
@@ -217,7 +209,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
       const preloaded = Array.isArray((hubConfig as any)?.questions) ? ((hubConfig as any).questions as Question[]) : null;
       const generatedQuestions = (preloaded && preloaded.length > 0) ? preloaded : generateExam(config);
-      const examTimeLimit = config.timeLimit || Math.max(300, (generatedQuestions.length || numQuestions) * 15);
+      const examTimeLimit = calcTimeLimitSeconds(generatedQuestions.length || numQuestions);
 
       setQuestions(generatedQuestions);
       setTimeLeft(examTimeLimit);
@@ -271,13 +263,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             const levelNum = getLevelIndex(selectedLevelSymbol);
             const config = getExamConfig(currentMode, levelNum, customRules);
             generatedQuestions = generateExam(config);
-            examTimeLimit = config.timeLimit;
+            examTimeLimit = calcTimeLimitSeconds(generatedQuestions.length);
         } else {
             const exam = await backend.getCustomExamById(selectedExamId);
             if (!exam) throw new Error("Không tìm thấy bài luyện tập.");
             
             generatedQuestions = exam.questions;
-            examTimeLimit = exam.time_limit;
+            examTimeLimit = calcTimeLimitSeconds(generatedQuestions.length);
         }
         
         setQuestions(generatedQuestions);
@@ -314,7 +306,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
       (async () => {
         const rate = getSpeechRate(speed);
-        await playStableTts(langConfig.sample, selectedLang, rate, {
+        await playGoogleTranslateTts(langConfig.sample, selectedLang, rate, {
           onAudio: (a) => {
             audioRef.current = a;
           },
@@ -383,13 +375,12 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   };
 
   const playSingleAudio = async (text: string, rate: number): Promise<void> => {
-    // Test FPT.AI voice ONLY for: "Cuộc thi → ✨ Sáng tạo phép tính → 🎧 Nghe"
+    // Cuộc thi → ✨ Sáng tạo phép tính → 🎧 Nghe: use Google Translate TTS (Vietnamese).
     if (origin === 'contests_creative' && currentMode === Mode.LISTENING) {
-      await playFptAiTts(text, 'vi-VN', rate, {
+      await playGoogleTranslateTts(text, 'vi-VN', rate, {
         onAudio: (a) => {
           audioRef.current = a;
         },
-        voice: 'banmai',
       });
       return;
     }
@@ -410,9 +401,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     
     const q = questions[currentQIndex];
     const rate = getSpeechRate(speed);
-    const phrases = getListeningPhrases(selectedLang);
-    // Single TTS call: reduces autoplay-policy issues and Google blocking retries
-    const text = `${phrases.ready}. ${q.operands.join(', ')}. ${phrases.equals}.`;
+    // Vietnamese phrase with numbers as words so TTS reads in Vietnamese
+    const text = buildListeningPhraseVi(q.operands);
     await playSingleAudio(text, rate);
 
     setIsPlayingAudio(false);
@@ -472,6 +462,23 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           if (!result.success) {
               console.error('Failed to save attempt:', result);
               // Still show results even if save fails
+          }
+
+          // Consume trial attempt only AFTER the user completes the attempt.
+          // This prevents losing attempts by just navigating into the practice session.
+          if (!trialConsumedRef.current && user.role !== 'admin') {
+            const now = new Date();
+            const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
+            const hasActiveLicense = !!(expiry && expiry > now);
+            if (!hasActiveLicense && origin !== 'contests_creative') {
+              const area: TrialArea | null =
+                returnTo?.tab === 'mode' ? 'mode' :
+                (locationState?.elite ? 'elite' : null);
+              if (area) {
+                consumeTrial(user.id, area, currentMode);
+                trialConsumedRef.current = true;
+              }
+            }
           }
 
           // If this run belongs to a roadmap exercise, store per-exercise progress in Supabase
@@ -805,11 +812,11 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
-            <div className="text-gray-700 font-heading font-black text-[clamp(2rem,8vw,5rem)] uppercase">
+            <div className="text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums uppercase">
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,18rem)] select-none tabular-nums">
+            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums">
               {flashNumber ?? ''}
             </div>
           )}
@@ -1023,9 +1030,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
                     {/* LISTENING MODE DISPLAY */}
                     {currentMode === Mode.LISTENING && (
-                        <div className="text-center">
+                        <div className="flex flex-col items-center justify-center text-center">
                             <div className={`w-48 h-48 rounded-full flex items-center justify-center text-7xl text-white shadow-2xl mb-10 transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red shadow-red-100'}`}>
-                                🎧
+                                🔊
                             </div>
                             <button 
                                onClick={playAudio}
