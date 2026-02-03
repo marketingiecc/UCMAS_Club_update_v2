@@ -9,6 +9,7 @@ import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { cancelBrowserSpeechSynthesis, getGoogleTranslateTtsUrl, playFptAiTts, playStableTts, speakWithBrowserTts, splitTtsText } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
+import { trainingTrackService } from '../services/trainingTrackService';
 
 interface PracticeSessionProps {
   user: UserProfile;
@@ -37,6 +38,14 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       language?: string;
       digits?: number;
       rows?: number;
+      questions?: Question[];
+    };
+    pathContext?: {
+      trackId: string;
+      dayId: string;
+      exerciseId: string;
+      levelSymbol: string;
+      dayNo: number;
     };
   };
   const hubConfig = locationState?.config;
@@ -116,6 +125,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(0);
+  const [initialTimeLimit, setInitialTimeLimit] = useState(0);
   
   // Flash States
   const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
@@ -205,11 +215,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         config.flashSpeed = speedSec * 1000;
       }
 
-      const generatedQuestions = generateExam(config);
-      const examTimeLimit = config.timeLimit || Math.max(300, numQuestions * 15);
+      const preloaded = Array.isArray((hubConfig as any)?.questions) ? ((hubConfig as any).questions as Question[]) : null;
+      const generatedQuestions = (preloaded && preloaded.length > 0) ? preloaded : generateExam(config);
+      const examTimeLimit = config.timeLimit || Math.max(300, (generatedQuestions.length || numQuestions) * 15);
 
       setQuestions(generatedQuestions);
       setTimeLeft(examTimeLimit);
+      setInitialTimeLimit(examTimeLimit);
       setStatus('running');
       setCurrentQIndex(0);
       setAnswers({});
@@ -270,6 +282,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         
         setQuestions(generatedQuestions);
         setTimeLeft(examTimeLimit);
+        setInitialTimeLimit(examTimeLimit);
         setStatus('running');
         
         setCurrentQIndex(0);
@@ -423,9 +436,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       if (audioRef.current) audioRef.current.pause(); 
       
       setStatus('finished');
-      if (returnTo?.tab === 'path' && returnTo.pathDay != null) {
-        markPathDayCompleted(user.id, selectedLevelSymbol, returnTo.pathDay);
-      }
 
       try {
           let correct = 0, wrong = 0, skipped = 0;
@@ -438,6 +448,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             else if (isCorrect) correct++;
             else wrong++;
           });
+
+          const durationSeconds = Math.max(0, Math.floor((initialTimeLimit || 0) - (timeLeft || 0)));
 
           const levelNum = getLevelIndex(selectedLevelSymbol);
           const config = getExamConfig(currentMode, levelNum);
@@ -452,7 +464,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                   wrong,
                   skipped,
                   total: questions.length,
-                  duration: (questions.length * 300)
+                  duration: durationSeconds
               },
               answers
           );
@@ -460,6 +472,26 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           if (!result.success) {
               console.error('Failed to save attempt:', result);
               // Still show results even if save fails
+          }
+
+          // If this run belongs to a roadmap exercise, store per-exercise progress in Supabase
+          if (returnTo?.tab === 'path' && locationState?.pathContext?.dayId && locationState?.pathContext?.exerciseId) {
+            const rec = await trainingTrackService.recordExerciseAttempt({
+              userId: user.id,
+              dayId: locationState.pathContext.dayId,
+              exerciseId: locationState.pathContext.exerciseId,
+              correctCount: correct,
+              totalCount: questions.length,
+              durationSeconds,
+              answers,
+            });
+            if (!rec.success) {
+              console.warn('recordExerciseAttempt failed, fallback localStorage:', rec.error);
+              if (returnTo.pathDay != null) markPathDayCompleted(user.id, selectedLevelSymbol, returnTo.pathDay);
+            }
+          } else if (returnTo?.tab === 'path' && returnTo.pathDay != null) {
+            // Fallback legacy behavior
+            markPathDayCompleted(user.id, selectedLevelSymbol, returnTo.pathDay);
           }
       } catch (error: any) {
           console.error('Error submitting exam:', error);

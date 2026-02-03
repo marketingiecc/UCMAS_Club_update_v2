@@ -70,10 +70,25 @@ export const backend = {
     return await backend.register(email, password, fullName);
   },
 
+  inviteTeacher: async (payload: { email: string; full_name: string; phone?: string }) => {
+    const redirectTo = `${window.location.origin}/auth/resetpass`;
+    const { data, error } = await supabase.functions.invoke('invite-teacher', {
+      body: {
+        email: payload.email,
+        full_name: payload.full_name,
+        phone: payload.phone ?? null,
+        redirectTo,
+      },
+    });
+    if (error) return { success: false, message: error.message };
+    if (!data?.ok) return { success: false, message: data?.error || 'Invite failed' };
+    return { success: true, user: data.user as { id: string; email?: string } };
+  },
+
   sendPasswordResetEmail: async (email: string) => {
     // STRICT: Use window.location.origin for redirection base
     const { error } = await supabase.auth.resetPasswordForEmail(email, { 
-      redirectTo: window.location.origin 
+      redirectTo: `${window.location.origin}/auth/resetpass`
     });
     
     if (error) return { success: false, message: error.message };
@@ -222,6 +237,303 @@ export const backend = {
           allowed_modes: [], // Expensive to compute for all users in fallback
           student_code: p.student_code || undefined
       }));
+  },
+
+  // --- Teacher management (Admin) ---
+  getTeachers: async (): Promise<UserProfile[]> => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'teacher')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        email: p.email || '',
+        full_name: p.full_name || '',
+        role: (p.role as any) || 'teacher',
+        created_at: p.created_at || new Date().toISOString(),
+        license_expiry: p.license_expiry || undefined,
+        allowed_modes: [],
+        student_code: p.student_code || undefined,
+        phone: p.phone || undefined,
+        level_symbol: p.level_symbol || undefined,
+        class_name: p.class_name || undefined,
+        center_id: p.center_id || undefined,
+        center_name: p.center_name || undefined,
+        avatar_url: p.avatar_url || undefined,
+      }));
+  },
+
+  getClasses: async (): Promise<Array<{ id: string; name: string; center_id?: string | null }>> => {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('id, name, center_id, start_date, end_date')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data || []) as any;
+  },
+
+  // --- Centers (Info management) ---
+  getCenters: async (): Promise<Array<{ id: string; name: string; address?: string | null; hotline?: string | null; google_map_url?: string | null; facebook_url?: string | null }>> => {
+      const { data, error } = await supabase
+        .from('centers')
+        .select('id, name, address, hotline, google_map_url, facebook_url')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data || []) as any;
+  },
+
+  adminCreateCenter: async (payload: { name: string; hotline?: string; google_map_url?: string; address?: string; facebook_url?: string }) => {
+      const { error } = await supabase.from('centers').insert({
+        name: payload.name,
+        hotline: payload.hotline || null,
+        google_map_url: payload.google_map_url || null,
+        address: payload.address || null,
+        facebook_url: payload.facebook_url || null,
+      } as any);
+      if (error) return { success: false, message: error.message };
+      return { success: true };
+  },
+
+  adminCreateClass: async (payload: {
+      name: string;
+      center_id?: string | null;
+      start_date?: string | null; // YYYY-MM-DD
+      end_date?: string | null;   // YYYY-MM-DD
+      schedule: Array<{ day_of_week: number; start_time: string; end_time: string }>;
+  }) => {
+      const { data: created, error } = await supabase
+        .from('classes')
+        .insert({
+          name: payload.name,
+          center_id: payload.center_id || null,
+          start_date: payload.start_date || null,
+          end_date: payload.end_date || null,
+        } as any)
+        .select('id')
+        .single();
+      if (error) return { success: false, message: error.message };
+      const classId = (created as any)?.id as string | undefined;
+      if (!classId) return { success: false, message: 'Không tạo được lớp (missing id)' };
+
+      if (payload.schedule.length > 0) {
+        const { error: schedErr } = await supabase.from('class_schedules').insert(
+          payload.schedule.map((s) => ({
+            class_id: classId,
+            day_of_week: s.day_of_week,
+            start_time: s.start_time,
+            end_time: s.end_time,
+          })),
+        );
+        if (schedErr) return { success: false, message: schedErr.message };
+      }
+
+      return { success: true, id: classId };
+  },
+
+  getTeacherActiveClassIds: async (teacherId: string): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('teacher_classes')
+        .select('class_id, unassigned_at')
+        .eq('teacher_id', teacherId)
+        .is('unassigned_at', null);
+      if (error) throw error;
+      return (data || []).map((r: any) => r.class_id);
+  },
+
+  setTeacherClasses: async (teacherId: string, classIds: string[]) => {
+      const now = new Date().toISOString();
+      const current = await backend.getTeacherActiveClassIds(teacherId);
+      const toAdd = classIds.filter((id) => !current.includes(id));
+      const toRemove = current.filter((id) => !classIds.includes(id));
+
+      if (toAdd.length > 0) {
+        const { error } = await supabase.from('teacher_classes').insert(
+          toAdd.map((class_id) => ({
+            class_id,
+            teacher_id: teacherId,
+            assigned_at: now,
+          })),
+        );
+        if (error) return { success: false, message: error.message };
+      }
+
+      if (toRemove.length > 0) {
+        const { error } = await supabase
+          .from('teacher_classes')
+          .update({ unassigned_at: now })
+          .eq('teacher_id', teacherId)
+          .in('class_id', toRemove)
+          .is('unassigned_at', null);
+        if (error) return { success: false, message: error.message };
+      }
+
+      return { success: true };
+  },
+
+  // --- Class roster helpers ---
+  getClassStudentIds: async (classId: string): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('class_students')
+        .select('student_id, left_at')
+        .eq('class_id', classId)
+        .is('left_at', null);
+      if (error) throw error;
+      return (data || []).map((r: any) => r.student_id);
+  },
+
+  getTeacherActiveClassIdsOnly: async (teacherId: string): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('teacher_classes')
+        .select('class_id, unassigned_at')
+        .eq('teacher_id', teacherId)
+        .is('unassigned_at', null);
+      if (error) throw error;
+      return (data || []).map((r: any) => r.class_id);
+  },
+
+  getTeacherStudentIds: async (teacherId: string): Promise<string[]> => {
+      const classIds = await backend.getTeacherActiveClassIdsOnly(teacherId);
+      if (classIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('class_students')
+        .select('student_id, class_id, left_at')
+        .in('class_id', classIds)
+        .is('left_at', null);
+      if (error) throw error;
+      return Array.from(new Set((data || []).map((r: any) => r.student_id)));
+  },
+
+  getStudentsByFilter: async (filters: { classId?: string; teacherId?: string; search?: string }) => {
+      const search = (filters.search || '').trim();
+
+      let ids: string[] | null = null;
+      if (filters.classId) ids = await backend.getClassStudentIds(filters.classId);
+      if (filters.teacherId) ids = await backend.getTeacherStudentIds(filters.teacherId);
+
+      let q = supabase.from('profiles').select('*').neq('role', 'admin');
+      if (ids) {
+        if (ids.length === 0) return [];
+        q = q.in('id', ids);
+      }
+      if (search) {
+        const s = `%${search}%`;
+        q = q.or(`full_name.ilike.${s},student_code.ilike.${s},phone.ilike.${s}`);
+      }
+
+      const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
+      if (error) throw error;
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        email: p.email || '',
+        full_name: p.full_name || '',
+        role: (p.role as any) || 'student',
+        created_at: p.created_at || new Date().toISOString(),
+        license_expiry: p.license_expiry || undefined,
+        allowed_modes: [],
+        student_code: p.student_code || undefined,
+        phone: p.phone || undefined,
+        level_symbol: p.level_symbol || undefined,
+        class_name: p.class_name || undefined,
+        center_id: p.center_id || undefined,
+        center_name: p.center_name || undefined,
+        avatar_url: p.avatar_url || undefined,
+      })) as UserProfile[];
+  },
+
+  getStudentsProgressSummary: async (filters: {
+    classId?: string;
+    teacherId?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+      const { data, error } = await supabase.rpc('rpc_get_students_progress_summary', {
+        p_class_id: filters.classId || null,
+        p_teacher_id: filters.teacherId || null,
+        p_search: filters.search || null,
+        p_from: filters.from || null,
+        p_to: filters.to || null,
+        p_limit: filters.limit ?? 50,
+        p_offset: filters.offset ?? 0,
+      });
+      if (error) return { success: false, message: error.message, data: null as any };
+      return { success: true, data: (data || []) as any[] };
+  },
+
+  getStudentProgressSnapshot: async (studentId: string) => {
+      // Attempts summary
+      const { data: attempts, error: attemptsErr } = await supabase
+        .from('attempts')
+        .select('mode, score_correct, score_total, duration_seconds, created_at')
+        .eq('user_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (attemptsErr) throw attemptsErr;
+
+      const attemptCount = (attempts || []).length;
+      const totalCorrect = (attempts || []).reduce((a: number, r: any) => a + (r.score_correct || 0), 0);
+      const totalQuestions = (attempts || []).reduce((a: number, r: any) => a + (r.score_total || 0), 0);
+      const totalTime = (attempts || []).reduce((a: number, r: any) => a + (r.duration_seconds || 0), 0);
+      const lastAttemptAt = (attempts || [])[0]?.created_at as string | undefined;
+      const byMode = (attempts || []).reduce((acc: any, r: any) => {
+        const m = r.mode || 'unknown';
+        acc[m] = acc[m] || { attempts: 0, correct: 0, total: 0, time: 0 };
+        acc[m].attempts += 1;
+        acc[m].correct += r.score_correct || 0;
+        acc[m].total += r.score_total || 0;
+        acc[m].time += r.duration_seconds || 0;
+        return acc;
+      }, {});
+
+      // Training track progress
+      const { data: dayResults, error: dayErr } = await supabase
+        .from('training_day_results')
+        .select('is_completed, completed_at, day_id')
+        .eq('user_id', studentId);
+      if (dayErr) throw dayErr;
+      const completedDays = (dayResults || []).filter((d: any) => d.is_completed).length;
+      const lastCompletedAt = (dayResults || [])
+        .filter((d: any) => d.completed_at)
+        .sort((a: any, b: any) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0]
+        ?.completed_at as string | undefined;
+
+      // Learning path progress (current_level)
+      const { data: enrollments, error: enrollErr } = await supabase
+        .from('learning_path_enrollments')
+        .select('path_id, current_level, updated_at, started_at')
+        .eq('user_id', studentId)
+        .order('updated_at', { ascending: false })
+        .limit(5);
+      if (enrollErr) throw enrollErr;
+
+      // Speed training sessions (recent)
+      const { data: speedSessions, error: speedErr } = await supabase
+        .from('speed_training_sessions')
+        .select('mode, speed_target, score, duration_seconds, created_at')
+        .eq('user_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (speedErr) throw speedErr;
+
+      return {
+        attempts: {
+          count: attemptCount,
+          accuracy_pct: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 1000) / 10 : 0,
+          total_time_seconds: totalTime,
+          last_attempt_at: lastAttemptAt,
+          by_mode: byMode,
+        },
+        training_track: {
+          completed_days: completedDays,
+          last_completed_at: lastCompletedAt,
+        },
+        learning_paths: enrollments || [],
+        speed_training: speedSessions || [],
+      };
   },
 
   updateProfile: async (userId: string, data: Partial<Pick<UserProfile, 'full_name' | 'student_code' | 'phone' | 'level_symbol' | 'class_name' | 'center_id' | 'center_name'>>) => {

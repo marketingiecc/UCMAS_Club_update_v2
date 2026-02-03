@@ -6,7 +6,9 @@ export enum Mode {
   MIXED = 'hon_hop',
 }
 
-export type UserRole = 'user' | 'admin';
+// NOTE: DB historically used either 'user' or 'student' for non-admin accounts.
+// We keep both for backward compatibility while adding 'teacher'.
+export type UserRole = 'admin' | 'teacher' | 'student' | 'user';
 
 export type LevelSymbol = 'Z' | 'A' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'K';
 

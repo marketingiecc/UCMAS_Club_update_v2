@@ -65,6 +65,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                {user && (
                  <>
                    <Link to="/training" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/training')}`}>Luyện tập</Link>
+                   {user.role === 'teacher' && (
+                     <Link to="/teacher" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/teacher')}`}>Giáo viên</Link>
+                   )}
                    <Link to="/contests" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname.startsWith('/contests'))}`}>
                      <span className="flex items-center gap-1">Cuộc thi <span className="text-ucmas-yellow">🏆</span></span>
                    </Link>
@@ -190,6 +193,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
               {user ? (
                 <>
                   <Link to="/training" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/training' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Trung tâm luyện tập</Link>
+                  {user.role === 'teacher' && (
+                    <Link to="/teacher" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/teacher' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Giáo viên</Link>
+                  )}
                   <Link to="/training/speed" onClick={() => setMobileMenuOpen(false)} className="block py-3 px-4 rounded-xl font-heading font-semibold text-sm text-gray-700">Speed Training</Link>
                   <Link to="/contests" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname.startsWith('/contests') ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Cuộc thi 🏆</Link>
                   <Link to="/history" onClick={() => setMobileMenuOpen(false)} className={`block py-3 px-4 rounded-xl font-heading font-semibold text-sm ${location.pathname === '/history' ? 'bg-ucmas-blue/10 text-ucmas-red' : 'text-gray-700'}`}>Lịch sử</Link>

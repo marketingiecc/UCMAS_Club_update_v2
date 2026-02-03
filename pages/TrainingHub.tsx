@@ -5,12 +5,16 @@ import CustomSlider from '../components/CustomSlider';
 import { practiceModeSettings, type DifficultyKey, type ModeKey } from '../services/practiceModeSettings';
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES, type LevelSymbol } from '../config/levelsAndDifficulty';
 import { canUseTrial, getTrialCount } from '../services/trialUsage';
+import { trainingTrackService, type TrackSnapshot } from '../services/trainingTrackService';
 
 // Ngôn ngữ: cố định tiếng Việt (không cho chọn)
 
 /** Bài luyện tập trong lộ trình (cùng cấu trúc Admin lưu localStorage) */
 interface PathExerciseEntry {
   id: string;
+  track_id?: string;
+  day_id?: string;
+  order_no?: number;
   level_symbol: string;
   day_no: number;
   mode: 'visual' | 'audio' | 'flash';
@@ -67,13 +71,21 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       if (state.openTab === 'elite') setSelectedModeElite(state.openMode);
       if (state.openTab === 'mode') setSelectedModePractice(state.openMode);
     }
-    if (state?.pathDay != null) setSelectedPathDay(state.pathDay);
+    if (state?.pathDay != null) {
+      setSelectedPathDay(state.pathDay);
+      // Ensure the current week aligns with the selected day (for progress fetch + UI consistency)
+      const w = Math.floor((state.pathDay - 1) / PATH_DAYS_PER_WEEK);
+      if (Number.isFinite(w) && w >= 0) setPathWeekIndex(w);
+    }
   }, [location.state]);
 
   // Lộ trình: tab con (0-3 = 1-30, 31-60, 61-90, 91-120), ngày đang xem chi tiết
   const [pathWeekIndex, setPathWeekIndex] = useState(0);
   const [selectedPathDay, setSelectedPathDay] = useState<number | null>(null);
-  const pathExercises = useMemo(() => loadPathExercises(), []);
+  const [pathSnapshot, setPathSnapshot] = useState<TrackSnapshot | null>(null);
+  const [pathExercises, setPathExercises] = useState<PathExerciseEntry[]>(() => loadPathExercises());
+  const [attemptsByExerciseId, setAttemptsByExerciseId] = useState<Record<string, { correct_count: number; score: number; completed_at: string }>>({});
+  const [completedDayIds, setCompletedDayIds] = useState<Set<string>>(new Set());
 
   // Tab 1: Luyện theo chế độ — chọn chế độ trước, sau đó hiện form
   const [selectedModePractice, setSelectedModePractice] = useState<SelectedMode | null>(null);
@@ -272,6 +284,82 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     [user.id, location.state]
   );
 
+  // Prefer Supabase roadmap (fallback: localStorage)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const snap = await trainingTrackService.getPublishedTrackSnapshot(userLevel, PATH_TOTAL_DAYS);
+        if (!mounted) return;
+        if (snap) {
+          setPathSnapshot(snap);
+          setPathExercises(
+            snap.exercises.map((ex) => ({
+              id: ex.id,
+              track_id: snap.track_id,
+              day_id: ex.day_id,
+              order_no: ex.order_no,
+              level_symbol: ex.level_symbol,
+              day_no: ex.day_no,
+              mode: ex.mode,
+              question_count: ex.question_count,
+              difficulty: ex.difficulty,
+              digits: ex.digits,
+              rows: ex.rows,
+              speed_seconds: ex.speed_seconds,
+              source: ex.source,
+              questions: ex.questions,
+            }))
+          );
+        } else {
+          setPathSnapshot(null);
+          setPathExercises(loadPathExercises());
+        }
+      } catch (e) {
+        console.warn('Load roadmap from Supabase failed, fallback localStorage.', e);
+        if (!mounted) return;
+        setPathSnapshot(null);
+        setPathExercises(loadPathExercises());
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [userLevel]);
+
+  // Load progress for visible week (checkmarks + score notes)
+  useEffect(() => {
+    if (!pathSnapshot) return;
+    const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
+    const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
+    const dayIdsSet = new Set<string>();
+    days.forEach((d) => {
+      const id = pathSnapshot.dayIdByNo[d];
+      if (id) dayIdsSet.add(id);
+    });
+    if (selectedPathDay != null) {
+      const selectedId = pathSnapshot.dayIdByNo[selectedPathDay];
+      if (selectedId) dayIdsSet.add(selectedId);
+    }
+    const dayIds = Array.from(dayIdsSet);
+    if (dayIds.length === 0) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await trainingTrackService.getUserExerciseAttempts({ userId: user.id, dayIds });
+        if (!mounted) return;
+        setAttemptsByExerciseId(res.attemptsByExerciseId as any);
+        setCompletedDayIds(new Set(res.completedDayIds));
+      } catch (e) {
+        console.warn('Load path progress failed:', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [pathSnapshot, pathWeekIndex, selectedPathDay, user.id]);
+
   const startPathExercise = (ex: PathExerciseEntry) => {
     const modeMap = { visual: Mode.VISUAL, audio: Mode.LISTENING, flash: Mode.FLASH } as const;
     const mode = modeMap[ex.mode];
@@ -289,12 +377,22 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       digits: ex.digits,
       rows: ex.rows,
       speed_seconds: ex.speed_seconds,
+      questions: ex.questions,
     };
     navigate(`/practice/${modeSlug}`, {
       state: {
         fromHub: true,
         config,
         returnTo: { tab: 'path' as const, pathDay: ex.day_no },
+        pathContext: (ex.track_id && ex.day_id)
+          ? {
+              trackId: ex.track_id,
+              dayId: ex.day_id,
+              exerciseId: ex.id,
+              levelSymbol: ex.level_symbol,
+              dayNo: ex.day_no,
+            }
+          : undefined,
       },
     });
   };
@@ -620,6 +718,20 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                                     <span className="text-gray-600 text-sm ml-2">
                                       {ex.question_count} câu · {ex.difficulty} · {ex.digits} chữ số, {ex.rows} dòng
                                     </span>
+                                    {(() => {
+                                      const attempt = attemptsByExerciseId[ex.id];
+                                      if (!attempt) return null;
+                                      return (
+                                        <div className="mt-1">
+                                          <div className="text-xs text-emerald-700 font-heading font-bold">
+                                            ✓ Điểm: {attempt.correct_count}/{ex.question_count}
+                                          </div>
+                                          <div className="text-[10px] text-gray-500 font-mono">
+                                            {new Date(attempt.completed_at).toLocaleString('vi-VN')}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                                 <button
@@ -691,7 +803,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                             </div>
                           </div>
 
-                          <div className="relative w-full h-[300px] sm:h-[360px] md:h-[420px] rounded-xl sm:rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden"> bg-white/60 border border-white shadow-inner overflow-hidden">
+                          <div className="relative w-full h-[300px] sm:h-[360px] md:h-[420px] rounded-xl sm:rounded-[2rem] bg-white/60 border border-white shadow-inner overflow-hidden">
                             {/* Road */}
                             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 420" preserveAspectRatio="none">
                               <path
@@ -715,7 +827,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                             {days.map((day, idx) => {
                               const dayExs = exercisesForLevel.filter((e) => e.day_no === day);
                               const hasExercises = dayExs.length > 0;
-                              const hasCompleted = pathDaysCompleted[userLevel]?.[day] === true;
+                              const hasCompleted = pathSnapshot
+                                ? completedDayIds.has(pathSnapshot.dayIdByNo[day] || '')
+                                : (pathDaysCompleted[userLevel]?.[day] === true);
                               const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
 
                               const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };

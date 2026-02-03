@@ -24,6 +24,10 @@ import PracticeMixedSession from './pages/PracticeMixedSession';
 import TrainingHub from './pages/TrainingHub';
 import AdminTrainingPage from './pages/AdminTrainingPage';
 import SpeedTrainingPage from './pages/SpeedTrainingPage';
+import AdminTeacherManagerPage from './pages/AdminTeacherManagerPage';
+import AdminStudentProgressPage from './pages/AdminStudentProgressPage';
+import TeacherDashboardPage from './pages/TeacherDashboardPage';
+import AdminInfoManagerPage from './pages/AdminInfoManagerPage';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -160,9 +164,14 @@ const AppContent: React.FC = () => {
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
         <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
         
+        <Route path="/teacher" element={user?.role === 'teacher' ? <TeacherDashboardPage user={user} /> : <Navigate to="/dashboard" />} />
+
         <Route path="/admin" element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/contests" element={user?.role === 'admin' ? <AdminContestPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/training" element={user?.role === 'admin' ? <AdminTrainingPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/teachers" element={user?.role === 'admin' ? <AdminTeacherManagerPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/progress" element={user?.role === 'admin' ? <AdminStudentProgressPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/info" element={user?.role === 'admin' ? <AdminInfoManagerPage /> : <Navigate to="/dashboard" />} />
         
 
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />

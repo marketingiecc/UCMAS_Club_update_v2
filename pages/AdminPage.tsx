@@ -3,6 +3,7 @@ import { backend } from '../services/mockBackend';
 import { UserProfile, AttemptResult, Question } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import { trainingTrackService, type TrackExercise as DbTrackExercise } from '../services/trainingTrackService';
 
 const MODES = [
   { id: 'visual', label: 'Nhìn tính' },
@@ -17,6 +18,8 @@ const TRACK_TOTAL_WEEKS = 16;
 /** Bài luyện tập trong lộ trình (1 bài = 1 ngày, 1 chế độ, có thể kèm JSON) */
 export interface TrackExerciseEntry {
   id: string;
+  day_id?: string;
+  order_no?: number;
   level_symbol: string;
   day_no: number;
   mode: 'visual' | 'audio' | 'flash';
@@ -54,13 +57,16 @@ const AdminPage: React.FC = () => {
   const [reportData, setReportData] = useState<any>(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
-  // Thiết kế lộ trình: danh sách bài đã tạo (localStorage key có thể dùng sau)
+  // Thiết kế lộ trình: cache local, nhưng source of truth là Supabase
   const [trackExercises, setTrackExercises] = useState<TrackExerciseEntry[]>(() => {
     try {
       const raw = localStorage.getItem('ucmas_track_exercises');
       return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   });
+  const [trackSyncStatus, setTrackSyncStatus] = useState<string>('');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPresetLevel, setModalPresetLevel] = useState<string | null>(null);
   /** Khi set: hiển thị danh sách 120 ngày để thiết lập cho cấp này */
@@ -83,6 +89,56 @@ const AdminPage: React.FC = () => {
   const saveTrackExercises = (list: TrackExerciseEntry[]) => {
     setTrackExercises(list);
     localStorage.setItem('ucmas_track_exercises', JSON.stringify(list));
+  };
+
+  const mergeLevelExercises = (levelSymbol: string, nextForLevel: TrackExerciseEntry[]) => {
+    const others = trackExercises.filter((e) => e.level_symbol !== levelSymbol);
+    const merged = [...others, ...nextForLevel];
+    saveTrackExercises(merged);
+  };
+
+  const refreshTrackFromSupabase = async (levelSymbol?: string) => {
+    try {
+      setTrackSyncStatus('⏳ Đang tải lộ trình từ Supabase...');
+
+      const levels = levelSymbol ? [levelSymbol] : LEVEL_SYMBOLS_ORDER;
+      const snaps = await Promise.all(levels.map((lv) => trainingTrackService.getPublishedTrackSnapshot(lv, TRACK_TOTAL_DAYS)));
+      const all: TrackExerciseEntry[] = [];
+      snaps.forEach((snap) => {
+        if (!snap) return;
+        snap.exercises.forEach((ex: DbTrackExercise) => {
+          all.push({
+            id: ex.id,
+            day_id: ex.day_id,
+            order_no: ex.order_no,
+            level_symbol: ex.level_symbol,
+            day_no: ex.day_no,
+            mode: ex.mode,
+            question_count: ex.question_count,
+            difficulty: ex.difficulty,
+            digits: ex.digits,
+            rows: ex.rows,
+            speed_seconds: ex.speed_seconds,
+            source: ex.source,
+            questions: ex.questions,
+            created_at: ex.created_at,
+          });
+        });
+      });
+
+      if (levelSymbol) {
+        // Only replace a single level
+        mergeLevelExercises(levelSymbol, all.filter((e) => e.level_symbol === levelSymbol));
+      } else {
+        saveTrackExercises(all);
+      }
+
+      setTrackSyncStatus('✅ Đã đồng bộ từ Supabase');
+      setTimeout(() => setTrackSyncStatus(''), 2000);
+    } catch (e: any) {
+      console.warn('refreshTrackFromSupabase error:', e);
+      setTrackSyncStatus(`❌ Không tải được từ Supabase: ${e?.message || 'Unknown error'}`);
+    }
   };
 
   const openCreateModal = (levelSymbol: string, dayNo?: number, editId?: string) => {
@@ -112,13 +168,14 @@ const AdminPage: React.FC = () => {
     setModalPresetLevel(null);
   };
 
-  const handleTrackFormSubmit = (e: React.FormEvent) => {
+  const handleTrackFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const questions = trackForm.questionsFromJson && trackForm.questionsFromJson.length > 0
       ? trackForm.questionsFromJson
       : undefined;
-    const entry: TrackExerciseEntry = {
-      id: trackForm.editingId || `te-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    setTrackSyncStatus('⏳ Đang lưu bài lên Supabase...');
+    const res = await trainingTrackService.adminUpsertExercise({
+      id: trackForm.editingId,
       level_symbol: trackForm.level_symbol,
       day_no: trackForm.day_no,
       mode: trackForm.mode,
@@ -129,18 +186,31 @@ const AdminPage: React.FC = () => {
       speed_seconds: trackForm.speed_seconds,
       source: questions ? 'json_upload' : 'generated',
       questions,
-      created_at: new Date().toISOString(),
-    };
-    const next = trackForm.editingId
-      ? trackExercises.map(e => (e.id === trackForm.editingId ? entry : e))
-      : [...trackExercises, entry];
-    saveTrackExercises(next);
+    });
+    if (!res.success) {
+      setTrackSyncStatus(`❌ Lưu thất bại: ${res.error || 'Unknown error'}`);
+      return;
+    }
+
+    await refreshTrackFromSupabase(trackForm.level_symbol);
     closeModal();
   };
 
-  const deleteTrackExercise = (id: string) => {
+  const deleteTrackExercise = async (id: string) => {
     if (!window.confirm('Xóa bài luyện tập này?')) return;
-    saveTrackExercises(trackExercises.filter(e => e.id !== id));
+    const ex = trackExercises.find((e) => e.id === id);
+    setTrackSyncStatus('⏳ Đang xóa trên Supabase...');
+    const res = await trainingTrackService.adminDeleteExercise(id);
+    if (!res.success) {
+      setTrackSyncStatus(`❌ Xóa thất bại: ${res.error || 'Unknown error'}`);
+      return;
+    }
+    if (ex?.level_symbol) {
+      await refreshTrackFromSupabase(ex.level_symbol);
+    } else {
+      // fallback: remove from local cache
+      saveTrackExercises(trackExercises.filter(e => e.id !== id));
+    }
   };
 
   const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,6 +246,13 @@ const AdminPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
+  }, [activeTab]);
+
+  // Load roadmap data from Supabase whenever admin opens Track Design
+  useEffect(() => {
+    if (activeTab !== 'trackDesign') return;
+    refreshTrackFromSupabase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
@@ -241,6 +318,18 @@ const AdminPage: React.FC = () => {
             <button onClick={() => navigate('/admin/training')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-red-200 bg-red-50 text-ucmas-red hover:bg-red-100 shadow-sm flex items-center justify-between">
                 <span>Quản lý Luyện Tập</span>
                 <span>🛠️</span>
+            </button>
+            <button onClick={() => navigate('/admin/teachers')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-sm flex items-center justify-between">
+                <span>Quản lý Giáo viên</span>
+                <span>👩‍🏫</span>
+            </button>
+            <button onClick={() => navigate('/admin/progress')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100 shadow-sm flex items-center justify-between">
+                <span>Tiến trình Học sinh</span>
+                <span>📌</span>
+            </button>
+            <button onClick={() => navigate('/admin/info')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 shadow-sm flex items-center justify-between">
+                <span>Quản lý Thông tin</span>
+                <span>🗂️</span>
             </button>
             <div className="h-px bg-gray-100 my-6"></div>
             <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition ${activeTab === 'reports' ? 'bg-gray-800 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>📈 Báo Cáo</button>
@@ -500,6 +589,11 @@ const AdminPage: React.FC = () => {
 
         {activeTab === 'trackDesign' && (
             <div>
+                {trackSyncStatus && (
+                  <div className="mb-4 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm text-gray-700">
+                    {trackSyncStatus}
+                  </div>
+                )}
                 {selectedLevelForDays == null ? (
                     <>
                         <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">Thiết kế lộ trình luyện tập</h3>
