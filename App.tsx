@@ -20,6 +20,7 @@ import ContestLobbyPage from './pages/ContestLobbyPage';
 import ContestExamPage from './pages/ContestExamPage';
 import AdminContestPage from './pages/AdminContestPage';
 import AdminPracticeManager from './pages/AdminPracticeManager';
+import AdminExerciseRepository from './pages/AdminExerciseRepository';
 import PracticeMixedSession from './pages/PracticeMixedSession';
 import TrainingHub from './pages/TrainingHub';
 import AdminTrainingPage from './pages/AdminTrainingPage';
@@ -55,69 +56,69 @@ const AppContent: React.FC = () => {
     }, 10000);
 
     const initAuth = async () => {
-        try {
-          setStatusText('Đang kiểm tra kết nối...');
-          
-          // Add timeout for getCurrentUser call
-          const userPromise = backend.getCurrentUser();
-          const timeoutPromise = new Promise<UserProfile | null>((resolve) => {
-            setTimeout(() => resolve(null), 8000);
-          });
-          
-          setStatusText('Đang xác thực...');
-          const u = await Promise.race([userPromise, timeoutPromise]);
-          
-          if (mounted.current) {
-             setUser(u);
-             setStatusText('Đã sẵn sàng');
+      try {
+        setStatusText('Đang kiểm tra kết nối...');
+
+        // Add timeout for getCurrentUser call
+        const userPromise = backend.getCurrentUser();
+        const timeoutPromise = new Promise<UserProfile | null>((resolve) => {
+          setTimeout(() => resolve(null), 8000);
+        });
+
+        setStatusText('Đang xác thực...');
+        const u = await Promise.race([userPromise, timeoutPromise]);
+
+        if (mounted.current) {
+          setUser(u);
+          setStatusText('Đã sẵn sàng');
+        }
+      } catch (e) {
+        console.error("Critical Auth Init Error:", e);
+        // Continue even if auth fails - user can still access public pages
+        if (mounted.current) {
+          setUser(null);
+          setStatusText('Đã sẵn sàng');
+        }
+      } finally {
+        if (mounted.current) {
+          setLoading(false);
+        }
+        clearTimeout(safetyTimer);
+      }
+    };
+
+    initAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted.current) return;
+
+      try {
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Only fetch if we don't have user yet to avoid double fetch on load
+          if (!userRef.current) {
+            const u = await backend.fetchProfile(session.user.id);
+            if (mounted.current) {
+              setUser(u);
+            }
           }
-        } catch (e) {
-          console.error("Critical Auth Init Error:", e);
-          // Continue even if auth fails - user can still access public pages
+        } else if (event === 'SIGNED_OUT') {
           if (mounted.current) {
             setUser(null);
-            setStatusText('Đã sẵn sàng');
           }
-        } finally {
-          if (mounted.current) {
-             setLoading(false);
-          }
-          clearTimeout(safetyTimer);
+        } else if (event === 'PASSWORD_RECOVERY') {
+          navigate('/auth/resetpass', { replace: true });
         }
-    };
-    
-    initAuth();
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (!mounted.current) return;
-        
-        try {
-          if (event === 'SIGNED_IN' && session?.user) {
-               // Only fetch if we don't have user yet to avoid double fetch on load
-               if (!userRef.current) {
-                   const u = await backend.fetchProfile(session.user.id);
-                   if (mounted.current) {
-                     setUser(u);
-                   }
-               }
-          } else if (event === 'SIGNED_OUT') {
-               if (mounted.current) {
-                 setUser(null);
-               }
-          } else if (event === 'PASSWORD_RECOVERY') {
-               navigate('/auth/resetpass', { replace: true });
-          }
-        } catch (err) {
-          console.error("Auth state change error:", err);
-        }
+      } catch (err) {
+        console.error("Auth state change error:", err);
+      }
     });
 
     return () => {
-        mounted.current = false;
-        if (authListener?.subscription) {
-          authListener.subscription.unsubscribe();
-        }
-        clearTimeout(safetyTimer);
+      mounted.current = false;
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+      clearTimeout(safetyTimer);
     };
   }, [navigate]); // Removed 'user' from dependencies to prevent infinite loop
 
@@ -127,7 +128,7 @@ const AppContent: React.FC = () => {
         <div className="w-16 h-16 border-4 border-ucmas-blue border-t-transparent rounded-full animate-spin mb-6"></div>
         <p className="text-gray-700 font-heading font-semibold text-lg mb-2 animate-pulse">{statusText}</p>
         <p className="text-xs text-gray-500 font-medium">Vui lòng đợi trong giây lát...</p>
-        <button 
+        <button
           onClick={() => {
             setLoading(false);
             setStatusText('Đã sẵn sàng');
@@ -144,7 +145,7 @@ const AppContent: React.FC = () => {
     <Layout user={user} setUser={setUser}>
       <Routes>
         <Route path="/" element={<HomePage user={user} />} />
-        
+
         <Route path="/login" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/register" element={!user ? <AuthPage setUser={setUser} /> : <Navigate to="/dashboard" />} />
         <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
@@ -155,15 +156,16 @@ const AppContent: React.FC = () => {
         <Route path="/training" element={user ? <TrainingHub user={user} /> : <Navigate to="/login" />} />
         <Route path="/training/speed" element={user ? <SpeedTrainingPage /> : <Navigate to="/login" />} />
         <Route path="/practice/:mode" element={user ? <PracticeSession user={user} /> : <Navigate to="/login" />} />
-        
+
         {/* NEW ROUTES */}
         <Route path="/practice-exam/:mode" element={user ? <PracticeSessionExam user={user} /> : <Navigate to="/login" />} />
         <Route path="/practice-mixed/:examId" element={user ? <PracticeMixedSession user={user} /> : <Navigate to="/login" />} />
+        <Route path="/admin/repository" element={user?.role === 'admin' ? <AdminExerciseRepository /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/practice" element={user?.role === 'admin' ? <AdminPracticeManager /> : <Navigate to="/dashboard" />} />
-        
+
         <Route path="/activate" element={user ? <ActivatePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
         <Route path="/history" element={user ? <HistoryPage userId={user.id} /> : <Navigate to="/login" />} />
-        
+
         <Route path="/teacher" element={user?.role === 'teacher' ? <TeacherDashboardPage user={user} /> : <Navigate to="/dashboard" />} />
 
         <Route path="/admin" element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/dashboard" />} />
@@ -172,7 +174,7 @@ const AppContent: React.FC = () => {
         <Route path="/admin/teachers" element={user?.role === 'admin' ? <AdminTeacherManagerPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/progress" element={user?.role === 'admin' ? <AdminStudentProgressPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/info" element={user?.role === 'admin' ? <AdminInfoManagerPage /> : <Navigate to="/dashboard" />} />
-        
+
 
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />

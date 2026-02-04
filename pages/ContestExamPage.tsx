@@ -263,7 +263,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-right text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10" style={{ fontFamily: 'DnEalianManuscript' }}>
+            <div className="text-gray-900 font-heading font-black leading-none tracking-tighter text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10" style={{ fontFamily: 'DnEalianManuscript' }}>
               {flashNumber ?? ''}
             </div>
           )}
@@ -300,14 +300,6 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
               />
 
               <div className="mt-6 flex gap-3">
-                <button
-                  disabled={currentQIndex === 0 || isInputDisabled}
-                  onClick={() => setCurrentQIndex(p => Math.max(0, p - 1))}
-                  className="flex-1 px-6 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm disabled:opacity-50"
-                >
-                  ← Trước
-                </button>
-
                 {user.role === 'teacher' && (
                   <button
                     onClick={() => setShowResult(!showResult)}
@@ -316,6 +308,14 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                     {showResult ? 'Ẩn Kết Quả' : 'Kết Quả'}
                   </button>
                 )}
+
+                <button
+                  disabled={currentQIndex === 0 || isInputDisabled}
+                  onClick={() => setCurrentQIndex(p => Math.max(0, p - 1))}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm disabled:opacity-50"
+                >
+                  ← Trước
+                </button>
                 {currentQIndex < questions.length - 1 ? (
                   <button
                     disabled={isInputDisabled}
@@ -397,7 +397,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
                   <div className="text-white font-black text-8xl uppercase animate-bounce">{flashOverlay}</div>
                 </div>
               ) : (isFlashing || flashNumber !== null) ? (
-                <div className="text-[150px] font-heading font-bold text-ucmas-green leading-none tracking-[0.06em] tabular-nums text-right w-full max-w-lg mx-auto" style={{ fontFamily: 'DnEalianManuscript' }}>
+                <div className="text-[150px] font-heading font-bold text-ucmas-green leading-none tracking-[0.06em] tabular-nums text-center w-full max-w-lg mx-auto" style={{ fontFamily: 'DnEalianManuscript' }}>
                   {flashNumber}
                 </div>
               ) : (
