@@ -356,12 +356,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     setIsFlashing(true);
 
     // --- 1. Countdown Sequence (Blue bg, White text) ---
-    const countdowns = ['3', '2', '1', 'Bắt đầu'];
+    const countdowns = ['3...', '2...', '1...', 'Bắt Đầu'];
     for (const count of countdowns) {
       setFlashOverlay(count);
       await new Promise(r => setTimeout(r, 1000));
     }
     setFlashOverlay(null); // Tắt overlay, hiện số
+    await new Promise(r => setTimeout(r, 1000));
 
     // --- 2. Number Sequence ---
     const q = questions[qIndex];
@@ -814,9 +815,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
             <div
-              className={`text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center ${flashOverlay === 'Bắt đầu'
-                ? 'text-[clamp(5.76rem,20.8vw,17.28rem)]'
-                : 'text-[clamp(7.2rem,26vw,21.6rem)]'
+              className={`text-gray-900 font-heading font-normal leading-none tracking-[0.06em] text-center ${flashOverlay === 'Bắt Đầu'
+                ? 'text-[clamp(5.18rem,18.72vw,15.55rem)]'
+                : 'text-[clamp(6.48rem,23.4vw,19.44rem)]'
                 } select-none tabular-nums uppercase`}
             >
               {flashOverlay}
@@ -1022,9 +1023,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                 {flashOverlay ? (
                   <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
                     <div
-                      className={`text-white font-heading font-black ${flashOverlay === 'Bắt đầu'
-                        ? 'text-[clamp(2rem,8vw,4.8rem)]'
-                        : 'text-[clamp(2.5rem,10vw,6rem)]'
+                      className={`text-white font-heading font-normal ${flashOverlay === 'Bắt Đầu'
+                        ? 'text-[clamp(1.8rem,7.2vw,4.32rem)]'
+                        : 'text-[clamp(2.25rem,9vw,5.4rem)]'
                         } uppercase animate-bounce`}
                     >
                       {flashOverlay}

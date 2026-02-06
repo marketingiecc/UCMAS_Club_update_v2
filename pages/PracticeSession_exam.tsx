@@ -247,17 +247,20 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     const q = questions[idx];
 
     // 1. Countdown
-    const countdowns = ['3', '2', '1', 'Bắt đầu'];
+    const countdowns = ['3...', '2...', '1...', 'Bắt Đầu'];
     for (const count of countdowns) {
       setFlashOverlay(count);
       await new Promise(r => setTimeout(r, 1000));
     }
     setFlashOverlay(null);
+    await new Promise(r => setTimeout(r, 1000));
 
     // 2. Numbers
     for (const num of q.operands) {
       setFlashNumber(num);
       await new Promise(r => setTimeout(r, configSpeed));
+      setFlashNumber(null);
+      await new Promise(r => setTimeout(r, 150));
     }
 
     // 3. Equals
@@ -426,16 +429,16 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
           {flashOverlay ? (
             <div
-              className={`text-gray-900 font-heading font-black leading-none tracking-[0.06em] text-center ${flashOverlay === 'Bắt đầu'
-                ? 'text-[clamp(5.76rem,20.8vw,17.28rem)]'
-                : 'text-[clamp(7.2rem,26vw,21.6rem)]'
+              className={`text-gray-900 font-heading font-normal leading-none tracking-[0.06em] text-center ${flashOverlay === 'Bắt Đầu'
+                ? 'text-[clamp(4.66rem,16.85vw,14.0rem)]'
+                : 'text-[clamp(5.83rem,21.06vw,17.5rem)]'
                 } select-none tabular-nums uppercase`}
             >
               {flashOverlay}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10" style={{ fontFamily: 'DnEalianManuscript' }}>
-              {flashNumber ?? ''}
+            <div key={flashNumber ?? 'blk'} className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10 animate-fade-in" style={{ fontFamily: 'DnEalianManuscript' }}>
+              {flashNumber ?? <span className="opacity-0">...</span>}
             </div>
           )}
 
@@ -667,16 +670,16 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                 {flashOverlay ? (
                   <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
                     <div
-                      className={`text-white font-heading font-black ${flashOverlay === 'Bắt đầu'
-                        ? 'text-[clamp(2rem,8vw,4.8rem)]'
-                        : 'text-[clamp(2.5rem,10vw,6rem)]'
+                      className={`text-white font-heading font-normal ${flashOverlay === 'Bắt Đầu'
+                        ? 'text-[clamp(1.62rem,6.48vw,3.89rem)]'
+                        : 'text-[clamp(2.02rem,8.1vw,4.86rem)]'
                         } uppercase animate-bounce`}
                     >
                       {flashOverlay}
                     </div>
                   </div>
                 ) : (isFlashing || flashNumber !== null) ? (
-                  <div className="font-heading font-bold text-ucmas-blue leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,16rem)] tabular-nums w-full max-w-lg mx-auto" style={{ fontFamily: 'DnEalianManuscript' }}>
+                  <div key={flashNumber ?? 'blk'} className="font-heading font-bold text-ucmas-blue leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,16rem)] tabular-nums w-full max-w-lg mx-auto animate-fade-in" style={{ fontFamily: 'DnEalianManuscript' }}>
                     {flashNumber}
                   </div>
                 ) : (
