@@ -27,6 +27,7 @@ export interface UserProfile {
   created_at: string;
   license_expiry?: string;
   allowed_modes: Mode[];
+  cups_count?: number; // Total cups collected
 }
 
 export interface Question {
@@ -41,7 +42,7 @@ export interface Question {
 export interface Contest {
   id: string;
   name: string;
-  start_at: string; 
+  start_at: string;
   duration_minutes: number;
   lobby_open_minutes: number;
   enable_nhin_tinh: boolean;
@@ -80,12 +81,12 @@ export interface ContestExam {
   // New specific speed columns from DB
   read_seconds_per_number?: number;
   display_seconds_per_number?: number;
-  
+
   config?: {
-      speed?: number; // Legacy generic speed
-      display_speed?: number; // Seconds per item (Flash)
-      read_speed?: number;    // Seconds per item (Listening)
-      [key: string]: any;
+    speed?: number; // Legacy generic speed
+    display_speed?: number; // Seconds per item (Flash)
+    read_speed?: number;    // Seconds per item (Listening)
+    [key: string]: any;
   };
 }
 

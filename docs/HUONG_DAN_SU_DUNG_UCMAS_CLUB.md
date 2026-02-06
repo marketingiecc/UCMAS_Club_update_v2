@@ -76,6 +76,7 @@ Có **3 tab** chính:
 
 - Lộ trình **16 tuần, 96 ngày**, theo cấp độ đã chọn ở Trang cá nhân.
 - Chọn **tuần** → chọn **ngày** → xem danh sách bài (Nhìn tính / Nghe tính / Flash) của ngày đó → nhấn **Làm bài** cho từng bài.
+- **Nhận Cup**: Hoàn thành toàn bộ bài tập của 6 ngày trong tuần để mở khóa và nhận **Cup** (hiển thị cuối lộ trình tuần). Số Cup tích lũy được hiển thị cạnh tên học sinh.
 
 **Lưu ý:** Tab này **chỉ dùng được khi đã kích hoạt**. Chưa kích hoạt sẽ thấy thông báo khóa và nút **Kích hoạt**.
 

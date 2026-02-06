@@ -86,6 +86,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const [pathExercises, setPathExercises] = useState<PathExerciseEntry[]>(() => loadPathExercises());
   const [attemptsByExerciseId, setAttemptsByExerciseId] = useState<Record<string, { correct_count: number; score: number; completed_at: string }>>({});
   const [completedDayIds, setCompletedDayIds] = useState<Set<string>>(new Set());
+  const [claimedWeeks, setClaimedWeeks] = useState<Set<number>>(new Set());
 
   // Tab 1: Luyện theo chế độ — chọn chế độ trước, sau đó hiện form
   const [selectedModePractice, setSelectedModePractice] = useState<SelectedMode | null>(null);
@@ -177,8 +178,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     const levelSym = (modeLevel || (user.level_symbol || 'A')) as LevelSymbol;
     const key: ModeKey =
       mode === Mode.VISUAL ? 'visual' :
-      mode === Mode.LISTENING ? 'audio' :
-      'flash';
+        mode === Mode.LISTENING ? 'audio' :
+          'flash';
 
     const limits = practiceModeSettings.getLimits(levelSym, key, modeDifficulty as DifficultyKey);
     const digits = randInt(clampInt(limits.digits_min, 1, 10), clampInt(limits.digits_max, 1, 10));
@@ -362,6 +363,93 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     };
   }, [pathSnapshot, pathWeekIndex, selectedPathDay, user.id]);
 
+  useEffect(() => {
+    let mounted = true;
+    const fetchCups = async () => {
+      try {
+        const set = await trainingTrackService.getCollectedCups(user.id);
+        if (mounted) setClaimedWeeks(set);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchCups();
+    return () => { mounted = false; };
+  }, [user.id]);
+
+  // Popup logic
+  const [showClaimPopup, setShowClaimPopup] = useState<{ visible: boolean; success: boolean; message: string; subMessage?: string }>({ visible: false, success: false, message: '' });
+
+  const handleClaimCup = async () => {
+    const weekIdx = pathWeekIndex;
+
+    // Check if this week is actually the *current path* week or completed.
+    // If user is looking at a future week that is locked/empty, they shouldn't even see the cup active.
+    // Logic: check completion of ALL 6 days.
+
+    const startDay = weekIdx * PATH_DAYS_PER_WEEK + 1;
+    const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
+
+    // Calculate ACTUAL days that have exercises. Empty days are ignored/auto-completed in this logic?
+    // "Hoàn thành toàn bộ bài tập của 6 ngày". 
+    // If a day has NO exercises, it is technically "complete" (nothing to do).
+    // So we check if there are ANY incomplete days among the days that HAVE exercises.
+
+    const daysWithExercises = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLevel));
+    // If a week has 0 exercises total, can they claim? Probably yes or just N/A. Let's assume yes if they visited.
+
+    const incompleteDays = daysWithExercises.filter(d => {
+      const id = pathSnapshot?.dayIdByNo[d];
+      return !id || !completedDayIds.has(id);
+    });
+
+    const isWeekCompleted = incompleteDays.length === 0;
+
+    if (!isWeekCompleted) {
+      setShowClaimPopup({
+        visible: true,
+        success: false,
+        message: "Con chưa hoàn thành hết bài tập trong tuần!",
+        subMessage: "Con hãy cố gắng hoàn thành bài hàng ngày để nhận Cup nhé."
+      });
+      return;
+    }
+
+    if (claimedWeeks.has(weekIdx)) return;
+
+    // Optimistic UI update or just wait for clean result?
+    // User requested NO reload.
+    const res = await trainingTrackService.claimCup(user.id, weekIdx);
+
+    if (res.success) {
+      setClaimedWeeks(prev => new Set(prev).add(weekIdx));
+
+      // Update global user object if possible to reflect new count immediately without reload
+      // But we don't have setUser here. Layout will re-fetch on navigation, but not immediately.
+      // We can try to force a fetch if we shared context, but given the constraints:
+      // We will rely on the Popup to show success.
+
+      // Calculate new total
+      const newTotal = (user.cups_count || 0) + 1;
+      // Note: We can't easily validly update `user` prop here as it's from parent.
+
+      setShowClaimPopup({
+        visible: true,
+        success: true,
+        message: "CHÚC MỪNG CON!",
+        subMessage: `Con đã nhận được Cup tuần ${weekIdx + 1}. Tổng số Cup: ${newTotal}`
+      });
+
+    } else {
+      setShowClaimPopup({
+        visible: true,
+        success: false,
+        message: "Có lỗi xảy ra",
+        subMessage: res.error
+      });
+    }
+  };
+
   const startPathExercise = (ex: PathExerciseEntry) => {
     const modeMap = { visual: Mode.VISUAL, audio: Mode.LISTENING, flash: Mode.FLASH } as const;
     const mode = modeMap[ex.mode];
@@ -388,12 +476,12 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
         returnTo: { tab: 'path' as const, pathDay: ex.day_no },
         pathContext: (ex.track_id && ex.day_id)
           ? {
-              trackId: ex.track_id,
-              dayId: ex.day_id,
-              exerciseId: ex.id,
-              levelSymbol: ex.level_symbol,
-              dayNo: ex.day_no,
-            }
+            trackId: ex.track_id,
+            dayId: ex.day_id,
+            exerciseId: ex.id,
+            levelSymbol: ex.level_symbol,
+            dayNo: ex.day_no,
+          }
           : undefined,
       },
     });
@@ -423,11 +511,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               title={tab.label}
-              className={`flex-shrink-0 lg:w-full text-left px-4 py-2.5 lg:py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap text-sm lg:text-base ${
-                tab.id === 'path' && isPathLocked
-                  ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
-                  : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
-              }`}
+              className={`flex-shrink-0 lg:w-full text-left px-4 py-2.5 lg:py-3 rounded-xl font-heading font-semibold flex items-center gap-2 transition-colors whitespace-nowrap text-sm lg:text-base ${tab.id === 'path' && isPathLocked
+                ? (activeTab === tab.id ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200')
+                : (activeTab === tab.id ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
+                }`}
             >
               <span>{tab.icon}</span>
               <span className="min-w-0 truncate">{tab.label}</span>
@@ -553,11 +640,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={() => startPractice(Mode.VISUAL)}
                         disabled={isTrialUser && (modeTrialRemaining(Mode.VISUAL) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (modeTrialRemaining(Mode.VISUAL) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (modeTrialRemaining(Mode.VISUAL) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
+                          }`}
                       >
                         Bắt đầu → Làm bài
                       </button>
@@ -618,11 +704,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={() => startPractice(Mode.LISTENING)}
                         disabled={isTrialUser && (modeTrialRemaining(Mode.LISTENING) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (modeTrialRemaining(Mode.LISTENING) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (modeTrialRemaining(Mode.LISTENING) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
+                          }`}
                       >
                         Bắt đầu → Làm bài
                       </button>
@@ -682,11 +767,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={() => startPractice(Mode.FLASH)}
                         disabled={isTrialUser && (modeTrialRemaining(Mode.FLASH) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (modeTrialRemaining(Mode.FLASH) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (modeTrialRemaining(Mode.FLASH) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
+                          }`}
                       >
                         Bắt đầu → Làm bài
                       </button>
@@ -793,11 +877,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                             key={wIdx}
                             type="button"
                             onClick={() => setPathWeekIndex(wIdx)}
-                            className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${
-                              pathWeekIndex === wIdx
-                                ? 'bg-ucmas-blue text-white shadow'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-4 py-2 rounded-xl font-heading font-semibold text-sm transition-colors whitespace-nowrap ${pathWeekIndex === wIdx
+                              ? 'bg-ucmas-blue text-white shadow'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
                           >
                             Tuần {wIdx + 1}
                           </button>
@@ -810,6 +893,13 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       const weekNo = pathWeekIndex + 1;
                       const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
                       const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
+
+                      const currentWeekNeededDays = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLevel));
+                      const isWeekCompleted = currentWeekNeededDays.length > 0 && currentWeekNeededDays.every(d => {
+                        const id = pathSnapshot?.dayIdByNo[d];
+                        return id && completedDayIds.has(id);
+                      });
+                      const isClaimed = claimedWeeks.has(pathWeekIndex);
 
                       return (
                         <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-white rounded-[2.5rem] border border-indigo-100 shadow-sm p-6 overflow-hidden">
@@ -902,6 +992,37 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                                 </button>
                               );
                             })}
+
+                            {/* CUP at the end */}
+                            <button
+                              type="button"
+                              onClick={handleClaimCup}
+                              disabled={isClaimed && true} // Only disable if claimed (to avoid re-claiming). If incomplete, we want click to show popup.
+                              className={`absolute flex flex-col items-center justify-center transition-all transform 
+                                    ${isClaimed
+                                  ? 'opacity-100 scale-110 grayscale-0'
+                                  : (isWeekCompleted
+                                    ? 'hover:scale-110 cursor-pointer animate-pulse' // Changed from bounce to pulse
+                                    : 'opacity-40 grayscale cursor-pointer hover:scale-105') // Show as gray if incomplete
+                                }`}
+                              style={{ right: '5%', top: '40%', transform: 'translate(0, -50%)' }}
+                              title={isClaimed ? "Đã nhận Cup!" : (isWeekCompleted ? "Click để nhận Cup!" : "Hoàn thành tuần để nhận Cup")}
+                            >
+                              <div className={`w-20 h-20 sm:w-24 sm:h-24 filter drop-shadow-xl transition-all ${isWeekCompleted && !isClaimed ? 'drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]' : ''}`}>
+                                <img src="/svg/Cup.svg" alt="Cup" className="w-full h-full object-contain" />
+                              </div>
+                              {!isClaimed && isWeekCompleted && (
+                                <div className="mt-2 bg-gradient-to-r from-ucmas-yellow to-orange-400 text-white text-xs sm:text-sm font-heading-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse whitespace-nowrap">
+                                  NHẬN CUP 🏆
+                                </div>
+                              )}
+                              {isClaimed && (
+                                <div className="mt-2 bg-green-100 text-green-700 border border-green-200 text-[10px] font-heading-bold px-2 py-0.5 rounded-md shadow-sm">
+                                  ĐÃ NHẬN
+                                </div>
+                              )}
+                            </button>
+
                           </div>
                         </div>
                       );
@@ -909,6 +1030,43 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                   </>
                 )}
               </div>
+
+              {/* Claim Popup */}
+              {showClaimPopup.visible && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                  <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full text-center relative border-[3px] border-white ring-4 ring-ucmas-blue/10 transform transition-all scale-100">
+                    <button
+                      onClick={() => setShowClaimPopup({ ...showClaimPopup, visible: false })}
+                      className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2 bg-gray-50 rounded-full transition-colors"
+                    >
+                      ✕
+                    </button>
+
+                    <div className={`mx-auto w-24 h-24 mb-6 rounded-full flex items-center justify-center shadow-inner ${showClaimPopup.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                      <div className="text-5xl">
+                        {showClaimPopup.success ? '🏆' : '💪'}
+                      </div>
+                    </div>
+
+                    <h3 className={`text-2xl font-heading-extrabold mb-3 ${showClaimPopup.success ? 'text-ucmas-blue' : 'text-gray-700'}`}>
+                      {showClaimPopup.message}
+                    </h3>
+
+                    {showClaimPopup.subMessage && (
+                      <p className="text-gray-600 mb-8 font-medium px-4 leading-relaxed">
+                        {showClaimPopup.subMessage}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={() => setShowClaimPopup({ ...showClaimPopup, visible: false })}
+                      className={`w-full py-3.5 rounded-xl font-heading-bold text-white shadow-lg transform transition hover:scale-[1.02] active:scale-95 ${showClaimPopup.success ? 'bg-ucmas-blue hover:bg-ucmas-blue/90' : 'bg-gray-800 hover:bg-gray-700'}`}
+                    >
+                      {showClaimPopup.success ? 'TUYỆT VỜI!' : 'ĐÓNG LẠI'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {isPathLocked && (
                 <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -1037,11 +1195,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={startEliteVisual}
                         disabled={isTrialUser && (eliteTrialRemaining(Mode.VISUAL) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (eliteTrialRemaining(Mode.VISUAL) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (eliteTrialRemaining(Mode.VISUAL) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-blue text-white hover:bg-ucmas-red'
+                          }`}
                       >
                         BẮT ĐẦU → Làm bài
                       </button>
@@ -1080,11 +1237,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={startEliteAudio}
                         disabled={isTrialUser && (eliteTrialRemaining(Mode.LISTENING) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (eliteTrialRemaining(Mode.LISTENING) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (eliteTrialRemaining(Mode.LISTENING) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-red text-white hover:bg-ucmas-blue'
+                          }`}
                       >
                         BẮT ĐẦU → Làm bài
                       </button>
@@ -1122,11 +1278,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <button
                         onClick={startEliteFlash}
                         disabled={isTrialUser && (eliteTrialRemaining(Mode.FLASH) ?? 0) <= 0}
-                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${
-                          isTrialUser && (eliteTrialRemaining(Mode.FLASH) ?? 0) <= 0
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
-                        }`}
+                        className={`w-full py-3.5 font-heading-bold rounded-xl transition-colors shadow-lg ${isTrialUser && (eliteTrialRemaining(Mode.FLASH) ?? 0) <= 0
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-ucmas-green text-white hover:bg-ucmas-blue'
+                          }`}
                       >
                         BẮT ĐẦU → Làm bài
                       </button>

@@ -435,5 +435,51 @@ export const trainingTrackService = {
       return { success: false, error: e?.message || 'Lỗi không xác định' };
     }
   },
+
+  async getCollectedCups(userId: string): Promise<Set<number>> {
+    try {
+      const { data, error } = await supabase
+        .from('user_collected_cups' as any)
+        .select('week_index')
+        .eq('user_id', userId);
+      if (error) {
+        // Table might not exist yet if migration wasn't run, handle gracefully
+        console.warn('getCollectedCups error (ignore if table missing):', error.message);
+        return new Set();
+      }
+      return new Set((data || []).map((r: any) => Number(r.week_index)));
+    } catch (e) {
+      return new Set();
+    }
+  },
+
+  async getTotalCups(userId: string): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('user_collected_cups' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      if (error) {
+        console.warn('getTotalCups error:', error.message);
+        return 0;
+      }
+      return count || 0;
+    } catch (e) {
+      return 0;
+    }
+  },
+
+  async claimCup(userId: string, weekIndex: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase
+        .from('user_collected_cups' as any)
+        .insert({ user_id: userId, week_index: weekIndex });
+      if (error) throw new Error(error.message);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Lỗi khi nhận Cup' };
+    }
+  },
 };
 

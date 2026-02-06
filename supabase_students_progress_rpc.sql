@@ -297,7 +297,7 @@ begin
           from public.teacher_classes tc
           join public.class_students cs
             on cs.class_id = tc.class_id
-           and cs.left_at is null
+            and cs.left_at is null
           where tc.teacher_id = p_teacher_id
             and tc.unassigned_at is null
             and cs.student_id = r.student_id
@@ -381,4 +381,3 @@ begin
   offset greatest(p_offset, 0);
 end;
 $$;
-

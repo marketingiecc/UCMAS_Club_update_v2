@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
+import { trainingTrackService } from '../services/trainingTrackService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,11 +36,45 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
 
   // Calculate days remaining
   const getDaysLeft = () => {
-     if (!user?.license_expiry) return 0;
-     const diff = new Date(user.license_expiry).getTime() - new Date().getTime();
-     return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    if (!user?.license_expiry) return 0;
+    const diff = new Date(user.license_expiry).getTime() - new Date().getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
-  
+
+
+  // Custom fetch for cup count
+  const [localCupsCount, setLocalCupsCount] = useState<number>(typeof user?.cups_count === 'number' ? user.cups_count : 0);
+
+  useEffect(() => {
+    if (typeof user?.cups_count === 'number') {
+      setLocalCupsCount(user.cups_count);
+    }
+  }, [user?.cups_count]);
+
+  const fetchCups = async () => {
+    if (user?.id) {
+      try {
+        const count = await trainingTrackService.getTotalCups(user.id);
+        // Only update if changed
+        setLocalCupsCount(prev => (prev !== count ? count : prev));
+      } catch (e) {
+        console.error("Failed to fetch cup count", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchCups(); // Initial fetch
+
+    // Listen for custom event
+    const handleCupUpdate = () => fetchCups();
+    window.addEventListener('cup-updated', handleCupUpdate);
+
+    return () => {
+      window.removeEventListener('cup-updated', handleCupUpdate);
+    };
+  }, [user?.id, location.pathname]);
+
   const daysLeft = getDaysLeft();
 
   const navLinkClass = (active: boolean) =>
@@ -52,40 +87,40 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
           <div className="flex items-center justify-between h-16 sm:h-20">
             {/* Logo with Tagline */}
             <div className="flex items-center gap-3 cursor-pointer group flex-shrink-0" onClick={() => navigate('/')}>
-               <img 
-                 src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro" 
-                 alt="UCMAS Logo" 
-                 className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
-               />
+              <img
+                src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro"
+                alt="UCMAS Logo"
+                className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
+              />
             </div>
 
             {/* Desktop Navigation Links (chỉ desktop >= lg) */}
             <div className="hidden lg:flex items-center space-x-6">
-               <Link to="/" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/')}`}>Trang chủ</Link>
-               {user && (
-                 <>
-                   <Link to="/training" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/training')}`}>Luyện tập</Link>
-                   {user.role === 'teacher' && (
-                     <Link to="/teacher" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/teacher')}`}>Giáo viên</Link>
-                   )}
-                   <Link to="/contests" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname.startsWith('/contests'))}`}>
-                     <span className="flex items-center gap-1">Cuộc thi <span className="text-ucmas-yellow">🏆</span></span>
-                   </Link>
-                   <Link to="/activate" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/activate')}`}>Kích hoạt</Link>
-                   {user.role === 'admin' && (
-                     <Link to="/admin" className={`text-xs font-heading-bold text-white bg-ucmas-red uppercase px-4 py-2 rounded-lg hover:bg-ucmas-blue transition-all shadow-md ${location.pathname === '/admin' ? 'ring-2 ring-ucmas-yellow' : ''}`}>
-                       Quản trị viên
-                     </Link>
-                   )}
-                 </>
-               )}
+              <Link to="/" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/')}`}>Trang chủ</Link>
+              {user && (
+                <>
+                  <Link to="/training" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/training')}`}>Luyện tập</Link>
+                  {user.role === 'teacher' && (
+                    <Link to="/teacher" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/teacher')}`}>Giáo viên</Link>
+                  )}
+                  <Link to="/contests" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname.startsWith('/contests'))}`}>
+                    <span className="flex items-center gap-1">Cuộc thi <span className="text-ucmas-yellow">🏆</span></span>
+                  </Link>
+                  <Link to="/activate" className={`text-sm font-heading font-semibold transition-colors ${navLinkClass(location.pathname === '/activate')}`}>Kích hoạt</Link>
+                  {user.role === 'admin' && (
+                    <Link to="/admin" className={`text-xs font-heading-bold text-white bg-ucmas-red uppercase px-4 py-2 rounded-lg hover:bg-ucmas-blue transition-all shadow-md ${location.pathname === '/admin' ? 'ring-2 ring-ucmas-yellow' : ''}`}>
+                      Quản trị viên
+                    </Link>
+                  )}
+                </>
+              )}
 
-               {!user && (
-                 <>
-                   <a href="#" className="text-sm font-heading font-semibold text-gray-700 hover:text-ucmas-blue transition-colors">Tin tức</a>
-                   <a href="#" className="text-sm font-heading font-semibold text-gray-700 hover:text-ucmas-blue transition-colors">Liên hệ</a>
-                 </>
-               )}
+              {!user && (
+                <>
+                  <a href="#" className="text-sm font-heading font-semibold text-gray-700 hover:text-ucmas-blue transition-colors">Tin tức</a>
+                  <a href="#" className="text-sm font-heading font-semibold text-gray-700 hover:text-ucmas-blue transition-colors">Liên hệ</a>
+                </>
+              )}
             </div>
 
             {/* Auth / User block */}
@@ -103,7 +138,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                     </div>
                     <div className="hidden lg:flex flex-col items-start">
                       <span className="text-sm font-heading-bold text-gray-800">{user.full_name || 'Học sinh'}</span>
-                      <span className="text-xs text-gray-500">Cấp độ: {user.level_symbol || '—'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Cấp độ: {user.level_symbol || '—'}</span>
+                        <span className="flex items-center gap-1 text-xs font-heading font-bold text-ucmas-green bg-green-50 px-2 py-0.5 rounded-full border border-green-100" title="Số Cup đã nhận">
+                          <img src="/svg/Cup.svg" alt="Cup" className="w-3 h-3" />
+                          {localCupsCount}
+                        </span>
+                      </div>
                     </div>
                   </Link>
                   {user.role !== 'admin' && daysLeft > 0 && (
@@ -120,12 +161,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                 </>
               ) : (
                 <div className="flex gap-2 sm:gap-3">
-                   <Link to="/login" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold text-ucmas-blue border-2 border-ucmas-blue hover:bg-ucmas-blue hover:text-white transition-all shadow-sm">
-                     Đăng nhập
-                   </Link>
-                   <Link to="/register" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold bg-ucmas-red text-white hover:bg-ucmas-blue shadow-lg transition-all transform hover:-translate-y-0.5 hover:shadow-xl">
-                     Đăng ký
-                   </Link>
+                  <Link to="/login" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold text-ucmas-blue border-2 border-ucmas-blue hover:bg-ucmas-blue hover:text-white transition-all shadow-sm">
+                    Đăng nhập
+                  </Link>
+                  <Link to="/register" className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-lg text-xs sm:text-sm font-heading-bold bg-ucmas-red text-white hover:bg-ucmas-blue shadow-lg transition-all transform hover:-translate-y-0.5 hover:shadow-xl">
+                    Đăng ký
+                  </Link>
                 </div>
               )}
               {/* Hamburger - chỉ hiện trên mobile/tablet và khi KHÔNG ở trang admin */}
@@ -158,9 +199,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
         {/* Mobile/Tablet menu - chỉ cho trang học sinh */}
         {showMobileNav && (
           <div
-            className={`lg:hidden overflow-hidden transition-all duration-200 ease-out ${
-              mobileMenuOpen ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
-            }`}
+            className={`lg:hidden overflow-hidden transition-all duration-200 ease-out ${mobileMenuOpen ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
+              }`}
           >
             <div className="border-t border-gray-100 bg-white px-4 py-4 space-y-2">
               {user && (
