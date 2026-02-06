@@ -5,7 +5,9 @@ import type { UserProfile } from '../types';
 
 type DbClass = { id: string; name: string; center_id?: string | null };
 
-// --- Sub-components for cleaner code ---
+type TimeFilter = 'week' | 'month' | 'year' | 'all';
+
+// --- Sub-components --
 
 const StatCard: React.FC<{
   title: string;
@@ -32,14 +34,54 @@ const FilterBar: React.FC<{
   setFilterClassId: (id: string) => void;
   search: string;
   setSearch: (s: string) => void;
+  timeFilter: TimeFilter;
+  setTimeFilter: (t: TimeFilter) => void;
   totalStudents: number;
   loading: boolean;
   onRefresh: () => void;
-}> = ({ classes, filterClassId, setFilterClassId, search, setSearch, totalStudents, loading, onRefresh }) => (
-  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto flex-1">
+}> = ({ classes, filterClassId, setFilterClassId, search, setSearch, timeFilter, setTimeFilter, totalStudents, loading, onRefresh }) => (
+  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-col gap-4">
+
+    {/* Top Row: Time Filter & Refresh */}
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="flex bg-gray-100 p-1 rounded-xl">
+        {[
+          { key: 'week', label: 'Tuần này' },
+          { key: 'month', label: 'Tháng này' },
+          { key: 'year', label: 'Năm nay' },
+          { key: 'all', label: 'Tất cả' },
+        ].map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setTimeFilter(opt.key as TimeFilter)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timeFilter === opt.key
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+              }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-heading font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
+          {totalStudents} học sinh
+        </span>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="px-4 py-2 rounded-xl bg-ucmas-blue text-white font-heading font-black hover:bg-ucmas-blue/90 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-ucmas-blue/20 flex items-center gap-2 text-sm"
+        >
+          {loading ? <span className="animate-spin">↻</span> : <span>↻</span>}
+          <span className="hidden md:inline">Làm mới</span>
+        </button>
+      </div>
+    </div>
+
+    {/* Bottom Row: Class & Search */}
+    <div className="flex flex-col md:flex-row gap-4">
       <div className="w-full md:w-64">
-        {/* <label className="block text-xs font-heading font-bold text-gray-600 mb-1">Lớp quản lý</label> */}
         <div className="relative">
           <select
             value={filterClassId}
@@ -66,28 +108,41 @@ const FilterBar: React.FC<{
         />
       </div>
     </div>
-
-    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-      <span className="text-xs font-heading font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
-        {totalStudents} học sinh
-      </span>
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        className="px-4 py-3 rounded-2xl bg-ucmas-blue text-white font-heading font-black hover:bg-ucmas-blue/90 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-ucmas-blue/20 flex items-center gap-2"
-      >
-        {loading ? (
-          <span className="animate-spin text-lg">↻</span>
-        ) : (
-          <span>↻</span>
-        )}
-        <span className="hidden md:inline">Làm mới</span>
-      </button>
-    </div>
   </div>
 );
 
-// --- Main Page Component ---
+// --- Helper: Date Range ---
+function getDateRange(filter: TimeFilter): { from?: string; to?: string } {
+  const now = new Date();
+  if (filter === 'all') return {};
+
+  if (filter === 'week') {
+    // Current week (Monday start)
+    const day = now.getDay() || 7; // 1=Mon, 7=Sun
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(now.getDate() - day + 1);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    // Usually 'to' is consistent, but RPC uses <= so now is fine or end of week
+    // Let's just use 'start' as 'from'. 'to' can be null (meaning up to now)
+    return { from: start.toISOString() };
+  }
+
+  if (filter === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: start.toISOString() };
+  }
+
+  if (filter === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    return { from: start.toISOString() };
+  }
+  return {};
+}
+
+
+// --- Main Page ---
 
 const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
   const navigate = useNavigate();
@@ -99,6 +154,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
   const [filterClassId, setFilterClassId] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week');
 
   // Side panel state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -116,19 +172,22 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
   const refresh = async () => {
     setLoading(true);
     try {
-      // 1. Load active classes for this teacher
+      // 1. Load Classes
       const classIds = await backend.getTeacherActiveClassIds(user.id);
       const allClasses = await backend.getClasses();
       const myClasses = allClasses.filter((c) => classIds.includes(c.id));
       setClasses(myClasses);
 
-      // 2. Load summary
+      // 2. Load Summary with Dates
+      const { from, to } = getDateRange(timeFilter);
+
       const summaryRes = await backend.getStudentsProgressSummary({
         teacherId: user.id,
         classId: filterClassId || undefined,
         search: activeFilters.search,
+        from,
+        to,
         limit: 200,
-        offset: 0,
       });
 
       if (summaryRes.success) {
@@ -140,19 +199,19 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
             email: r.email || '',
             full_name: r.full_name || '',
             role: 'student' as any,
-            created_at: new Date().toISOString(), // stub
+            created_at: new Date().toISOString(),
             allowed_modes: [],
             student_code: r.student_code || undefined,
             phone: r.phone || undefined,
-            cups_count: r.cups_count || 0, // Using the new field
-          };
+            cups_count: r.cups_count || 0,
+            level_symbol: r.level_symbol, // Bind Level
+          } as UserProfile;
         });
         setStudents(nextStudents);
         setSummaryByStudentId(map);
       } else {
-        // Fallback
-        const roster = await backend.getStudentsByFilter({ teacherId: user.id, search: activeFilters.search });
-        setStudents(roster);
+        // Fallback usually shouldn't happen unless RPC fails
+        setStudents([]);
         setSummaryByStudentId({});
       }
     } finally {
@@ -163,9 +222,9 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [timeFilter]); // Refresh on time filter change
 
-  // Debounce search
+  // Debounce search/class
   useEffect(() => {
     const handle = setTimeout(() => void refresh(), 400);
     return () => clearTimeout(handle);
@@ -191,42 +250,38 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
     setDetailStudent(null);
   };
 
-  // --- Computed Stats ---
+  // --- Stats Computation ---
   const stats = useMemo(() => {
     const total = students.length;
-    const today = new Date().toDateString();
-
     let submittedToday = 0;
     let needsAttention = 0;
+    const todayStr = new Date().toDateString();
 
     students.forEach(s => {
       const summary = summaryByStudentId[s.id];
       if (summary) {
-        if (summary.last_attempt_at && new Date(summary.last_attempt_at).toDateString() === today) {
+        if (summary.last_attempt_at && new Date(summary.last_attempt_at).toDateString() === todayStr) {
           submittedToday++;
         }
-        // Logic: Low accuracy (< 50%) OR Inactive (> 3 days) could be "Needs Attention"
-        // Simply checking accuracy for now or if no attempts
+        // Needs attention if Attempts > 0 but Accuracy < 50%
         if (summary.attempts_count > 0 && summary.accuracy_pct < 50) {
           needsAttention++;
         }
       }
     });
-
     return { total, submittedToday, needsAttention };
   }, [students, summaryByStudentId]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
       <div className="max-w-[1400px] mx-auto">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-heading font-black text-[#1a237e] uppercase tracking-tight">
               Bảng điều khiển giáo viên
             </h1>
             <p className="text-sm text-gray-500 font-medium mt-1">
-              Quản lý lớp học, theo dõi tiến độ và hỗ trợ học sinh hiệu quả.
+              Quản lý lớp học và theo dõi tiến độ.
             </p>
           </div>
           <button
@@ -237,7 +292,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           </button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Tổng học sinh"
@@ -248,7 +303,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           <StatCard
             title="Học sinh cần chú ý"
             value={stats.needsAttention}
-            subtext={stats.needsAttention > 0 ? "TB < 50%" : "Tốt"}
+            subtext={stats.needsAttention > 0 ? "Tỉ lệ đúng < 50%" : "Tốt"}
             icon={<span className="text-2xl">⚠️</span>}
             colorClass="bg-red-50 border-red-100 text-red-900"
           />
@@ -266,97 +321,83 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           setFilterClassId={setFilterClassId}
           search={search}
           setSearch={setSearch}
+          timeFilter={timeFilter}
+          setTimeFilter={setTimeFilter}
           totalStudents={students.length}
           loading={loading}
           onRefresh={refresh}
         />
 
-        {/* Main Table */}
+        {/* Table */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
-          {/* Header Row */}
           <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
             <div className="col-span-4 md:col-span-3">Học sinh</div>
-            <div className="col-span-2 hidden md:block text-center">Cấp độ</div> {/* Placeholder for Level */}
-            <div className="col-span-4 md:col-span-3">Tiến độ tuần này</div>
-            <div className="col-span-2 hidden md:block text-center">Điểm TB</div>
-            <div className="col-span-4 md:col-span-2 text-right">Hành động</div>
+            <div className="col-span-2 text-center">Cấp độ</div>
+            <div className="col-span-4 md:col-span-3">Tiến độ ({
+              timeFilter === 'week' ? 'Tuần' : timeFilter === 'month' ? 'Tháng' : timeFilter === 'year' ? 'Năm' : 'Tất cả'
+            })</div>
+            <div className="col-span-2 hidden md:block text-center">Tỉ lệ đúng</div>
+            <div className="col-span-2 text-right">Hành động</div>
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-gray-400 font-medium">Đang tải dữ liệu lớp học...</div>
+            <div className="p-12 text-center text-gray-400 font-medium">Đang tải dữ liệu...</div>
           ) : students.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="text-4xl mb-3">📭</div>
-              <div className="text-gray-900 font-bold mb-1">Chưa có dữ liệu</div>
-              <div className="text-gray-500 text-sm">Không tìm thấy học sinh nào trong lớp này.</div>
-            </div>
+            <div className="p-12 text-center text-gray-400 font-medium">Chưa có dữ liệu</div>
           ) : (
             <div className="divide-y divide-gray-50">
               {students.map((s) => {
                 const summary = summaryByStudentId[s.id] || {};
-                const accuracy = summary.accuracy_pct || 0;
-                const attempts = summary.attempts_count || 0;
-                // Example progress bar logic (just visual based on accuracy/attempts)
-                const progressColor = accuracy >= 80 ? 'bg-green-500' : accuracy >= 50 ? 'bg-yellow-400' : 'bg-red-400';
-                const progressWidth = Math.min(100, Math.max(5, accuracy)) + '%';
+                const accuracy = Number(summary.accuracy_pct) || 0;
+                const trainingDays = summary.training_completed_days || 0;
+                // Visual bar for training days (goal: say 7 days for week, 30 for month?)
+                const maxDays = timeFilter === 'week' ? 7 : timeFilter === 'month' ? 30 : 100;
+                const widthPct = Math.min(100, (trainingDays / maxDays) * 100);
 
                 return (
-                  <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors group">
-                    {/* Student Info */}
-                    <div className="col-span-4 md:col-span-3 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-sm shrink-0">
-                        {s.full_name?.charAt(0) || 'U'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-heading font-black text-gray-800 text-sm truncate">{s.full_name}</div>
-                        <div className="text-xs text-gray-400 truncate font-medium">
-                          {s.student_code && <span className="mr-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{s.student_code}</span>}
-                          {s.phone}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Cups / Level */}
-                    <div className="col-span-2 hidden md:flex flex-col items-center justify-center">
-                      {/* Mock Level or Cups */}
-                      {s.cups_count != null && (
-                        <div className="flex items-center gap-1.5 px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
-                          <span>🏆</span> {s.cups_count}
-                        </div>
-                      )}
-                      <span className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Cấp độ</span>
-                    </div>
-
-                    {/* Progress Bar */}
+                  <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors">
+                    {/* Name & Cups */}
                     <div className="col-span-4 md:col-span-3">
-                      <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className={`font-bold ${accuracy >= 50 ? 'text-green-600' : 'text-red-500'}`}>
-                          {accuracy > 0 ? (accuracy >= 80 ? '>80%' : accuracy < 50 ? '<60%' : '60-80%') : 'Chưa học'}
-                        </span>
-                        <span className="text-gray-400">{accuracy}% ({attempts} lượt)</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${progressColor}`} style={{ width: progressWidth }}></div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                          {s.full_name?.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-heading font-black text-gray-800 text-sm truncate">{s.full_name}</div>
+                          <div className="text-xs text-blue-600 font-bold flex items-center gap-1">
+                            <span>🏆 {s.cups_count || 0}</span>
+                            <span className="text-gray-300">|</span>
+                            <span className="text-gray-400 font-medium">{s.student_code || '---'}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Score */}
+                    {/* Level */}
+                    <div className="col-span-2 text-center font-heading font-black text-gray-700 text-sm">
+                      {s.level_symbol || '-'}
+                    </div>
+
+                    {/* Progress (Training Days) */}
+                    <div className="col-span-4 md:col-span-3">
+                      <div className="flex justify-between text-xs mb-1 font-bold text-gray-600">
+                        <span>{trainingDays} ngày luyện</span>
+                        <span className="text-gray-400">{widthPct.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 rounded-full" style={{ width: `${widthPct}%` }}></div>
+                      </div>
+                    </div>
+
+                    {/* Accuracy */}
                     <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700">
-                      {summary.accuracy_pct ? (summary.accuracy_pct / 10).toFixed(1) : '-'}
-                      {accuracy < 50 && accuracy > 0 && <span className="ml-2 text-red-500 text-lg">⚠️</span>}
+                      {accuracy}%
+                      {accuracy < 50 && accuracy > 0 && <span className="ml-1 text-red-500">⚠️</span>}
                     </div>
 
-                    {/* Actions */}
-                    <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2">
-                      <button
-                        className="hidden lg:block px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition"
-                      >
-                        Nhắc nhở
-                      </button>
-                      <button
-                        onClick={() => openDetail(s)}
-                        className="px-4 py-1.5 rounded-xl bg-[#1a237e] text-white text-xs font-heading font-bold hover:bg-[#1a237e]/90 shadow-md shadow-blue-900/20 transition"
-                      >
+                    {/* Action */}
+                    <div className="col-span-2 flex justify-end">
+                      <button onClick={() => openDetail(s)} className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100">
                         Chi tiết
                       </button>
                     </div>
@@ -367,126 +408,34 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           )}
         </div>
 
-        {/* Sidebar / Modal for Details */}
+        {/* Detail Modal (Simple Reuse) */}
         {detailOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end font-sans">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-              onClick={closeDetail}
-            ></div>
-
-            {/* Sidebar Panel */}
-            <div className="relative w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-              {/* Header */}
-              <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-gray-50/50">
-                <div>
-                  <h2 className="text-xl font-heading font-black text-gray-800">Chi tiết học sinh</h2>
-                  {detailStudent && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-lg">
-                        {detailStudent.full_name?.charAt(0) || 'U'}
-                      </div>
-                      <div>
-                        <div className="font-bold text-gray-900">{detailStudent.full_name}</div>
-                        <div className="text-xs text-gray-500 font-medium">
-                          {detailStudent.student_code} • {detailStudent.phone}
-                        </div>
-                        {summaryByStudentId[detailStudent.id]?.accuracy_pct < 50 && (
-                          <div className="text-xs text-red-600 font-bold mt-1 flex items-center gap-1">
-                            ⚠️ Cần hỗ trợ ngay
-                          </div>
-                        )}
-                      </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeDetail}>
+            <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h2 className="text-xl font-heading font-black mb-4">Chi tiết: {detailStudent?.full_name}</h2>
+              {detailLoading ? 'Đang tải...' : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="text-xs text-gray-500 uppercase font-bold">Tổng Cup</div>
+                      <div className="text-2xl font-black text-yellow-600">{detailStudent?.cups_count || 0} 🏆</div>
                     </div>
-                  )}
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="text-xs text-gray-500 uppercase font-bold">Cấp độ hiện tại</div>
+                      <div className="text-2xl font-black text-indigo-900">{detailStudent?.level_symbol || '-'}</div>
+                    </div>
+                  </div>
+
+                  {/* Mini Chart Placeholder */}
+                  <div className="h-32 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                    Biểu đồ chi tiết (Đang cập nhật)
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <button onClick={closeDetail} className="px-5 py-2 bg-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-300">Đóng</button>
+                  </div>
                 </div>
-                <button
-                  onClick={closeDetail}
-                  className="p-2 rounded-full hover:bg-gray-200 text-gray-400 transition"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {detailLoading ? (
-                  <div className="flex flex-col items-center justify-center h-40 gap-3 text-gray-400">
-                    <span className="animate-spin text-2xl">⏳</span>
-                    <span className="text-sm font-medium">Đang tải hồ sơ...</span>
-                  </div>
-                ) : detailData?.error ? (
-                  <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium">
-                    {detailData.error}
-                  </div>
-                ) : (
-                  <>
-                    {/* Quick Stats Row */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-                        <div className="text-xs text-blue-800 font-bold mb-1">Cúp tích lũy</div>
-                        <div className="text-2xl font-black text-blue-900">
-                          {detailStudent?.cups_count || 0} 🏆
-                        </div>
-                      </div>
-                      <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100">
-                        <div className="text-xs text-purple-800 font-bold mb-1">Điểm trung bình</div>
-                        <div className="text-2xl font-black text-purple-900">
-                          {(detailData?.attempts?.accuracy_pct / 10).toFixed(1)} <span className="text-sm font-normal text-purple-700">/10</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Graph Placeholder (7 days) */}
-                    <div>
-                      <h3 className="text-sm font-heading font-black uppercase text-gray-800 mb-3">Kết quả luyện tập 7 ngày qua</h3>
-                      <div className="h-40 w-full bg-gray-50 rounded-2xl border border-gray-100 flex items-end justify-between p-4 px-2">
-                        {/* Mock Graph Bars */}
-                        {[60, 30, 80, 45, 90, 20, 70].map((h, i) => (
-                          <div key={i} className="flex flex-col items-center gap-1 w-full">
-                            <div
-                              className="w-2 md:w-4 bg-indigo-500 rounded-t-lg opacity-80 hover:opacity-100 transition-all"
-                              style={{ height: `${h}%` }}
-                            ></div>
-                            <span className="text-[9px] text-gray-400 font-bold uppercase">
-                              {['S', 'M', 'T', 'W', 'T', 'F', 'S'][i]}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Needs Improvement Section */}
-                    <div className="p-4 bg-red-50 border border-red-100 rounded-2xl">
-                      <h3 className="text-sm font-heading font-black text-red-800 mb-2 flex items-center gap-2">
-                        <span>📉</span> Bài tập cần cải thiện
-                      </h3>
-                      <ul className="space-y-2">
-                        {/* Mock data or derived from detailData if available */}
-                        <li className="text-xs font-bold text-gray-700 flex justify-between">
-                          <span>Trừ có nhớ (Cấp 2)</span>
-                          <span className="text-red-600">4.5 điểm</span>
-                        </li>
-                        <li className="text-xs font-bold text-gray-700 flex justify-between">
-                          <span>Nghe tính 2 chữ số</span>
-                          <span className="text-red-600">5.0 điểm</span>
-                        </li>
-                      </ul>
-                    </div>
-
-                    {/* Actions Bottom */}
-                    <div className="space-y-3 pt-4">
-                      <button className="w-full py-3 rounded-xl bg-red-600 text-white font-heading font-bold shadow-lg shadow-red-600/20 hover:bg-red-700 transition">
-                        Giao bài tập bổ trợ
-                      </button>
-                      <button className="w-full py-3 rounded-xl bg-[#1a237e] text-white font-heading font-bold shadow-lg shadow-blue-900/20 hover:bg-[#1a237e]/90 transition">
-                        Gửi tin nhắn
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+              )}
             </div>
           </div>
         )}
