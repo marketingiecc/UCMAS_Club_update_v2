@@ -184,32 +184,42 @@ const AdminInfoManagerPage: React.FC = () => {
         const classById = new Map<string, DbClass>();
         (cls || []).forEach((c) => classById.set(c.id, c));
 
-        // Class student counts + center unique student counts
-        const classCounts: Record<string, number> = {};
-        const centerStudentSets = new Map<string, Set<string>>();
-        (studentRows || []).forEach((r) => {
-          classCounts[r.class_id] = (classCounts[r.class_id] || 0) + 1;
-          const cl = classById.get(r.class_id);
-          const centerId = cl?.center_id || null;
-          if (!centerId) return;
-          if (!centerStudentSets.has(centerId)) centerStudentSets.set(centerId, new Set());
-          centerStudentSets.get(centerId)!.add(r.student_id);
-        });
-        setClassStudentCounts(classCounts);
+        const [adminStats] = await Promise.all([
+          backend.getAdminInfoStats().catch(() => null),
+        ]);
 
-        // Center stats (class count + student count)
-        const centerStatsNext: Record<string, { classCount: number; studentCount: number }> = {};
-        (cens || []).forEach((c: any) => (centerStatsNext[c.id] = { classCount: 0, studentCount: 0 }));
-        (cls || []).forEach((c) => {
-          if (!c.center_id) return;
-          if (!centerStatsNext[c.center_id]) centerStatsNext[c.center_id] = { classCount: 0, studentCount: 0 };
-          centerStatsNext[c.center_id].classCount += 1;
-        });
-        centerStudentSets.forEach((set, centerId) => {
-          if (!centerStatsNext[centerId]) centerStatsNext[centerId] = { classCount: 0, studentCount: 0 };
-          centerStatsNext[centerId].studentCount = set.size;
-        });
-        setCenterStats(centerStatsNext);
+        if (adminStats) {
+          setCenterStats(adminStats.centerStats || {});
+          setClassStudentCounts(adminStats.classStudentCounts || {});
+        } else {
+          // Fallback if RPC fails or not deployed yet
+          // Class student counts + center unique student counts
+          const classCounts: Record<string, number> = {};
+          const centerStudentSets = new Map<string, Set<string>>();
+          (studentRows || []).forEach((r) => {
+            classCounts[r.class_id] = (classCounts[r.class_id] || 0) + 1;
+            const cl = classById.get(r.class_id);
+            const centerId = cl?.center_id || null;
+            if (!centerId) return;
+            if (!centerStudentSets.has(centerId)) centerStudentSets.set(centerId, new Set());
+            centerStudentSets.get(centerId)!.add(r.student_id);
+          });
+          setClassStudentCounts(classCounts);
+
+          // Center stats (class count + student count)
+          const centerStatsNext: Record<string, { classCount: number; studentCount: number }> = {};
+          (cens || []).forEach((c: any) => (centerStatsNext[c.id] = { classCount: 0, studentCount: 0 }));
+          (cls || []).forEach((c) => {
+            if (!c.center_id) return;
+            if (!centerStatsNext[c.center_id]) centerStatsNext[c.center_id] = { classCount: 0, studentCount: 0 };
+            centerStatsNext[c.center_id].classCount += 1;
+          });
+          centerStudentSets.forEach((set, centerId) => {
+            if (!centerStatsNext[centerId]) centerStatsNext[centerId] = { classCount: 0, studentCount: 0 };
+            centerStatsNext[centerId].studentCount = set.size;
+          });
+          setCenterStats(centerStatsNext);
+        }
 
         // Schedule summaries per class
         const dowLabel = new Map<number, string>(DOW.map((d) => [d.id, d.label]));
@@ -640,25 +650,22 @@ const AdminInfoManagerPage: React.FC = () => {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-2 mb-6 inline-flex">
           <button
             onClick={() => goTab('centers')}
-            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
-              activeTab === 'centers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
-            }`}
+            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${activeTab === 'centers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
           >
             Trung tâm
           </button>
           <button
             onClick={() => goTab('classes')}
-            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
-              activeTab === 'classes' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
-            }`}
+            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${activeTab === 'classes' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
           >
             Lớp học
           </button>
           <button
             onClick={() => goTab('teachers')}
-            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${
-              activeTab === 'teachers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
-            }`}
+            className={`px-5 py-3 rounded-2xl text-xs font-heading font-black uppercase transition ${activeTab === 'teachers' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
           >
             Giáo viên
           </button>
@@ -818,88 +825,88 @@ const AdminInfoManagerPage: React.FC = () => {
         )}
 
         {activeTab === 'teachers' && (
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-lg font-heading font-black text-gray-800">Danh sách giáo viên</h2>
-              <div className="text-xs text-gray-500 mt-1">Danh sách là thông tin chính. Bấm “Thêm giáo viên” để tạo mới.</div>
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-heading font-black text-gray-800">Danh sách giáo viên</h2>
+                <div className="text-xs text-gray-500 mt-1">Danh sách là thông tin chính. Bấm “Thêm giáo viên” để tạo mới.</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCreateTeacherOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-ucmas-red text-white text-xs font-heading font-black uppercase hover:bg-ucmas-blue transition"
+                >
+                  Thêm giáo viên
+                </button>
+                <button
+                  onClick={() => void refreshTeachers()}
+                  className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-heading font-black uppercase"
+                >
+                  Làm mới
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCreateTeacherOpen(true)}
-                className="px-4 py-2 rounded-xl bg-ucmas-red text-white text-xs font-heading font-black uppercase hover:bg-ucmas-blue transition"
-              >
-                Thêm giáo viên
-              </button>
-              <button
-                onClick={() => void refreshTeachers()}
-                className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-heading font-black uppercase"
-              >
-                Làm mới
-              </button>
-            </div>
-          </div>
 
-          <input
-            value={teacherSearch}
-            onChange={(e) => setTeacherSearch(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl border border-gray-200 mb-4"
-            placeholder="Search tên / email / SĐT"
-          />
+            <input
+              value={teacherSearch}
+              onChange={(e) => setTeacherSearch(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border border-gray-200 mb-4"
+              placeholder="Search tên / email / SĐT"
+            />
 
-          {teachersLoading ? (
-            <div className="text-gray-500 text-sm">Đang tải...</div>
-          ) : teachersError ? (
-            <div className="text-sm text-red-600">❌ {teachersError}</div>
-          ) : filteredTeachers.length === 0 ? (
-            <div className="text-gray-500 text-sm">Chưa có giáo viên.</div>
-          ) : (
-            <div className="space-y-3 max-h-[70vh] overflow-auto pr-1">
-              {filteredTeachers.map((t) => {
-                const st = teacherStats[t.id] || { classCount: 0, studentCount: 0, centerNames: [] };
-                return (
-                  <div
-                    key={t.id}
-                    className="p-4 rounded-2xl border border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-heading font-black text-gray-800 truncate">{t.full_name || 'Giáo viên'}</div>
-                      <div className="text-xs text-gray-500 truncate">{t.email}</div>
-                      {t.phone && <div className="text-xs text-gray-500">SĐT: {t.phone}</div>}
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                        <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
-                          {st.studentCount} học sinh
-                        </span>
-                        <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
-                          {st.classCount} lớp
-                        </span>
-                        <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
-                          Trung tâm: {st.centerNames.length ? st.centerNames.join(', ') : '—'}
-                        </span>
+            {teachersLoading ? (
+              <div className="text-gray-500 text-sm">Đang tải...</div>
+            ) : teachersError ? (
+              <div className="text-sm text-red-600">❌ {teachersError}</div>
+            ) : filteredTeachers.length === 0 ? (
+              <div className="text-gray-500 text-sm">Chưa có giáo viên.</div>
+            ) : (
+              <div className="space-y-3 max-h-[70vh] overflow-auto pr-1">
+                {filteredTeachers.map((t) => {
+                  const st = teacherStats[t.id] || { classCount: 0, studentCount: 0, centerNames: [] };
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 rounded-2xl border border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-heading font-black text-gray-800 truncate">{t.full_name || 'Giáo viên'}</div>
+                        <div className="text-xs text-gray-500 truncate">{t.email}</div>
+                        {t.phone && <div className="text-xs text-gray-500">SĐT: {t.phone}</div>}
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                          <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
+                            {st.studentCount} học sinh
+                          </span>
+                          <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
+                            {st.classCount} lớp
+                          </span>
+                          <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
+                            Trung tâm: {st.centerNames.length ? st.centerNames.join(', ') : '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditTeacher(t)}
+                          className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-heading font-black uppercase"
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          onClick={() => void openAssign(t)}
+                          className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-heading font-black uppercase"
+                        >
+                          Thêm lớp
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditTeacher(t)}
-                        className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-heading font-black uppercase"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        onClick={() => void openAssign(t)}
-                        className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-heading font-black uppercase"
-                      >
-                        Thêm lớp
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Create Center modal */}
@@ -1055,11 +1062,10 @@ const AdminInfoManagerPage: React.FC = () => {
                           key={d.id}
                           type="button"
                           onClick={() => toggleDay(d.id)}
-                          className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${
-                            classForm.days.includes(d.id)
+                          className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${classForm.days.includes(d.id)
                               ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
                               : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                          }`}
+                            }`}
                         >
                           {d.label}
                         </button>
@@ -1188,11 +1194,10 @@ const AdminInfoManagerPage: React.FC = () => {
                               days: p.days.includes(d.id) ? p.days.filter((x) => x !== d.id) : [...p.days, d.id].sort((a, b) => a - b),
                             }))
                           }
-                          className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${
-                            editClassForm.days.includes(d.id)
+                          className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${editClassForm.days.includes(d.id)
                               ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
                               : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                          }`}
+                            }`}
                         >
                           {d.label}
                         </button>
@@ -1446,9 +1451,8 @@ const AdminInfoManagerPage: React.FC = () => {
                         key={c.id}
                         type="button"
                         onClick={() => toggleAssignClass(c.id)}
-                        className={`text-left p-4 rounded-2xl border transition ${
-                          assignIdSet.has(c.id) ? 'border-ucmas-blue bg-ucmas-blue/10' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
+                        className={`text-left p-4 rounded-2xl border transition ${assignIdSet.has(c.id) ? 'border-ucmas-blue bg-ucmas-blue/10' : 'border-gray-200 hover:bg-gray-50'
+                          }`}
                       >
                         <div className="font-heading font-black text-gray-800 truncate">{c.name}</div>
                         <div className="text-xs text-gray-500 truncate">
