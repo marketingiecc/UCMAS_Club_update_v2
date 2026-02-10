@@ -55,8 +55,8 @@ const FilterBar: React.FC<{
             key={opt.key}
             onClick={() => setTimeFilter(opt.key as TimeFilter)}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timeFilter === opt.key
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white text-indigo-700 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             {opt.label}
@@ -331,12 +331,13 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
         {/* Table */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
           <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
-            <div className="col-span-4 md:col-span-3">Học sinh</div>
-            <div className="col-span-2 text-center">Cấp độ</div>
-            <div className="col-span-4 md:col-span-3">Tiến độ ({
+            <div className="col-span-3 md:col-span-3">Học sinh</div>
+            <div className="col-span-2 md:col-span-1 text-center">Level</div>
+            <div className="col-span-2 md:col-span-1 text-center">Tổng Cup</div>
+            <div className="col-span-3 md:col-span-3">Tiến độ ({
               timeFilter === 'week' ? 'Tuần' : timeFilter === 'month' ? 'Tháng' : timeFilter === 'year' ? 'Năm' : 'Tất cả'
             })</div>
-            <div className="col-span-2 hidden md:block text-center">Tỉ lệ đúng</div>
+            <div className="col-span-2 text-center hidden md:block">Tỉ lệ đúng</div>
             <div className="col-span-2 text-right">Hành động</div>
           </div>
 
@@ -356,32 +357,33 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
                 return (
                   <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors">
-                    {/* Name & Cups */}
-                    <div className="col-span-4 md:col-span-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                    {/* Name */}
+                    <div className="col-span-3 md:col-span-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0">
                           {s.full_name?.charAt(0)}
                         </div>
                         <div className="min-w-0">
                           <div className="font-heading font-black text-gray-800 text-sm truncate">{s.full_name}</div>
-                          <div className="text-xs text-blue-600 font-bold flex items-center gap-1">
-                            <span>🏆 {s.cups_count || 0}</span>
-                            <span className="text-gray-300">|</span>
-                            <span className="text-gray-400 font-medium">{s.student_code || '---'}</span>
-                          </div>
+                          <div className="text-xs text-gray-400 font-medium truncate">{s.student_code || '---'}</div>
                         </div>
                       </div>
                     </div>
 
                     {/* Level */}
-                    <div className="col-span-2 text-center font-heading font-black text-gray-700 text-sm">
+                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-gray-700 text-sm">
                       {s.level_symbol || '-'}
                     </div>
 
+                    {/* Cups */}
+                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-yellow-600 text-sm">
+                      {s.cups_count || 0} 🏆
+                    </div>
+
                     {/* Progress (Training Days) */}
-                    <div className="col-span-4 md:col-span-3">
+                    <div className="col-span-3 md:col-span-3">
                       <div className="flex justify-between text-xs mb-1 font-bold text-gray-600">
-                        <span>{trainingDays} ngày luyện</span>
+                        <span>{trainingDays} ngày</span>
                         <span className="text-gray-400">{widthPct.toFixed(0)}%</span>
                       </div>
                       <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -390,14 +392,14 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
                     </div>
 
                     {/* Accuracy */}
-                    <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700">
+                    <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700 text-sm">
                       {accuracy}%
                       {accuracy < 50 && accuracy > 0 && <span className="ml-1 text-red-500">⚠️</span>}
                     </div>
 
                     {/* Action */}
                     <div className="col-span-2 flex justify-end">
-                      <button onClick={() => openDetail(s)} className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100">
+                      <button onClick={() => openDetail(s)} className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 whitespace-nowrap">
                         Chi tiết
                       </button>
                     </div>
@@ -413,26 +415,103 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeDetail}>
             <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
               <h2 className="text-xl font-heading font-black mb-4">Chi tiết: {detailStudent?.full_name}</h2>
-              {detailLoading ? 'Đang tải...' : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                      <div className="text-xs text-gray-500 uppercase font-bold">Tổng Cup</div>
-                      <div className="text-2xl font-black text-yellow-600">{detailStudent?.cups_count || 0} 🏆</div>
+              {detailLoading ? (
+                <div className="text-center py-8 text-gray-500">Đang tải dữ liệu...</div>
+              ) : (
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                  {/* Top Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="p-3 bg-yellow-50 rounded-xl border border-yellow-100">
+                      <div className="text-[10px] text-yellow-600 uppercase font-black tracking-wide">Tổng Cup</div>
+                      <div className="text-xl font-black text-yellow-700 mt-1">{detailStudent?.cups_count || 0} 🏆</div>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                      <div className="text-xs text-gray-500 uppercase font-bold">Cấp độ hiện tại</div>
-                      <div className="text-2xl font-black text-indigo-900">{detailStudent?.level_symbol || '-'}</div>
+                    <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                      <div className="text-[10px] text-indigo-600 uppercase font-black tracking-wide">Cấp độ</div>
+                      <div className="text-xl font-black text-indigo-700 mt-1">{detailStudent?.level_symbol || '-'}</div>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                      <div className="text-[10px] text-green-600 uppercase font-black tracking-wide">Luyện tập</div>
+                      <div className="text-xl font-black text-green-700 mt-1">
+                        {detailData?.training_track?.completed_days || 0} <span className="text-xs">ngày</span>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="text-[10px] text-blue-600 uppercase font-black tracking-wide">Chính xác</div>
+                      <div className="text-xl font-black text-blue-700 mt-1">
+                        {detailData?.attempts?.accuracy_pct || 0}%
+                      </div>
                     </div>
                   </div>
 
-                  {/* Mini Chart Placeholder */}
-                  <div className="h-32 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                    Biểu đồ chi tiết (Đang cập nhật)
+                  {/* Summary Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Thống kê chung</h3>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>Tổng số lần làm bài:</span>
+                          <span className="font-bold">{detailData?.attempts?.count || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Tổng thời gian:</span>
+                          <span className="font-bold">{Math.round((detailData?.attempts?.total_time_seconds || 0) / 60)} phút</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Làm bài gần nhất:</span>
+                          <span className="font-bold text-xs">
+                            {detailData?.attempts?.last_attempt_at ? new Date(detailData.attempts.last_attempt_at).toLocaleDateString('vi-VN') : '---'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Theo chế độ</h3>
+                      <div className="space-y-2 text-xs">
+                        {Object.entries(detailData?.attempts?.by_mode || {}).map(([mode, stats]: [string, any]) => (
+                          <div key={mode} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                            <span className="font-bold uppercase text-gray-500">{mode.replace('_', ' ')}</span>
+                            <div className="text-right">
+                              <div className="font-bold">{stats.attempts} lượt</div>
+                              <div className={`text-[10px] ${stats.correct / stats.total < 0.5 ? 'text-red-500' : 'text-green-600'}`}>
+                                {stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0}% đúng
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {Object.keys(detailData?.attempts?.by_mode || {}).length === 0 && (
+                          <div className="text-gray-400 italic text-center py-2">Chưa có dữ liệu</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex justify-end pt-4">
-                    <button onClick={closeDetail} className="px-5 py-2 bg-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-300">Đóng</button>
+                  {/* Recent Activity List */}
+                  <div className="pt-2">
+                    <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Hoạt động gần đây (Speed Training)</h3>
+                    <div className="space-y-2">
+                      {(detailData?.speed_training || []).slice(0, 5).map((sess: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl text-sm">
+                          <div>
+                            <div className="font-bold text-gray-800 uppercase text-xs">{sess.mode}</div>
+                            <div className="text-xs text-gray-400">{new Date(sess.created_at).toLocaleString('vi-VN')}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600">{sess.score} điểm</div>
+                            <div className="text-xs text-gray-500">{sess.duration_seconds}s</div>
+                          </div>
+                        </div>
+                      ))}
+                      {(detailData?.speed_training || []).length === 0 && (
+                        <div className="text-gray-400 italic text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                          Chưa có hoạt động
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button onClick={closeDetail} className="px-5 py-2 bg-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-300 transition-colors">Đóng</button>
                   </div>
                 </div>
               )}

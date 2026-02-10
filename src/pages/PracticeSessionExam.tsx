@@ -33,7 +33,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     const [timeLeft, setTimeLeft] = useState(600);
 
     // Flash & Audio states
-    const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
+    const [flashNumber, setFlashNumber] = useState<{ val: number | string, key: number | string } | null>(null);
     const [isFlashing, setIsFlashing] = useState(false);
     const [flashOverlay, setFlashOverlay] = useState<string | null>(null);
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -134,15 +134,18 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         await new Promise(r => setTimeout(r, 1000));
 
         // 2. Numbers
-        for (const num of q.operands) {
-            setFlashNumber(num);
+        for (let i = 0; i < q.operands.length; i++) {
+            const num = q.operands[i];
+            // Use object or key to force re-render/animation restart
+            setFlashNumber({ val: num, key: i });
+
+            // Wait full duration - no blank gap
             await new Promise(r => setTimeout(r, configSpeed));
-            setFlashNumber(null);
-            await new Promise(r => setTimeout(r, 150));
         }
+        setFlashNumber(null); // Clear last number
 
         // 3. Equals
-        setFlashNumber('=');
+        setFlashNumber({ val: '=', key: 'eq' });
         setIsFlashing(false);
     };
 
@@ -268,11 +271,15 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                         <div className="text-center w-full h-full flex items-center justify-center">
                             {flashOverlay ? (
                                 <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center rounded-[2rem]">
-                                    <div className="text-white font-normal text-[4.86rem] uppercase animate-bounce">{flashOverlay}</div>
+                                    <div className="text-white font-bold font-serif text-[4.86rem] uppercase animate-bounce">{flashOverlay}</div>
                                 </div>
                             ) : (
-                                <div key={flashNumber?.toString() || 'blank'} className="text-[160px] font-black text-ucmas-blue leading-none tracking-tighter transition-all animate-fade-in">
-                                    {flashNumber ?? <span className="opacity-0">...</span>}
+                                <div
+                                    key={typeof flashNumber === 'object' && flashNumber ? `${flashNumber.val}-${flashNumber.key}` : 'blank'}
+                                    className={`text-[160px] font-black text-ucmas-blue leading-none tracking-tighter transition-all ${(typeof flashNumber === 'object' && flashNumber?.val === '=') ? 'font-sans' : 'font-dnealian'} animate-flash-fade`}
+                                    style={{ animationDuration: `${navState?.customConfig?.flashSpeed || (navState?.customConfig?.speed ? navState.customConfig.speed * 1000 : 1000)}ms` }}
+                                >
+                                    {(typeof flashNumber === 'object' && flashNumber) ? flashNumber.val : <span className="opacity-0">...</span>}
                                 </div>
                             )}
                         </div>

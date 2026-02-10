@@ -4,6 +4,7 @@ import { backend } from '../services/mockBackend';
 import type { UserProfile } from '../types';
 
 type DbClass = { id: string; name: string; center_id?: string | null };
+type TimeFilter = 'week' | 'month' | 'year' | 'all';
 
 const StatCard: React.FC<{
   title: string;
@@ -33,13 +34,53 @@ const FilterBar: React.FC<{
   setFilterClassId: (id: string) => void;
   search: string;
   setSearch: (s: string) => void;
+  timeFilter: TimeFilter;
+  setTimeFilter: (t: TimeFilter) => void;
   totalStudents: number;
   loading: boolean;
   onRefresh: () => void;
-}> = ({ teachers, classes, filterTeacherId, setFilterTeacherId, filterClassId, setFilterClassId, search, setSearch, totalStudents, loading, onRefresh }) => (
-  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto flex-1">
+}> = ({ teachers, classes, filterTeacherId, setFilterTeacherId, filterClassId, setFilterClassId, search, setSearch, timeFilter, setTimeFilter, totalStudents, loading, onRefresh }) => (
+  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-col gap-4">
 
+    {/* Top Row: Time Filter & Refresh */}
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="flex bg-gray-100 p-1 rounded-xl">
+        {[
+          { key: 'week', label: 'Tuần này' },
+          { key: 'month', label: 'Tháng này' },
+          { key: 'year', label: 'Năm nay' },
+          { key: 'all', label: 'Tất cả' },
+        ].map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setTimeFilter(opt.key as TimeFilter)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timeFilter === opt.key
+              ? 'bg-white text-indigo-700 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+              }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-heading font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
+          {totalStudents} học sinh
+        </span>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="px-4 py-2 rounded-xl bg-ucmas-blue text-white font-heading font-black hover:bg-ucmas-blue/90 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-ucmas-blue/20 flex items-center gap-2 text-sm"
+        >
+          {loading ? <span className="animate-spin">↻</span> : <span>↻</span>}
+          <span className="hidden md:inline">Làm mới</span>
+        </button>
+      </div>
+    </div>
+
+    {/* Bottom Row: Filters */}
+    <div className="flex flex-col md:flex-row gap-4">
       <div className="w-full md:w-56">
         <div className="relative">
           <select
@@ -86,25 +127,33 @@ const FilterBar: React.FC<{
         />
       </div>
     </div>
-
-    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-      <span className="text-xs font-heading font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg whitespace-nowrap">
-        {totalStudents} học sinh
-      </span>
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        className="px-4 py-3 rounded-2xl bg-ucmas-blue text-white font-heading font-black hover:bg-ucmas-blue/90 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-ucmas-blue/20 flex items-center gap-2"
-      >
-        {loading ? (
-          <span className="animate-spin text-lg">↻</span>
-        ) : (
-          <span>↻</span>
-        )}
-      </button>
-    </div>
   </div>
 );
+
+// --- Helper: Date Range ---
+function getDateRange(filter: TimeFilter): { from?: string; to?: string } {
+  const now = new Date();
+  if (filter === 'all') return {};
+
+  if (filter === 'week') {
+    const day = now.getDay() || 7;
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(now.getDate() - day + 1);
+    return { from: start.toISOString() };
+  }
+
+  if (filter === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: start.toISOString() };
+  }
+
+  if (filter === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    return { from: start.toISOString() };
+  }
+  return {};
+}
 
 const AdminStudentProgressPage: React.FC = () => {
   const navigate = useNavigate();
@@ -118,6 +167,7 @@ const AdminStudentProgressPage: React.FC = () => {
   const [filterTeacherId, setFilterTeacherId] = useState<string>('');
   const [filterClassId, setFilterClassId] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week');
 
   // Side panel
   const [detailOpen, setDetailOpen] = useState(false);
@@ -143,10 +193,14 @@ const AdminStudentProgressPage: React.FC = () => {
       setTeachers(t);
       setClasses(c);
 
+      const { from, to } = getDateRange(timeFilter);
+
       const summaryRes = await backend.getStudentsProgressSummary({
         teacherId: activeFilters.teacherId,
         classId: activeFilters.classId,
         search: activeFilters.search,
+        from,
+        to,
         limit: 200,
         offset: 0,
       });
@@ -165,7 +219,8 @@ const AdminStudentProgressPage: React.FC = () => {
             student_code: r.student_code || undefined,
             phone: r.phone || undefined,
             cups_count: r.cups_count || 0,
-          };
+            level_symbol: r.level_symbol,
+          } as UserProfile;
         });
         setStudents(nextStudents);
         setSummaryByStudentId(map);
@@ -182,7 +237,7 @@ const AdminStudentProgressPage: React.FC = () => {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [timeFilter]); // Refresh on time filter change
 
   useEffect(() => {
     const handle = setTimeout(() => void refresh(), 400);
@@ -284,6 +339,8 @@ const AdminStudentProgressPage: React.FC = () => {
           setFilterClassId={setFilterClassId}
           search={search}
           setSearch={setSearch}
+          timeFilter={timeFilter}
+          setTimeFilter={setTimeFilter}
           totalStudents={students.length}
           loading={loading}
           onRefresh={refresh}
@@ -293,11 +350,14 @@ const AdminStudentProgressPage: React.FC = () => {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
           {/* Header Row */}
           <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
-            <div className="col-span-4 md:col-span-3">Học sinh</div>
-            <div className="col-span-2 hidden md:block text-center">Cấp độ</div>
-            <div className="col-span-4 md:col-span-3">Tiến độ tuần này</div>
-            <div className="col-span-2 hidden md:block text-center">Điểm TB</div>
-            <div className="col-span-4 md:col-span-2 text-right">Hành động</div>
+            <div className="col-span-3 md:col-span-3">Học sinh</div>
+            <div className="col-span-2 md:col-span-1 text-center">Level</div>
+            <div className="col-span-2 md:col-span-1 text-center">Tổng Cup</div>
+            <div className="col-span-3 md:col-span-3">Tiến độ ({
+              timeFilter === 'week' ? 'Tuần' : timeFilter === 'month' ? 'Tháng' : timeFilter === 'year' ? 'Năm' : 'Tất cả'
+            })</div>
+            <div className="col-span-2 text-center hidden md:block">Tỉ lệ đúng</div>
+            <div className="col-span-2 text-right">Hành động</div>
           </div>
 
           {loading ? (
@@ -312,15 +372,16 @@ const AdminStudentProgressPage: React.FC = () => {
             <div className="divide-y divide-gray-50">
               {students.map((s) => {
                 const summary = summaryByStudentId[s.id] || {};
-                const accuracy = summary.accuracy_pct || 0;
-                const attempts = summary.attempts_count || 0;
-                const progressColor = accuracy >= 80 ? 'bg-green-500' : accuracy >= 50 ? 'bg-yellow-400' : 'bg-red-400';
-                const progressWidth = Math.min(100, Math.max(5, accuracy)) + '%';
+                const accuracy = Number(summary.accuracy_pct) || 0;
+
+                const trainingDays = summary.training_completed_days || 0;
+                const maxDays = timeFilter === 'week' ? 7 : timeFilter === 'month' ? 30 : 100;
+                const widthPct = Math.min(100, (trainingDays / maxDays) * 100);
 
                 return (
                   <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors group">
                     {/* Student Info */}
-                    <div className="col-span-4 md:col-span-3 flex items-center gap-3">
+                    <div className="col-span-3 md:col-span-3 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-sm shrink-0">
                         {s.full_name?.charAt(0) || 'U'}
                       </div>
@@ -333,40 +394,40 @@ const AdminStudentProgressPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Cups / Level */}
-                    <div className="col-span-2 hidden md:flex flex-col items-center justify-center">
-                      {s.cups_count != null && (
-                        <div className="flex items-center gap-1.5 px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
-                          <span>🏆</span> {s.cups_count}
-                        </div>
-                      )}
-                      <span className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Cấp độ</span>
+                    {/* Level */}
+                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-gray-700 text-sm">
+                      {s.level_symbol || '-'}
+                    </div>
+
+                    {/* Cups */}
+                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-yellow-600 text-sm">
+                      {s.cups_count || 0} 🏆
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="col-span-4 md:col-span-3">
+                    <div className="col-span-3 md:col-span-3">
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className={`font-bold ${accuracy >= 50 ? 'text-green-600' : 'text-red-500'}`}>
-                          {accuracy > 0 ? (accuracy >= 80 ? '>80%' : accuracy < 50 ? '<60%' : '60-80%') : 'Chưa học'}
+                        <span className="font-bold text-gray-600">
+                          {trainingDays} ngày
                         </span>
-                        <span className="text-gray-400">{accuracy}% ({attempts} lượt)</span>
+                        <span className="text-gray-400">{widthPct.toFixed(0)}%</span>
                       </div>
                       <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${progressColor}`} style={{ width: progressWidth }}></div>
+                        <div className="h-full rounded-full bg-green-500" style={{ width: `${widthPct}%` }}></div>
                       </div>
                     </div>
 
-                    {/* Score */}
-                    <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700">
-                      {summary.accuracy_pct ? (summary.accuracy_pct / 10).toFixed(1) : '-'}
-                      {accuracy < 50 && accuracy > 0 && <span className="ml-2 text-red-500 text-lg">⚠️</span>}
+                    {/* Accuracy */}
+                    <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700 text-sm">
+                      {accuracy}%
+                      {accuracy < 50 && accuracy > 0 && <span className="ml-1 text-red-500">⚠️</span>}
                     </div>
 
                     {/* Actions */}
-                    <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2">
+                    <div className="col-span-2 flex items-center justify-end gap-2">
                       <button
                         onClick={() => openDetail(s)}
-                        className="px-4 py-1.5 rounded-xl bg-[#1a237e] text-white text-xs font-heading font-bold hover:bg-[#1a237e]/90 shadow-md shadow-blue-900/20 transition"
+                        className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 whitespace-nowrap"
                       >
                         Chi tiết
                       </button>
@@ -380,84 +441,109 @@ const AdminStudentProgressPage: React.FC = () => {
 
         {/* Sidebar / Modal for Details */}
         {detailOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end font-sans">
-            <div
-              className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-              onClick={closeDetail}
-            ></div>
-
-            <div className="relative w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-              <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-gray-50/50">
-                <div>
-                  <h2 className="text-xl font-heading font-black text-gray-800">Chi tiết học sinh</h2>
-                  {detailStudent && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-lg">
-                        {detailStudent.full_name?.charAt(0) || 'U'}
-                      </div>
-                      <div>
-                        <div className="font-bold text-gray-900">{detailStudent.full_name}</div>
-                        <div className="text-xs text-gray-500 font-medium">
-                          {detailStudent.student_code} • {detailStudent.phone}
-                        </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeDetail}>
+            <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h2 className="text-xl font-heading font-black mb-4">Chi tiết: {detailStudent?.full_name}</h2>
+              {detailLoading ? (
+                <div className="text-center py-8 text-gray-500">Đang tải dữ liệu...</div>
+              ) : (
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                  {/* Top Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="p-3 bg-yellow-50 rounded-xl border border-yellow-100">
+                      <div className="text-[10px] text-yellow-600 uppercase font-black tracking-wide">Tổng Cup</div>
+                      <div className="text-xl font-black text-yellow-700 mt-1">{detailStudent?.cups_count || 0} 🏆</div>
+                    </div>
+                    <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                      <div className="text-[10px] text-indigo-600 uppercase font-black tracking-wide">Cấp độ</div>
+                      <div className="text-xl font-black text-indigo-700 mt-1">{detailStudent?.level_symbol || '-'}</div>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                      <div className="text-[10px] text-green-600 uppercase font-black tracking-wide">Luyện tập</div>
+                      <div className="text-xl font-black text-green-700 mt-1">
+                        {detailData?.training_track?.completed_days || 0} <span className="text-xs">ngày</span>
                       </div>
                     </div>
-                  )}
-                </div>
-                <button
-                  onClick={closeDetail}
-                  className="p-2 rounded-full hover:bg-gray-200 text-gray-400 transition"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {detailLoading ? (
-                  <div className="flex flex-col items-center justify-center h-40 gap-3 text-gray-400">
-                    <span className="animate-spin text-2xl">⏳</span>
-                    <span className="text-sm font-medium">Đang tải hồ sơ...</span>
-                  </div>
-                ) : detailData?.error ? (
-                  <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium">
-                    {detailData.error}
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-                        <div className="text-xs text-blue-800 font-bold mb-1">Cúp tích lũy</div>
-                        <div className="text-2xl font-black text-blue-900">
-                          {detailStudent?.cups_count || 0} 🏆
-                        </div>
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="text-[10px] text-blue-600 uppercase font-black tracking-wide">Chính xác</div>
+                      <div className="text-xl font-black text-blue-700 mt-1">
+                        {detailData?.attempts?.accuracy_pct || 0}%
                       </div>
-                      <div className="p-3 bg-purple-50 rounded-2xl border border-purple-100">
-                        <div className="text-xs text-purple-800 font-bold mb-1">Điểm trung bình</div>
-                        <div className="text-2xl font-black text-purple-900">
-                          {(detailData?.attempts?.accuracy_pct / 10).toFixed(1)} <span className="text-sm font-normal text-purple-700">/10</span>
+                    </div>
+                  </div>
+
+                  {/* Summary Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Thống kê chung</h3>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>Tổng số lần làm bài:</span>
+                          <span className="font-bold">{detailData?.attempts?.count || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Tổng thời gian:</span>
+                          <span className="font-bold">{Math.round((detailData?.attempts?.total_time_seconds || 0) / 60)} phút</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Làm bài gần nhất:</span>
+                          <span className="font-bold text-xs">
+                            {detailData?.attempts?.last_attempt_at ? new Date(detailData.attempts.last_attempt_at).toLocaleDateString('vi-VN') : '---'}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div>
-                      <h3 className="text-sm font-heading font-black uppercase text-gray-800 mb-3">Kết quả luyện tập 7 ngày qua</h3>
-                      <div className="h-40 w-full bg-gray-50 rounded-2xl border border-gray-100 flex items-end justify-between p-4 px-2">
-                        {[60, 30, 80, 45, 90, 20, 70].map((h, i) => (
-                          <div key={i} className="flex flex-col items-center gap-1 w-full">
-                            <div
-                              className="w-2 md:w-4 bg-teal-500 rounded-t-lg opacity-80 hover:opacity-100 transition-all"
-                              style={{ height: `${h}%` }}
-                            ></div>
-                            <span className="text-[9px] text-gray-400 font-bold uppercase">
-                              {['S', 'M', 'T', 'W', 'T', 'F', 'S'][i]}
-                            </span>
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Theo chế độ</h3>
+                      <div className="space-y-2 text-xs">
+                        {Object.entries(detailData?.attempts?.by_mode || {}).map(([mode, stats]: [string, any]) => (
+                          <div key={mode} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                            <span className="font-bold uppercase text-gray-500">{mode.replace('_', ' ')}</span>
+                            <div className="text-right">
+                              <div className="font-bold">{stats.attempts} lượt</div>
+                              <div className={`text-[10px] ${stats.correct / stats.total < 0.5 ? 'text-red-500' : 'text-green-600'}`}>
+                                {stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0}% đúng
+                              </div>
+                            </div>
                           </div>
                         ))}
+                        {Object.keys(detailData?.attempts?.by_mode || {}).length === 0 && (
+                          <div className="text-gray-400 italic text-center py-2">Chưa có dữ liệu</div>
+                        )}
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+
+                  {/* Recent Activity List */}
+                  <div className="pt-2">
+                    <h3 className="font-heading font-bold text-sm text-gray-700 mb-3">Hoạt động gần đây (Speed Training)</h3>
+                    <div className="space-y-2">
+                      {(detailData?.speed_training || []).slice(0, 5).map((sess: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl text-sm">
+                          <div>
+                            <div className="font-bold text-gray-800 uppercase text-xs">{sess.mode}</div>
+                            <div className="text-xs text-gray-400">{new Date(sess.created_at).toLocaleString('vi-VN')}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600">{sess.score} điểm</div>
+                            <div className="text-xs text-gray-500">{sess.duration_seconds}s</div>
+                          </div>
+                        </div>
+                      ))}
+                      {(detailData?.speed_training || []).length === 0 && (
+                        <div className="text-gray-400 italic text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                          Chưa có hoạt động
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button onClick={closeDetail} className="px-5 py-2 bg-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-300 transition-colors">Đóng</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
