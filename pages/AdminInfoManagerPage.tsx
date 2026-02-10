@@ -31,10 +31,20 @@ const DOW: Array<{ id: number; label: string }> = [
 ];
 
 const AdminInfoManagerPage: React.FC = () => {
+  const normKey = (v?: string | null) => (v || '').toLowerCase();
+  const normalizeRecordKeys = <T,>(obj: Record<string, T> | null | undefined) => {
+    const out: Record<string, T> = {};
+    Object.entries(obj || {}).forEach(([k, v]) => {
+      if (!k) return;
+      out[normKey(k)] = v;
+    });
+    return out;
+  };
+
   const navigate = useNavigate();
   const location = useLocation();
   const getTabFromQuery = () => {
-    const tab = new URLSearchParams(location.search).get('tab');
+    const tab = new URLSearchParams(location.search).get('tab')?.toLowerCase();
     return tab === 'classes' || tab === 'teachers' ? tab : 'centers';
   };
   const [activeTab, setActiveTab] = useState<'centers' | 'classes' | 'teachers'>(getTabFromQuery());
@@ -55,9 +65,15 @@ const AdminInfoManagerPage: React.FC = () => {
 
   const centerNameByIdMemo = useMemo(() => {
     const m = new Map<string, string>();
-    centers.forEach((c) => m.set(c.id, c.name));
+    centers.forEach((c) => m.set(normKey(c.id), c.name));
     return m;
   }, [centers]);
+
+  const classByIdMemo = useMemo(() => {
+    const m = new Map<string, DbClass>();
+    classes.forEach((c) => m.set(normKey(c.id), c));
+    return m;
+  }, [classes]);
 
   const [centerSearch, setCenterSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
@@ -72,7 +88,7 @@ const AdminInfoManagerPage: React.FC = () => {
     const q = classSearch.trim().toLowerCase();
     if (!q) return classes;
     return classes.filter((cl) => {
-      const centerName = cl.center_id ? centerNameByIdMemo.get(cl.center_id) : '';
+      const centerName = cl.center_id ? centerNameByIdMemo.get(normKey(cl.center_id)) : '';
       return [cl.name, centerName].filter(Boolean).some((x) => String(x).toLowerCase().includes(q));
     });
   }, [classes, classSearch, centerNameByIdMemo]);
@@ -147,7 +163,7 @@ const AdminInfoManagerPage: React.FC = () => {
   const [assignTeacher, setAssignTeacher] = useState<UserProfile | null>(null);
   const [assignClassIds, setAssignClassIds] = useState<string[]>([]);
   const [assignSaving, setAssignSaving] = useState(false);
-  const assignIdSet = useMemo(() => new Set(assignClassIds), [assignClassIds]);
+  const assignIdSet = useMemo(() => new Set(assignClassIds.map((x) => normKey(x)).filter(Boolean)), [assignClassIds]);
   const [assignSearch, setAssignSearch] = useState('');
   const [assignCenterId, setAssignCenterId] = useState<string>('');
 
@@ -182,37 +198,55 @@ const AdminInfoManagerPage: React.FC = () => {
         ]);
 
         const classById = new Map<string, DbClass>();
-        (cls || []).forEach((c) => classById.set(c.id, c));
+        (cls || []).forEach((c) => classById.set(normKey(c.id), c));
 
         const [adminStats] = await Promise.all([
-          backend.getAdminInfoStats().catch(() => null),
+          backend.getAdminInfoStats().catch((err) => {
+            console.error("RPC Error:", err);
+            return null;
+          }),
         ]);
 
+        console.log("Admin Stats RPC Result:", adminStats);
+
         if (adminStats) {
-          setCenterStats(adminStats.centerStats || {});
-          setClassStudentCounts(adminStats.classStudentCounts || {});
+          // Normalize keys so all lookups/mappings are case-insensitive
+          setCenterStats(normalizeRecordKeys(adminStats.centerStats || {}));
+          setClassStudentCounts(normalizeRecordKeys(adminStats.classStudentCounts || {}));
         } else {
           // Fallback if RPC fails or not deployed yet
+          console.log("Using Fallback for Stats");
           // Class student counts + center unique student counts
+          const classStudentSets = new Map<string, Set<string>>();
           const classCounts: Record<string, number> = {};
           const centerStudentSets = new Map<string, Set<string>>();
           (studentRows || []).forEach((r) => {
-            classCounts[r.class_id] = (classCounts[r.class_id] || 0) + 1;
-            const cl = classById.get(r.class_id);
-            const centerId = cl?.center_id || null;
-            if (!centerId) return;
-            if (!centerStudentSets.has(centerId)) centerStudentSets.set(centerId, new Set());
-            centerStudentSets.get(centerId)!.add(r.student_id);
+            const classIdKey = normKey(r.class_id);
+            const studentIdKey = normKey(r.student_id);
+            if (!classIdKey || !studentIdKey) return;
+
+            if (!classStudentSets.has(classIdKey)) classStudentSets.set(classIdKey, new Set());
+            classStudentSets.get(classIdKey)!.add(studentIdKey);
+
+            const cl = classById.get(classIdKey);
+            const centerIdKey = cl?.center_id ? normKey(cl.center_id) : null;
+            if (!centerIdKey) return;
+            if (!centerStudentSets.has(centerIdKey)) centerStudentSets.set(centerIdKey, new Set());
+            centerStudentSets.get(centerIdKey)!.add(studentIdKey);
+          });
+          classStudentSets.forEach((set, classId) => {
+            classCounts[classId] = set.size;
           });
           setClassStudentCounts(classCounts);
 
           // Center stats (class count + student count)
           const centerStatsNext: Record<string, { classCount: number; studentCount: number }> = {};
-          (cens || []).forEach((c: any) => (centerStatsNext[c.id] = { classCount: 0, studentCount: 0 }));
+          (cens || []).forEach((c: any) => (centerStatsNext[normKey(c.id)] = { classCount: 0, studentCount: 0 }));
           (cls || []).forEach((c) => {
             if (!c.center_id) return;
-            if (!centerStatsNext[c.center_id]) centerStatsNext[c.center_id] = { classCount: 0, studentCount: 0 };
-            centerStatsNext[c.center_id].classCount += 1;
+            const centerIdKey = normKey(c.center_id);
+            if (!centerStatsNext[centerIdKey]) centerStatsNext[centerIdKey] = { classCount: 0, studentCount: 0 };
+            centerStatsNext[centerIdKey].classCount += 1;
           });
           centerStudentSets.forEach((set, centerId) => {
             if (!centerStatsNext[centerId]) centerStatsNext[centerId] = { classCount: 0, studentCount: 0 };
@@ -225,14 +259,17 @@ const AdminInfoManagerPage: React.FC = () => {
         const dowLabel = new Map<number, string>(DOW.map((d) => [d.id, d.label]));
         const schedByClass = new Map<string, Array<{ day_of_week: number; start_time: string; end_time: string }>>();
         (schedRows || []).forEach((s) => {
-          if (!schedByClass.has(s.class_id)) schedByClass.set(s.class_id, []);
-          schedByClass.get(s.class_id)!.push(s);
+          const classIdKey = normKey(s.class_id);
+          if (!classIdKey) return;
+          if (!schedByClass.has(classIdKey)) schedByClass.set(classIdKey, []);
+          schedByClass.get(classIdKey)!.push(s);
         });
 
         const schedText: Record<string, string> = {};
         const schedPrefill: Record<string, { days: number[]; start_time: string; end_time: string; multiTime: boolean }> = {};
         (cls || []).forEach((c) => {
-          const rows = (schedByClass.get(c.id) || []).slice().sort((a, b) => a.day_of_week - b.day_of_week);
+          const classIdKey = normKey(c.id);
+          const rows = (schedByClass.get(classIdKey) || []).slice().sort((a, b) => a.day_of_week - b.day_of_week);
           if (!rows.length) return;
           const days = Array.from(new Set(rows.map((r) => r.day_of_week))).sort((a, b) => a - b);
           const timePairs = Array.from(new Set(rows.map((r) => `${r.start_time}-${r.end_time}`)));
@@ -240,8 +277,8 @@ const AdminInfoManagerPage: React.FC = () => {
           const first = rows[0];
           const dayText = days.map((d) => dowLabel.get(d) || `Thứ ${d}`).join(', ');
           const timeText = multiTime ? 'Nhiều khung giờ' : `${first.start_time}–${first.end_time}`;
-          schedText[c.id] = `${dayText} • ${timeText}`;
-          schedPrefill[c.id] = {
+          schedText[classIdKey] = `${dayText} • ${timeText}`;
+          schedPrefill[classIdKey] = {
             days,
             start_time: first.start_time,
             end_time: first.end_time,
@@ -256,16 +293,20 @@ const AdminInfoManagerPage: React.FC = () => {
         const teacherIds = Array.from(new Set(links.map((l) => l.teacher_id)));
         const teacherProfiles = await backend.getTeacherNamesByIds(teacherIds);
         const teacherNameById = new Map<string, string>();
-        (teacherProfiles || []).forEach((t) => teacherNameById.set(t.id, t.full_name || t.email || 'Giáo viên'));
+        (teacherProfiles || []).forEach((t) => teacherNameById.set(normKey(t.id), t.full_name || t.email || 'Giáo viên'));
         const teacherNamesByClass = new Map<string, string[]>();
         links.forEach((l) => {
-          if (!teacherNamesByClass.has(l.class_id)) teacherNamesByClass.set(l.class_id, []);
-          teacherNamesByClass.get(l.class_id)!.push(teacherNameById.get(l.teacher_id) || 'Giáo viên');
+          const classIdKey = normKey(l.class_id);
+          const teacherIdKey = normKey(l.teacher_id);
+          if (!classIdKey) return;
+          if (!teacherNamesByClass.has(classIdKey)) teacherNamesByClass.set(classIdKey, []);
+          teacherNamesByClass.get(classIdKey)!.push(teacherNameById.get(teacherIdKey) || 'Giáo viên');
         });
         const teacherText: Record<string, string> = {};
         (cls || []).forEach((c) => {
-          const names = Array.from(new Set(teacherNamesByClass.get(c.id) || [])).filter(Boolean);
-          teacherText[c.id] = names.length ? names.join(', ') : '—';
+          const classIdKey = normKey(c.id);
+          const names = Array.from(new Set(teacherNamesByClass.get(classIdKey) || [])).filter(Boolean);
+          teacherText[classIdKey] = names.length ? names.join(', ') : '—';
         });
         setClassTeacherText(teacherText);
       } catch {
@@ -309,25 +350,27 @@ const AdminInfoManagerPage: React.FC = () => {
               backend.getTeacherActiveClassIdsOnly(teacher.id),
               backend.getTeacherStudentIds(teacher.id),
             ]);
+            const normClassIds = Array.from(new Set((classIds || []).map((x) => normKey(x)).filter(Boolean)));
+            const normStudentIds = Array.from(new Set((studentIds || []).map((x) => normKey(x)).filter(Boolean)));
             const centerNames = Array.from(
               new Set(
-                classIds
-                  .map((id) => classes.find((c) => c.id === id)?.center_id)
+                normClassIds
+                  .map((id) => classByIdMemo.get(id)?.center_id)
                   .filter(Boolean)
-                  .map((cid) => centerNameByIdMemo.get(cid as string) || String(cid)),
+                  .map((cid) => centerNameByIdMemo.get(normKey(cid as string)) || String(cid)),
               ),
-            ).sort((a, b) => a.localeCompare(b));
+            ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
             return [
-              teacher.id,
+              normKey(teacher.id),
               {
-                classCount: classIds.length,
-                studentCount: studentIds.length,
+                classCount: normClassIds.length,
+                studentCount: normStudentIds.length,
                 centerNames,
               },
             ] as const;
           } catch {
             return [
-              teacher.id,
+              normKey(teacher.id),
               {
                 classCount: 0,
                 studentCount: 0,
@@ -522,7 +565,8 @@ const AdminInfoManagerPage: React.FC = () => {
     setAssignCenterId('');
   };
   const toggleAssignClass = (classId: string) => {
-    setAssignClassIds((prev) => (prev.includes(classId) ? prev.filter((x) => x !== classId) : [...prev, classId]));
+    const key = normKey(classId);
+    setAssignClassIds((prev) => (prev.some((x) => normKey(x) === key) ? prev.filter((x) => normKey(x) !== key) : [...prev, classId]));
   };
   const saveAssign = async () => {
     if (!assignTeacher) return;
@@ -543,9 +587,9 @@ const AdminInfoManagerPage: React.FC = () => {
   const assignFilteredClasses = useMemo(() => {
     const q = assignSearch.trim().toLowerCase();
     return classes.filter((cl) => {
-      if (assignCenterId && (cl.center_id || '') !== assignCenterId) return false;
+      if (assignCenterId && normKey(cl.center_id || '') !== normKey(assignCenterId)) return false;
       if (!q) return true;
-      const centerName = cl.center_id ? centerNameByIdMemo.get(cl.center_id) : '';
+      const centerName = cl.center_id ? centerNameByIdMemo.get(normKey(cl.center_id)) : '';
       return [cl.name, centerName].filter(Boolean).some((x) => String(x).toLowerCase().includes(q));
     });
   }, [assignCenterId, assignSearch, classes, centerNameByIdMemo]);
@@ -553,7 +597,7 @@ const AdminInfoManagerPage: React.FC = () => {
   const openEditClass = (cl: DbClass) => {
     setEditClass(cl);
     setEditClassMsg(null);
-    const pre = classSchedulePrefill[cl.id];
+    const pre = classSchedulePrefill[normKey(cl.id)];
     setEditClassForm({
       name: cl.name || '',
       center_id: (cl.center_id || '') as string,
@@ -725,10 +769,10 @@ const AdminInfoManagerPage: React.FC = () => {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                       <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
-                        {(centerStats[c.id]?.classCount ?? 0)} lớp
+                        {(centerStats[normKey(c.id)]?.classCount ?? 0)} lớp
                       </span>
                       <span className="px-2 py-1 rounded-xl bg-white border border-gray-200 text-gray-700">
-                        {(centerStats[c.id]?.studentCount ?? 0)} học sinh
+                        {(centerStats[normKey(c.id)]?.studentCount ?? 0)} học sinh
                       </span>
                     </div>
                     {c.hotline && <div className="text-xs text-gray-500 mt-1">Hotline: {c.hotline}</div>}
@@ -803,14 +847,14 @@ const AdminInfoManagerPage: React.FC = () => {
                       </button>
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Trung tâm: {cl.center_id ? centerNameByIdMemo.get(cl.center_id) || cl.center_id : '—'}
+                      Trung tâm: {cl.center_id ? centerNameByIdMemo.get(normKey(cl.center_id)) || cl.center_id : '—'}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">Học sinh: {classStudentCounts[cl.id] ?? 0}</div>
+                    <div className="text-xs text-gray-500 mt-1">Học sinh: {classStudentCounts[normKey(cl.id)] ?? 0}</div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Lịch: {classScheduleText[cl.id] || '—'}
+                      Lịch: {classScheduleText[normKey(cl.id)] || '—'}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Giáo viên: {classTeacherText[cl.id] || '—'}
+                      Giáo viên: {classTeacherText[normKey(cl.id)] || '—'}
                     </div>
                     {(cl.start_date || cl.end_date) && (
                       <div className="text-xs text-gray-500 mt-1">
@@ -863,7 +907,7 @@ const AdminInfoManagerPage: React.FC = () => {
             ) : (
               <div className="space-y-3 max-h-[70vh] overflow-auto pr-1">
                 {filteredTeachers.map((t) => {
-                  const st = teacherStats[t.id] || { classCount: 0, studentCount: 0, centerNames: [] };
+                  const st = teacherStats[normKey(t.id)] || { classCount: 0, studentCount: 0, centerNames: [] };
                   return (
                     <div
                       key={t.id}
@@ -1063,8 +1107,8 @@ const AdminInfoManagerPage: React.FC = () => {
                           type="button"
                           onClick={() => toggleDay(d.id)}
                           className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${classForm.days.includes(d.id)
-                              ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
-                              : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                            ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                             }`}
                         >
                           {d.label}
@@ -1195,8 +1239,8 @@ const AdminInfoManagerPage: React.FC = () => {
                             }))
                           }
                           className={`px-3 py-2 rounded-xl border text-xs font-heading font-black uppercase transition ${editClassForm.days.includes(d.id)
-                              ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
-                              : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                            ? 'border-ucmas-blue bg-ucmas-blue/10 text-ucmas-blue'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                             }`}
                         >
                           {d.label}
@@ -1223,7 +1267,7 @@ const AdminInfoManagerPage: React.FC = () => {
                         />
                       </div>
                     </div>
-                    {classSchedulePrefill[editClass.id]?.multiTime && (
+                    {classSchedulePrefill[normKey(editClass.id)]?.multiTime && (
                       <div className="text-[11px] text-amber-600 mt-2">
                         Lưu ý: Lớp này đang có nhiều khung giờ khác nhau. Khi lưu, hệ thống sẽ áp dụng 1 khung giờ chung cho các thứ đã chọn.
                       </div>
@@ -1451,14 +1495,14 @@ const AdminInfoManagerPage: React.FC = () => {
                         key={c.id}
                         type="button"
                         onClick={() => toggleAssignClass(c.id)}
-                        className={`text-left p-4 rounded-2xl border transition ${assignIdSet.has(c.id) ? 'border-ucmas-blue bg-ucmas-blue/10' : 'border-gray-200 hover:bg-gray-50'
+                        className={`text-left p-4 rounded-2xl border transition ${assignIdSet.has(normKey(c.id)) ? 'border-ucmas-blue bg-ucmas-blue/10' : 'border-gray-200 hover:bg-gray-50'
                           }`}
                       >
                         <div className="font-heading font-black text-gray-800 truncate">{c.name}</div>
                         <div className="text-xs text-gray-500 truncate">
-                          {c.center_id ? centerNameByIdMemo.get(c.center_id) || c.center_id : '—'}
+                          {c.center_id ? centerNameByIdMemo.get(normKey(c.center_id)) || c.center_id : '—'}
                         </div>
-                        <div className="text-xs text-gray-500 truncate">{assignIdSet.has(c.id) ? 'Đã chọn' : 'Chưa chọn'}</div>
+                        <div className="text-xs text-gray-500 truncate">{assignIdSet.has(normKey(c.id)) ? 'Đã chọn' : 'Chưa chọn'}</div>
                       </button>
                     ))}
                   </div>
