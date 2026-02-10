@@ -312,6 +312,22 @@ const AdminStudentProgressPage: React.FC = () => {
           if (typeof cupCounts[id] === 'number') map[id].cups_count = cupCounts[id];
         });
 
+        // If RPC is outdated / missing stats, fill using batch aggregation (same as detail logic).
+        const needsFill =
+          (summaryRes.data || []).length === 0 ||
+          typeof (summaryRes.data?.[0] as any)?.nhin_tinh_attempts_count === 'undefined' ||
+          typeof (summaryRes.data?.[0] as any)?.accuracy_pct === 'undefined';
+        if (needsFill) {
+          const attemptStats = await backend.getStudentsAttemptsSummaryByUserIds({
+            userIds: nextStudents.map(s => s.id),
+            from,
+            to,
+          });
+          nextStudents.forEach((s) => {
+            map[s.id] = { ...(map[s.id] || {}), ...(attemptStats[s.id] || {}) };
+          });
+        }
+
         setStudents(nextStudents);
         setSummaryByStudentId(map);
       } else {
@@ -321,8 +337,17 @@ const AdminStudentProgressPage: React.FC = () => {
           ...st,
           cups_count: typeof cupCounts[st.id] === 'number' ? cupCounts[st.id] : (st.cups_count || 0),
         }));
+        const attemptStats = await backend.getStudentsAttemptsSummaryByUserIds({
+          userIds: withCups.map(x => x.id),
+          from,
+          to,
+        });
+        const map: Record<string, any> = {};
+        withCups.forEach((st) => {
+          map[st.id] = { ...(attemptStats[st.id] || {}), cups_count: st.cups_count || 0, level_symbol: st.level_symbol };
+        });
         setStudents(withCups);
-        setSummaryByStudentId({});
+        setSummaryByStudentId(map);
       }
     } finally {
       setLoading(false);
@@ -449,13 +474,14 @@ const AdminStudentProgressPage: React.FC = () => {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
           {/* Header Row */}
           <div className="overflow-x-auto">
-            <div className="min-w-[1180px] grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
+            <div className="min-w-[1300px] grid grid-cols-[repeat(13,minmax(0,1fr))] gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
               <div className="col-span-3">Học sinh</div>
               <div className="col-span-1 text-center">Level</div>
               <div className="col-span-1 text-center">Tổng Cup</div>
               <div className="col-span-1 text-center">NHÌN TÍNH</div>
               <div className="col-span-1 text-center">NGHE TÍNH</div>
               <div className="col-span-1 text-center">FLASH</div>
+              <div className="col-span-1 text-center">Tỉ lệ chính xác</div>
               <div className="col-span-1 text-center">Tổng thời gian</div>
               <div className="col-span-1 text-center">Làm gần nhất</div>
               <div className="col-span-1 text-center">Số lần</div>
@@ -471,7 +497,7 @@ const AdminStudentProgressPage: React.FC = () => {
                 <div className="text-gray-500 text-sm">Thử thay đổi bộ lọc tìm kiếm.</div>
               </div>
             ) : (
-              <div className="min-w-[1180px] divide-y divide-gray-50">
+              <div className="min-w-[1300px] divide-y divide-gray-50">
                 {students.map((s) => {
                   const summary = summaryByStudentId[s.id] || {};
                   const nhinAttempts = Number(summary.nhin_tinh_attempts_count) || 0;
@@ -480,6 +506,7 @@ const AdminStudentProgressPage: React.FC = () => {
                   const ngheAcc = Number(summary.nghe_tinh_accuracy_pct) || 0;
                   const flashAttempts = Number(summary.flash_attempts_count) || 0;
                   const flashAcc = Number(summary.flash_accuracy_pct) || 0;
+                  const overallAcc = Number(summary.accuracy_pct) || 0;
 
                   const totalTimeSeconds = Number(summary.total_time_seconds) || 0;
                   const lastAttemptAt = summary.last_attempt_at ? new Date(summary.last_attempt_at) : null;
@@ -497,7 +524,7 @@ const AdminStudentProgressPage: React.FC = () => {
                   };
 
                   return (
-                    <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors group">
+                    <div key={s.id} className="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors group">
                       {/* Student Info */}
                       <div className="col-span-3 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-sm shrink-0">
@@ -526,6 +553,17 @@ const AdminStudentProgressPage: React.FC = () => {
                       <div className="col-span-1 text-center">{cell(nhinAttempts, nhinAcc)}</div>
                       <div className="col-span-1 text-center">{cell(ngheAttempts, ngheAcc)}</div>
                       <div className="col-span-1 text-center">{cell(flashAttempts, flashAcc)}</div>
+
+                      {/* Overall accuracy */}
+                      <div className="col-span-1 text-center">
+                        {!attemptsCount ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : (
+                          <span className={`font-heading font-black text-sm ${overallAcc > 0 && overallAcc < 50 ? 'text-red-600' : 'text-green-700'}`}>
+                            {overallAcc}%
+                          </span>
+                        )}
+                      </div>
 
                       {/* Total time */}
                       <div className="col-span-1 text-center font-heading font-black text-gray-700 text-xs">

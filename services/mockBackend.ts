@@ -799,6 +799,281 @@ export const backend = {
     }
   },
 
+  /**
+   * Batch aggregate attempts stats for many users.
+   * This follows the same extraction logic as `getStudentProgressSnapshot`,
+   * but runs in batches so Admin/Teacher tables can show overview immediately,
+   * even when the summary RPC is missing/outdated.
+   */
+  getStudentsAttemptsSummaryByUserIds: async (params: {
+    userIds: string[];
+    from?: string;
+    to?: string;
+  }): Promise<Record<
+    string,
+    {
+      attempts_count: number;
+      accuracy_pct: number;
+      total_time_seconds: number;
+      last_attempt_at: string | null;
+      nhin_tinh_attempts_count: number;
+      nhin_tinh_accuracy_pct: number;
+      nghe_tinh_attempts_count: number;
+      nghe_tinh_accuracy_pct: number;
+      flash_attempts_count: number;
+      flash_accuracy_pct: number;
+    }
+  >> => {
+    const ids = Array.from(new Set((params.userIds || []).filter(Boolean)));
+    if (!ids.length) return {};
+
+    const from = params.from ? new Date(params.from) : null;
+    const to = params.to ? new Date(params.to) : null;
+    const inRange = (iso: string) => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    };
+
+    const isMissingTableError = (msg: string) => {
+      const m = (msg || '').toLowerCase();
+      return m.includes('does not exist') || m.includes('could not find the table');
+    };
+
+    const normalizeModeKey = (m: unknown) => {
+      const s = String(m || '').toLowerCase();
+      if (!s) return 'unknown';
+      if (s === 'nhin_tinh' || s === 'visual' || s === 'elite_visual') return 'nhin_tinh';
+      if (s === 'nghe_tinh' || s === 'audio' || s === 'elite_audio') return 'nghe_tinh';
+      if (s === 'flash' || s === 'elite_flash') return 'flash';
+      return s;
+    };
+
+    type AttemptLike = {
+      user_id: string;
+      mode: string;
+      score_correct: number;
+      score_total: number;
+      duration_seconds: number;
+      created_at: string;
+    };
+
+    const MAX_ROWS = 5000;
+    const PAGE_SIZE = 1000;
+
+    const fetchPaged = async <T,>(fetchPage: (fromIdx: number, toIdx: number) => Promise<{ data: T[] | null; error: any }>) => {
+      const out: T[] = [];
+      for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
+        const { data, error } = await fetchPage(offset, offset + PAGE_SIZE - 1);
+        if (error) {
+          if (!isMissingTableError(error?.message || '')) throw error;
+          break;
+        }
+        if (data && data.length) out.push(...data);
+        if (!data || data.length < PAGE_SIZE) break;
+      }
+      return out;
+    };
+
+    const all: AttemptLike[] = [];
+
+    // attempts
+    try {
+      const rows = await fetchPaged<any>((fromIdx, toIdx) => {
+        let q: any = supabase
+          .from('attempts')
+          .select('user_id, mode, score_correct, score_total, duration_seconds, created_at')
+          .in('user_id', ids as any)
+          .order('created_at', { ascending: false })
+          .range(fromIdx, toIdx);
+        if (params.from) q = q.gte('created_at', params.from);
+        if (params.to) q = q.lte('created_at', params.to);
+        return q;
+      });
+      rows.forEach((r: any) => {
+        all.push({
+          user_id: String(r.user_id),
+          mode: String(r.mode || 'unknown'),
+          score_correct: Number(r.score_correct || 0),
+          score_total: Number(r.score_total || 0),
+          duration_seconds: Number(r.duration_seconds || 0),
+          created_at: String(r.created_at || new Date().toISOString()),
+        });
+      });
+    } catch (e: any) {
+      console.warn('getStudentsAttemptsSummaryByUserIds attempts error:', e?.message || e);
+    }
+
+    // practice_attempts
+    try {
+      const rows = await fetchPaged<any>((fromIdx, toIdx) => {
+        let q: any = supabase
+          .from('practice_attempts' as any)
+          .select('user_id, mode, score_correct, score_total, duration_seconds, created_at')
+          .in('user_id', ids as any)
+          .order('created_at', { ascending: false })
+          .range(fromIdx, toIdx);
+        if (params.from) q = q.gte('created_at', params.from);
+        if (params.to) q = q.lte('created_at', params.to);
+        return q;
+      });
+      rows.forEach((r: any) => {
+        all.push({
+          user_id: String(r.user_id),
+          mode: String(r.mode || 'unknown'),
+          score_correct: Number(r.score_correct || 0),
+          score_total: Number(r.score_total || 0),
+          duration_seconds: Number(r.duration_seconds || 0),
+          created_at: String(r.created_at || new Date().toISOString()),
+        });
+      });
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('getStudentsAttemptsSummaryByUserIds practice_attempts error:', e?.message || e);
+    }
+
+    // practice_history
+    try {
+      const rows = await fetchPaged<any>((fromIdx, toIdx) => {
+        let q: any = supabase
+          .from('practice_history' as any)
+          .select('user_id, mode, correct_count, question_count, duration_seconds, created_at')
+          .in('user_id', ids as any)
+          .order('created_at', { ascending: false })
+          .range(fromIdx, toIdx);
+        if (params.from) q = q.gte('created_at', params.from);
+        if (params.to) q = q.lte('created_at', params.to);
+        return q;
+      });
+      rows.forEach((r: any) => {
+        all.push({
+          user_id: String(r.user_id),
+          mode: String(r.mode || 'unknown'),
+          score_correct: Number(r.correct_count || 0),
+          score_total: Number(r.question_count || 0),
+          duration_seconds: Number(r.duration_seconds || 0),
+          created_at: String(r.created_at || new Date().toISOString()),
+        });
+      });
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('getStudentsAttemptsSummaryByUserIds practice_history error:', e?.message || e);
+    }
+
+    // contest_section_attempts (optional)
+    try {
+      const sessions = await fetchPaged<any>((fromIdx, toIdx) => {
+        const q: any = supabase
+          .from('contest_sessions' as any)
+          .select('id, user_id')
+          .in('user_id', ids as any)
+          .order('joined_at', { ascending: false })
+          .range(fromIdx, toIdx);
+        return q;
+      });
+      const sessionIdToUserId = new Map<string, string>();
+      sessions.forEach((s: any) => {
+        if (s?.id && s?.user_id) sessionIdToUserId.set(String(s.id), String(s.user_id));
+      });
+      const sessionIds = Array.from(sessionIdToUserId.keys());
+      if (sessionIds.length > 0) {
+        const csaRows = await fetchPaged<any>((fromIdx, toIdx) => {
+          let q: any = supabase
+            .from('contest_section_attempts' as any)
+            .select('session_id, mode, score_correct, score_total, duration_seconds, finished_at, created_at')
+            .in('session_id', sessionIds as any)
+            .order('finished_at', { ascending: false })
+            .range(fromIdx, toIdx);
+          // Prefer finished_at filtering (typical schema)
+          if (params.from) q = q.gte('finished_at', params.from);
+          if (params.to) q = q.lte('finished_at', params.to);
+          return q;
+        });
+        csaRows.forEach((r: any) => {
+          const userId = sessionIdToUserId.get(String(r.session_id || ''));
+          if (!userId) return;
+          const ts = String(r.finished_at || r.created_at || new Date().toISOString());
+          if (!inRange(ts)) return;
+          all.push({
+            user_id: userId,
+            mode: String(r.mode || 'unknown'),
+            score_correct: Number(r.score_correct || 0),
+            score_total: Number(r.score_total || 0),
+            duration_seconds: Number(r.duration_seconds || 0),
+            created_at: ts,
+          });
+        });
+      }
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('getStudentsAttemptsSummaryByUserIds contest error:', e?.message || e);
+    }
+
+    // Aggregate
+    const base: Record<string, any> = {};
+    ids.forEach((id) => {
+      base[id] = {
+        attempts_count: 0,
+        correct_sum: 0,
+        total_sum: 0,
+        total_time_seconds: 0,
+        last_attempt_at: null as string | null,
+        by_mode: {
+          nhin_tinh: { attempts: 0, correct: 0, total: 0 },
+          nghe_tinh: { attempts: 0, correct: 0, total: 0 },
+          flash: { attempts: 0, correct: 0, total: 0 },
+        },
+      };
+    });
+
+    all.forEach((r) => {
+      const uid = String(r.user_id || '');
+      if (!uid || !base[uid]) return;
+      if (params.from || params.to) {
+        if (!inRange(r.created_at)) return;
+      }
+      const correct = Number(r.score_correct || 0);
+      const total = Number(r.score_total || 0);
+      const dur = Number(r.duration_seconds || 0);
+      base[uid].attempts_count += 1;
+      base[uid].correct_sum += correct;
+      base[uid].total_sum += total;
+      base[uid].total_time_seconds += dur;
+      if (!base[uid].last_attempt_at || new Date(r.created_at) > new Date(base[uid].last_attempt_at)) {
+        base[uid].last_attempt_at = r.created_at;
+      }
+      const mk = normalizeModeKey(r.mode);
+      if (mk === 'nhin_tinh' || mk === 'nghe_tinh' || mk === 'flash') {
+        base[uid].by_mode[mk].attempts += 1;
+        base[uid].by_mode[mk].correct += correct;
+        base[uid].by_mode[mk].total += total;
+      }
+    });
+
+    const round1 = (n: number) => Math.round(n * 10) / 10;
+    const out: Record<string, any> = {};
+    ids.forEach((id) => {
+      const s = base[id];
+      const accuracy = s.total_sum > 0 ? round1((s.correct_sum / s.total_sum) * 100) : 0;
+      const nhinAcc = s.by_mode.nhin_tinh.total > 0 ? round1((s.by_mode.nhin_tinh.correct / s.by_mode.nhin_tinh.total) * 100) : 0;
+      const ngheAcc = s.by_mode.nghe_tinh.total > 0 ? round1((s.by_mode.nghe_tinh.correct / s.by_mode.nghe_tinh.total) * 100) : 0;
+      const flashAcc = s.by_mode.flash.total > 0 ? round1((s.by_mode.flash.correct / s.by_mode.flash.total) * 100) : 0;
+      out[id] = {
+        attempts_count: s.attempts_count,
+        accuracy_pct: accuracy,
+        total_time_seconds: s.total_time_seconds,
+        last_attempt_at: s.last_attempt_at,
+        nhin_tinh_attempts_count: s.by_mode.nhin_tinh.attempts,
+        nhin_tinh_accuracy_pct: nhinAcc,
+        nghe_tinh_attempts_count: s.by_mode.nghe_tinh.attempts,
+        nghe_tinh_accuracy_pct: ngheAcc,
+        flash_attempts_count: s.by_mode.flash.attempts,
+        flash_accuracy_pct: flashAcc,
+      };
+    });
+
+    return out;
+  },
+
   getAdminInfoStats: async () => {
     const { data, error } = await supabase.rpc('rpc_get_admin_info_stats');
     if (error) {
