@@ -762,6 +762,43 @@ export const backend = {
     return { success: true, data: (data || []) as any[] };
   },
 
+  /**
+   * Batch cups counts for many users.
+   * This mirrors the logic used in the Header Avatar (count rows in `user_collected_cups`).
+   */
+  getCupsCountsByUserIds: async (userIds: string[]): Promise<Record<string, number>> => {
+    try {
+      const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+      if (!ids.length) return {};
+
+      const { data, error } = await supabase
+        .from('user_collected_cups' as any)
+        .select('user_id')
+        .in('user_id', ids as any);
+
+      if (error) {
+        const msg = error.message || '';
+        const missingTable =
+          msg.includes("Could not find the table 'public.user_collected_cups'") ||
+          msg.includes("relation \"public.user_collected_cups\" does not exist") ||
+          msg.toLowerCase().includes('user_collected_cups') && msg.toLowerCase().includes('does not exist');
+        if (missingTable) return {};
+        console.warn('getCupsCountsByUserIds error:', error);
+        return {};
+      }
+
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => {
+        const id = String(r.user_id || '');
+        if (!id) return;
+        map[id] = (map[id] || 0) + 1;
+      });
+      return map;
+    } catch (e) {
+      return {};
+    }
+  },
+
   getAdminInfoStats: async () => {
     const { data, error } = await supabase.rpc('rpc_get_admin_info_stats');
     if (error) {
@@ -773,7 +810,23 @@ export const backend = {
   },
 
   getStudentProgressSnapshot: async (studentId: string) => {
-    // Attempts summary
+    // Attempts/Practice summary (merge multiple sources, so it matches dashboard summary)
+    type AttemptLikeRow = {
+      mode: string;
+      score_correct: number;
+      score_total: number;
+      duration_seconds: number;
+      created_at: string;
+    };
+
+    const isMissingTableError = (msg: string) => {
+      const m = (msg || '').toLowerCase();
+      return m.includes('does not exist') || m.includes('could not find the table');
+    };
+
+    const all: AttemptLikeRow[] = [];
+
+    // 1) Legacy/main attempts
     const { data: attempts, error: attemptsErr } = await supabase
       .from('attempts')
       .select('mode, score_correct, score_total, duration_seconds, created_at')
@@ -781,14 +834,127 @@ export const backend = {
       .order('created_at', { ascending: false })
       .limit(500);
     if (attemptsErr) throw attemptsErr;
+    (attempts || []).forEach((r: any) => {
+      all.push({
+        mode: String(r.mode || 'unknown'),
+        score_correct: Number(r.score_correct || 0),
+        score_total: Number(r.score_total || 0),
+        duration_seconds: Number(r.duration_seconds || 0),
+        created_at: String(r.created_at || new Date().toISOString()),
+      });
+    });
 
-    const attemptCount = (attempts || []).length;
-    const totalCorrect = (attempts || []).reduce((a: number, r: any) => a + (r.score_correct || 0), 0);
-    const totalQuestions = (attempts || []).reduce((a: number, r: any) => a + (r.score_total || 0), 0);
-    const totalTime = (attempts || []).reduce((a: number, r: any) => a + (r.duration_seconds || 0), 0);
-    const lastAttemptAt = (attempts || [])[0]?.created_at as string | undefined;
-    const byMode = (attempts || []).reduce((acc: any, r: any) => {
-      const m = r.mode || 'unknown';
+    // 2) New practice module attempts (if table exists)
+    try {
+      const { data: pa, error: paErr } = await supabase
+        .from('practice_attempts' as any)
+        .select('mode, score_correct, score_total, duration_seconds, created_at')
+        .eq('user_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (paErr) {
+        if (!isMissingTableError(paErr.message || '')) console.warn('practice_attempts query error:', paErr);
+      } else {
+        (pa || []).forEach((r: any) => {
+          all.push({
+            mode: String(r.mode || 'unknown'),
+            score_correct: Number(r.score_correct || 0),
+            score_total: Number(r.score_total || 0),
+            duration_seconds: Number(r.duration_seconds || 0),
+            created_at: String(r.created_at || new Date().toISOString()),
+          });
+        });
+      }
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('practice_attempts exception:', e);
+    }
+
+    // 3) Older practice history table (if exists)
+    try {
+      const { data: ph, error: phErr } = await supabase
+        .from('practice_history' as any)
+        .select('mode, correct_count, question_count, duration_seconds, created_at')
+        .eq('user_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (phErr) {
+        if (!isMissingTableError(phErr.message || '')) console.warn('practice_history query error:', phErr);
+      } else {
+        (ph || []).forEach((r: any) => {
+          all.push({
+            mode: String(r.mode || 'unknown'),
+            score_correct: Number(r.correct_count || 0),
+            score_total: Number(r.question_count || 0),
+            duration_seconds: Number(r.duration_seconds || 0),
+            created_at: String(r.created_at || new Date().toISOString()),
+          });
+        });
+      }
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('practice_history exception:', e);
+    }
+
+    // 4) Contest section attempts (if exists)
+    try {
+      const { data: sessions, error: sErr } = await supabase
+        .from('contest_sessions' as any)
+        .select('id')
+        .eq('user_id', studentId)
+        .order('joined_at', { ascending: false })
+        .limit(200);
+      if (sErr) {
+        if (!isMissingTableError(sErr.message || '')) console.warn('contest_sessions query error:', sErr);
+      } else {
+        const sessionIds = (sessions || []).map((r: any) => String(r.id)).filter(Boolean);
+        if (sessionIds.length > 0) {
+          const { data: csa, error: cErr } = await supabase
+            .from('contest_section_attempts' as any)
+            .select('mode, score_correct, score_total, duration_seconds, finished_at, created_at, session_id')
+            .in('session_id', sessionIds as any)
+            .order('finished_at', { ascending: false })
+            .limit(500);
+          if (cErr) {
+            if (!isMissingTableError(cErr.message || '')) console.warn('contest_section_attempts query error:', cErr);
+          } else {
+            (csa || []).forEach((r: any) => {
+              const ts = r.finished_at || r.created_at || new Date().toISOString();
+              all.push({
+                mode: String(r.mode || 'unknown'),
+                score_correct: Number(r.score_correct || 0),
+                score_total: Number(r.score_total || 0),
+                duration_seconds: Number(r.duration_seconds || 0),
+                created_at: String(ts),
+              });
+            });
+          }
+        }
+      }
+    } catch (e: any) {
+      if (!isMissingTableError(e?.message || '')) console.warn('contest section exception:', e);
+    }
+
+    // Normalize & aggregate
+    const sorted = all
+      .filter(r => r && r.created_at)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const attemptCount = sorted.length;
+    const totalCorrect = sorted.reduce((a, r) => a + (Number(r.score_correct) || 0), 0);
+    const totalQuestions = sorted.reduce((a, r) => a + (Number(r.score_total) || 0), 0);
+    const totalTime = sorted.reduce((a, r) => a + (Number(r.duration_seconds) || 0), 0);
+    const lastAttemptAt = sorted[0]?.created_at as string | undefined;
+    const normalizeModeKey = (m: unknown) => {
+      const s = String(m || '').toLowerCase();
+      if (!s) return 'unknown';
+      if (s === 'nhin_tinh' || s === 'visual' || s === 'elite_visual') return 'nhin_tinh';
+      if (s === 'nghe_tinh' || s === 'audio' || s === 'elite_audio') return 'nghe_tinh';
+      if (s === 'flash' || s === 'elite_flash') return 'flash';
+      if (s === 'hon_hop' || s === 'mixed') return 'hon_hop';
+      return s;
+    };
+
+    const byMode = sorted.reduce((acc: any, r: any) => {
+      const m = normalizeModeKey(r.mode);
       acc[m] = acc[m] || { attempts: 0, correct: 0, total: 0, time: 0 };
       acc[m].attempts += 1;
       acc[m].correct += r.score_correct || 0;

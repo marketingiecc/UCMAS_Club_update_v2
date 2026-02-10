@@ -5,7 +5,7 @@ import type { UserProfile } from '../types';
 
 type DbClass = { id: string; name: string; center_id?: string | null };
 
-type TimeFilter = 'week' | 'month' | 'year' | 'all';
+type TimeFilter = 'week_this' | 'week_last' | 'month_this' | 'month_last' | 'custom' | 'all';
 
 // --- Sub-components --
 
@@ -36,19 +36,40 @@ const FilterBar: React.FC<{
   setSearch: (s: string) => void;
   timeFilter: TimeFilter;
   setTimeFilter: (t: TimeFilter) => void;
+  customFrom: string;
+  setCustomFrom: (v: string) => void;
+  customTo: string;
+  setCustomTo: (v: string) => void;
   totalStudents: number;
   loading: boolean;
   onRefresh: () => void;
-}> = ({ classes, filterClassId, setFilterClassId, search, setSearch, timeFilter, setTimeFilter, totalStudents, loading, onRefresh }) => (
+}> = ({
+  classes,
+  filterClassId,
+  setFilterClassId,
+  search,
+  setSearch,
+  timeFilter,
+  setTimeFilter,
+  customFrom,
+  setCustomFrom,
+  customTo,
+  setCustomTo,
+  totalStudents,
+  loading,
+  onRefresh,
+}) => (
   <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-col gap-4">
 
     {/* Top Row: Time Filter & Refresh */}
     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
       <div className="flex bg-gray-100 p-1 rounded-xl">
         {[
-          { key: 'week', label: 'Tuần này' },
-          { key: 'month', label: 'Tháng này' },
-          { key: 'year', label: 'Năm nay' },
+          { key: 'week_this', label: 'Tuần này' },
+          { key: 'week_last', label: 'Tuần trước' },
+          { key: 'month_this', label: 'Tháng này' },
+          { key: 'month_last', label: 'Tháng trước' },
+          { key: 'custom', label: 'Tùy chỉnh' },
           { key: 'all', label: 'Tất cả' },
         ].map(opt => (
           <button
@@ -78,6 +99,30 @@ const FilterBar: React.FC<{
         </button>
       </div>
     </div>
+
+    {/* Custom range */}
+    {timeFilter === 'custom' && (
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1">
+          <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1">Từ ngày</label>
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-ucmas-blue/20 transition-all"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1">Đến ngày</label>
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-ucmas-blue/20 transition-all"
+          />
+        </div>
+      </div>
+    )}
 
     {/* Bottom Row: Class & Search */}
     <div className="flex flex-col md:flex-row gap-4">
@@ -112,33 +157,57 @@ const FilterBar: React.FC<{
 );
 
 // --- Helper: Date Range ---
-function getDateRange(filter: TimeFilter): { from?: string; to?: string } {
+function getDateRange(filter: TimeFilter, customFrom: string, customTo: string): { from?: string; to?: string } {
   const now = new Date();
   if (filter === 'all') return {};
 
-  if (filter === 'week') {
-    // Current week (Monday start)
-    const day = now.getDay() || 7; // 1=Mon, 7=Sun
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(now.getDate() - day + 1);
-    const end = new Date(now);
-    end.setHours(23, 59, 59, 999);
-    // Usually 'to' is consistent, but RPC uses <= so now is fine or end of week
-    // Let's just use 'start' as 'from'. 'to' can be null (meaning up to now)
-    return { from: start.toISOString() };
+  const startOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  };
+  const endOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x;
+  };
+
+  if (filter === 'week_this' || filter === 'week_last') {
+    const day = now.getDay() || 7;
+    const start = startOfDay(now);
+    start.setDate(now.getDate() - day + 1 + (filter === 'week_last' ? -7 : 0));
+    const end = endOfDay(start);
+    end.setDate(start.getDate() + 6);
+    return { from: start.toISOString(), to: end.toISOString() };
   }
 
-  if (filter === 'month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: start.toISOString() };
+  if (filter === 'month_this' || filter === 'month_last') {
+    const base = filter === 'month_last'
+      ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = startOfDay(base);
+    const end = endOfDay(new Date(base.getFullYear(), base.getMonth() + 1, 0));
+    return { from: start.toISOString(), to: end.toISOString() };
   }
 
-  if (filter === 'year') {
-    const start = new Date(now.getFullYear(), 0, 1);
-    return { from: start.toISOString() };
+  if (filter === 'custom') {
+    const fromOk = customFrom ? new Date(customFrom + 'T00:00:00') : null;
+    const toOk = customTo ? new Date(customTo + 'T23:59:59') : null;
+    return {
+      from: fromOk && !Number.isNaN(fromOk.getTime()) ? fromOk.toISOString() : undefined,
+      to: toOk && !Number.isNaN(toOk.getTime()) ? toOk.toISOString() : undefined,
+    };
   }
+
   return {};
+}
+
+function formatDurationSeconds(totalSeconds: unknown): string {
+  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}g ${m}p`;
+  return `${m}p`;
 }
 
 
@@ -154,7 +223,9 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
   const [filterClassId, setFilterClassId] = useState<string>('');
   const [search, setSearch] = useState('');
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week_this');
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
 
   // Side panel state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -179,7 +250,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
       setClasses(myClasses);
 
       // 2. Load Summary with Dates
-      const { from, to } = getDateRange(timeFilter);
+      const { from, to } = getDateRange(timeFilter, customFrom, customTo);
 
       const summaryRes = await backend.getStudentsProgressSummary({
         teacherId: user.id,
@@ -192,7 +263,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
       if (summaryRes.success) {
         const map: Record<string, any> = {};
-        const nextStudents: UserProfile[] = (summaryRes.data || []).map((r: any) => {
+        let nextStudents: UserProfile[] = (summaryRes.data || []).map((r: any) => {
           map[r.student_id] = r;
           return {
             id: r.student_id,
@@ -207,6 +278,17 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
             level_symbol: r.level_symbol, // Bind Level
           } as UserProfile;
         });
+
+        // Override cups_count by the same logic as Header Avatar profile (count rows in `user_collected_cups`).
+        const cupCounts = await backend.getCupsCountsByUserIds(nextStudents.map(s => s.id));
+        nextStudents = nextStudents.map((s) => ({
+          ...s,
+          cups_count: typeof cupCounts[s.id] === 'number' ? cupCounts[s.id] : (s.cups_count || 0),
+        }));
+        Object.keys(map).forEach((id) => {
+          if (typeof cupCounts[id] === 'number') map[id].cups_count = cupCounts[id];
+        });
+
         setStudents(nextStudents);
         setSummaryByStudentId(map);
       } else {
@@ -222,7 +304,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeFilter]); // Refresh on time filter change
+  }, [timeFilter, customFrom, customTo]); // Refresh on time filter change
 
   // Debounce search/class
   useEffect(() => {
@@ -303,7 +385,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           <StatCard
             title="Học sinh cần chú ý"
             value={stats.needsAttention}
-            subtext={stats.needsAttention > 0 ? "Tỉ lệ đúng < 50%" : "Tốt"}
+            subtext={stats.needsAttention > 0 ? "Tỉ lệ chính xác < 50%" : "Tốt"}
             icon={<span className="text-2xl">⚠️</span>}
             colorClass="bg-red-50 border-red-100 text-red-900"
           />
@@ -323,6 +405,10 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
           setSearch={setSearch}
           timeFilter={timeFilter}
           setTimeFilter={setTimeFilter}
+          customFrom={customFrom}
+          setCustomFrom={setCustomFrom}
+          customTo={customTo}
+          setCustomTo={setCustomTo}
           totalStudents={students.length}
           loading={loading}
           onRefresh={refresh}
@@ -330,84 +416,107 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
         {/* Table */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden">
-          <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
-            <div className="col-span-3 md:col-span-3">Học sinh</div>
-            <div className="col-span-2 md:col-span-1 text-center">Level</div>
-            <div className="col-span-2 md:col-span-1 text-center">Tổng Cup</div>
-            <div className="col-span-3 md:col-span-3">Tiến độ ({
-              timeFilter === 'week' ? 'Tuần' : timeFilter === 'month' ? 'Tháng' : timeFilter === 'year' ? 'Năm' : 'Tất cả'
-            })</div>
-            <div className="col-span-2 text-center hidden md:block">Tỉ lệ đúng</div>
-            <div className="col-span-2 text-right">Hành động</div>
-          </div>
-
-          {loading ? (
-            <div className="p-12 text-center text-gray-400 font-medium">Đang tải dữ liệu...</div>
-          ) : students.length === 0 ? (
-            <div className="p-12 text-center text-gray-400 font-medium">Chưa có dữ liệu</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {students.map((s) => {
-                const summary = summaryByStudentId[s.id] || {};
-                const accuracy = Number(summary.accuracy_pct) || 0;
-                const trainingDays = summary.training_completed_days || 0;
-                // Visual bar for training days (goal: say 7 days for week, 30 for month?)
-                const maxDays = timeFilter === 'week' ? 7 : timeFilter === 'month' ? 30 : 100;
-                const widthPct = Math.min(100, (trainingDays / maxDays) * 100);
-
-                return (
-                  <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors">
-                    {/* Name */}
-                    <div className="col-span-3 md:col-span-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0">
-                          {s.full_name?.charAt(0)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-heading font-black text-gray-800 text-sm truncate">{s.full_name}</div>
-                          <div className="text-xs text-gray-400 font-medium truncate">{s.student_code || '---'}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Level */}
-                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-gray-700 text-sm">
-                      {s.level_symbol || '-'}
-                    </div>
-
-                    {/* Cups */}
-                    <div className="col-span-2 md:col-span-1 text-center font-heading font-black text-yellow-600 text-sm">
-                      {s.cups_count || 0} 🏆
-                    </div>
-
-                    {/* Progress (Training Days) */}
-                    <div className="col-span-3 md:col-span-3">
-                      <div className="flex justify-between text-xs mb-1 font-bold text-gray-600">
-                        <span>{trainingDays} ngày</span>
-                        <span className="text-gray-400">{widthPct.toFixed(0)}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-green-500 rounded-full" style={{ width: `${widthPct}%` }}></div>
-                      </div>
-                    </div>
-
-                    {/* Accuracy */}
-                    <div className="col-span-2 hidden md:flex items-center justify-center font-heading font-black text-gray-700 text-sm">
-                      {accuracy}%
-                      {accuracy < 50 && accuracy > 0 && <span className="ml-1 text-red-500">⚠️</span>}
-                    </div>
-
-                    {/* Action */}
-                    <div className="col-span-2 flex justify-end">
-                      <button onClick={() => openDetail(s)} className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 whitespace-nowrap">
-                        Chi tiết
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          <div className="overflow-x-auto">
+            <div className="min-w-[1180px] grid grid-cols-12 gap-4 px-6 py-4 bg-gray-50/80 border-b border-gray-100 text-xs font-heading font-black text-gray-400 uppercase tracking-wider">
+              <div className="col-span-3">Học sinh</div>
+              <div className="col-span-1 text-center">Level</div>
+              <div className="col-span-1 text-center">Tổng Cup</div>
+              <div className="col-span-1 text-center">NHÌN TÍNH</div>
+              <div className="col-span-1 text-center">NGHE TÍNH</div>
+              <div className="col-span-1 text-center">FLASH</div>
+              <div className="col-span-1 text-center">Tổng thời gian</div>
+              <div className="col-span-1 text-center">Làm gần nhất</div>
+              <div className="col-span-1 text-center">Số lần</div>
+              <div className="col-span-1 text-right">Chi tiết</div>
             </div>
-          )}
+
+            {loading ? (
+              <div className="p-12 text-center text-gray-400 font-medium">Đang tải dữ liệu...</div>
+            ) : students.length === 0 ? (
+              <div className="p-12 text-center text-gray-400 font-medium">Chưa có dữ liệu</div>
+            ) : (
+              <div className="min-w-[1180px] divide-y divide-gray-50">
+                {students.map((s) => {
+                  const summary = summaryByStudentId[s.id] || {};
+                  const nhinAttempts = Number(summary.nhin_tinh_attempts_count) || 0;
+                  const nhinAcc = Number(summary.nhin_tinh_accuracy_pct) || 0;
+                  const ngheAttempts = Number(summary.nghe_tinh_attempts_count) || 0;
+                  const ngheAcc = Number(summary.nghe_tinh_accuracy_pct) || 0;
+                  const flashAttempts = Number(summary.flash_attempts_count) || 0;
+                  const flashAcc = Number(summary.flash_accuracy_pct) || 0;
+
+                  const totalTimeSeconds = Number(summary.total_time_seconds) || 0;
+                  const lastAttemptAt = summary.last_attempt_at ? new Date(summary.last_attempt_at) : null;
+                  const attemptsCount = Number(summary.attempts_count) || 0;
+
+                  const cell = (attempts: number, acc: number) => {
+                    if (!attempts) return <span className="text-xs text-gray-400">—</span>;
+                    const bad = acc > 0 && acc < 50;
+                    return (
+                      <div className="text-xs leading-tight">
+                        <div className="font-heading font-black text-gray-800">{attempts} lượt</div>
+                        <div className={`font-heading font-black ${bad ? 'text-red-600' : 'text-green-700'}`}>{acc}%</div>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div key={s.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50/30 transition-colors">
+                      {/* Name */}
+                      <div className="col-span-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0">
+                            {s.full_name?.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-heading font-black text-gray-800 text-sm truncate">{s.full_name}</div>
+                            <div className="text-xs text-gray-400 font-medium truncate">{s.student_code || '---'}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Level */}
+                      <div className="col-span-1 text-center font-heading font-black text-gray-700 text-sm">
+                        {s.level_symbol || '-'}
+                      </div>
+
+                      {/* Cups */}
+                      <div className="col-span-1 text-center font-heading font-black text-yellow-600 text-sm">
+                        {s.cups_count || 0} 🏆
+                      </div>
+
+                      {/* Mode cells */}
+                      <div className="col-span-1 text-center">{cell(nhinAttempts, nhinAcc)}</div>
+                      <div className="col-span-1 text-center">{cell(ngheAttempts, ngheAcc)}</div>
+                      <div className="col-span-1 text-center">{cell(flashAttempts, flashAcc)}</div>
+
+                      {/* Total time */}
+                      <div className="col-span-1 text-center font-heading font-black text-gray-700 text-xs">
+                        {formatDurationSeconds(totalTimeSeconds)}
+                      </div>
+
+                      {/* Last attempt */}
+                      <div className="col-span-1 text-center text-xs text-gray-700 font-heading font-black">
+                        {lastAttemptAt ? lastAttemptAt.toLocaleDateString('vi-VN') : '—'}
+                      </div>
+
+                      {/* Attempts count */}
+                      <div className="col-span-1 text-center font-heading font-black text-gray-700 text-sm">
+                        {attemptsCount}
+                      </div>
+
+                      {/* Action */}
+                      <div className="col-span-1 flex justify-end">
+                        <button onClick={() => openDetail(s)} className="text-blue-700 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 whitespace-nowrap">
+                          Chi tiết
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Detail Modal (Simple Reuse) */}
@@ -436,7 +545,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
                       </div>
                     </div>
                     <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                      <div className="text-[10px] text-blue-600 uppercase font-black tracking-wide">Chính xác</div>
+                      <div className="text-[10px] text-blue-600 uppercase font-black tracking-wide">Tỉ lệ chính xác</div>
                       <div className="text-xl font-black text-blue-700 mt-1">
                         {detailData?.attempts?.accuracy_pct || 0}%
                       </div>
