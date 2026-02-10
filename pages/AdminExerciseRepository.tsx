@@ -1,15 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Contest } from '../types';
+import { downloadTrackDayTemplateSampleJson, trackDayLibraryService, type TrackDayLibraryRow } from '../services/trackDayLibraryService';
+import { getLevelLabel, LEVEL_OPTIONS } from '../config/levelsAndDifficulty';
 
 const AdminExerciseRepository: React.FC = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState<'contest' | 'practice'>('contest');
+    const [activeTab, setActiveTab] = useState<'contest' | 'practice' | 'trackLibrary'>('contest');
     const [contests, setContests] = useState<Contest[]>([]);
     const [practiceExams, setPracticeExams] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [libraryItems, setLibraryItems] = useState<TrackDayLibraryRow[]>([]);
+    const [preview, setPreview] = useState<TrackDayLibraryRow | null>(null);
+    const [libraryQuery, setLibraryQuery] = useState('');
+    const [libraryLevelNameFilter, setLibraryLevelNameFilter] = useState<string>('');
+    const [librarySort, setLibrarySort] = useState<'updated_desc' | 'updated_asc' | 'name_asc' | 'name_desc'>('updated_desc');
+
+    const filteredLibraryItems = useMemo(() => {
+        const q = libraryQuery.trim().toLowerCase();
+        const levelName = libraryLevelNameFilter.trim();
+
+        const base = libraryItems.filter((it) => {
+            const itLevelName = (it as any).level_name || (it.level_symbol ? getLevelLabel(it.level_symbol) : '');
+            const okLevel = !levelName || itLevelName === levelName;
+            const okQuery = !q || (it.name || '').toLowerCase().includes(q);
+            return okLevel && okQuery;
+        });
+
+        const sorted = [...base];
+        sorted.sort((a, b) => {
+            if (librarySort === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''), 'vi');
+            if (librarySort === 'name_desc') return String(b.name || '').localeCompare(String(a.name || ''), 'vi');
+            const da = new Date(a.updated_at || a.created_at).getTime();
+            const db = new Date(b.updated_at || b.created_at).getTime();
+            return librarySort === 'updated_asc' ? da - db : db - da;
+        });
+        return sorted;
+    }, [libraryItems, libraryLevelNameFilter, libraryQuery, librarySort]);
+
+    const readFileText = (file: File) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Không đọc được file.'));
+        reader.readAsText(file);
+    });
 
     useEffect(() => {
         loadData();
@@ -20,7 +56,7 @@ const AdminExerciseRepository: React.FC = () => {
         if (activeTab === 'contest') {
             const data = await backend.getAdminContests();
             setContests(data);
-        } else {
+        } else if (activeTab === 'practice') {
             // Load all exams from practice service
             // Filter client-side or assume service returns all
             const data = await practiceService.getAdminAllExams();
@@ -28,6 +64,14 @@ const AdminExerciseRepository: React.FC = () => {
             // For now, practiceService returns everything including contest exams? 
             // We might need to filter based on 'config.contestId'
             setPracticeExams(data);
+        } else {
+            try {
+                const items = await trackDayLibraryService.list();
+                setLibraryItems(items);
+            } catch (e: any) {
+                console.warn(e);
+                alert('Không tải được Kho bài luyện tập: ' + (e?.message || 'Unknown error'));
+            }
         }
         setLoading(false);
     };
@@ -35,6 +79,37 @@ const AdminExerciseRepository: React.FC = () => {
     const handleCreateExam = () => {
         // Navigate to Practice Manager to create/upload
         navigate('/admin/practice');
+    };
+
+    const handleUploadTrackLibrary = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.onchange = async (e: any) => {
+            const file: File | undefined = e?.target?.files?.[0];
+            if (!file) return;
+            try {
+                const text = await readFileText(file);
+                await trackDayLibraryService.createFromJsonText({ text, fallbackName: file.name.replace(/\.json$/i, '') });
+                alert('✅ Đã tải lên Kho bài luyện tập.');
+                await loadData();
+            } catch (err: any) {
+                alert('❌ Upload thất bại: ' + (err?.message || 'Unknown error'));
+            } finally {
+                input.value = '';
+            }
+        };
+        input.click();
+    };
+
+    const handleDeleteTrackLibrary = async (id: string) => {
+        if (!window.confirm('Xóa file này khỏi Kho bài luyện tập?')) return;
+        try {
+            await trackDayLibraryService.delete(id);
+            setLibraryItems((prev) => prev.filter((x) => x.id !== id));
+        } catch (e: any) {
+            alert('❌ Xóa thất bại: ' + (e?.message || 'Unknown error'));
+        }
     };
 
     const handleDelete = async (id: string, type: 'contest' | 'practice') => {
@@ -85,6 +160,17 @@ const AdminExerciseRepository: React.FC = () => {
                             </span>
                         </button>
                     </li>
+                    <li className="mr-2">
+                        <button
+                            onClick={() => setActiveTab('trackLibrary')}
+                            className={`inline-block p-4 border-b-2 rounded-t-lg transition-colors font-heading-bold uppercase text-xs tracking-wider ${activeTab === 'trackLibrary' ? 'text-ucmas-blue border-ucmas-blue bg-blue-50/50' : 'border-transparent hover:text-gray-600 hover:border-gray-300'}`}
+                        >
+                            <span className="flex items-center gap-2">
+                                <span className="text-lg">🧩</span>
+                                KHO BÀI LUYỆN TẬP
+                            </span>
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -94,19 +180,38 @@ const AdminExerciseRepository: React.FC = () => {
                     <h3 className="text-lg font-heading font-black text-gray-700 flex items-center gap-2 uppercase tracking-tight">
                         {activeTab === 'contest' ? (
                             <>Danh sách Đề thi Cuộc thi <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{contests.length}</span></>
-                        ) : (
+                        ) : activeTab === 'practice' ? (
                             <>Danh sách Bài tập Luyện tập <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{practiceExams.length}</span></>
+                        ) : (
+                            <>Danh sách File JSON Lộ Trình <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{libraryItems.length}</span></>
                         )}
                     </h3>
 
                     <div className="flex gap-3">
-                        <button
-                            onClick={handleCreateExam}
-                            className="bg-ucmas-blue text-white px-5 py-2.5 rounded-xl font-heading-bold text-xs shadow-md hover:bg-blue-700 transition flex items-center gap-2 uppercase tracking-wide"
-                        >
-                            <span className="text-lg">+</span>
-                            Tạo / Tải Đề Mới
-                        </button>
+                        {activeTab !== 'trackLibrary' ? (
+                            <button
+                                onClick={handleCreateExam}
+                                className="bg-ucmas-blue text-white px-5 py-2.5 rounded-xl font-heading-bold text-xs shadow-md hover:bg-blue-700 transition flex items-center gap-2 uppercase tracking-wide"
+                            >
+                                <span className="text-lg">+</span>
+                                Tạo / Tải Đề Mới
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={downloadTrackDayTemplateSampleJson}
+                                    className="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl font-heading-bold text-xs shadow-sm hover:bg-gray-50 transition flex items-center gap-2 uppercase tracking-wide"
+                                >
+                                    📥 Tải JSON mẫu
+                                </button>
+                                <button
+                                    onClick={handleUploadTrackLibrary}
+                                    className="bg-ucmas-blue text-white px-5 py-2.5 rounded-xl font-heading-bold text-xs shadow-md hover:bg-blue-700 transition flex items-center gap-2 uppercase tracking-wide"
+                                >
+                                    ⬆️ Upload JSON
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -150,7 +255,7 @@ const AdminExerciseRepository: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
-                ) : (
+                ) : activeTab === 'practice' ? (
                     <div className="overflow-x-auto rounded-2xl border border-gray-100">
                         <table className="w-full text-sm text-left text-gray-500">
                             <thead className="text-xs text-gray-500 uppercase bg-gray-50 font-heading font-black tracking-widest">
@@ -201,8 +306,145 @@ const AdminExerciseRepository: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
+                ) : (
+                    <div>
+                        <div className="flex flex-col md:flex-row gap-3 md:gap-4 mb-4">
+                            <div className="flex-1">
+                                <input
+                                    value={libraryQuery}
+                                    onChange={(e) => setLibraryQuery(e.target.value)}
+                                    placeholder="Tìm theo tên file..."
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition font-medium"
+                                />
+                            </div>
+                            <select
+                                value={libraryLevelNameFilter}
+                                onChange={(e) => setLibraryLevelNameFilter(e.target.value)}
+                                className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition min-w-[220px]"
+                                aria-label="Lọc theo cấp độ"
+                            >
+                                <option value="">Tất cả cấp độ</option>
+                                {LEVEL_OPTIONS.map((lv) => (
+                                    <option key={lv.symbol} value={lv.name}>{lv.name}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={librarySort}
+                                onChange={(e) => setLibrarySort(e.target.value as any)}
+                                className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition min-w-[220px]"
+                                aria-label="Sắp xếp"
+                            >
+                                <option value="updated_desc">Mới cập nhật (mới → cũ)</option>
+                                <option value="updated_asc">Mới cập nhật (cũ → mới)</option>
+                                <option value="name_asc">Tên (A → Z)</option>
+                                <option value="name_desc">Tên (Z → A)</option>
+                            </select>
+                            <button
+                                onClick={() => { setLibraryQuery(''); setLibraryLevelNameFilter(''); setLibrarySort('updated_desc'); }}
+                                className="px-5 py-3 rounded-xl border border-gray-200 text-gray-700 font-heading font-black text-xs uppercase hover:bg-white transition"
+                            >
+                                Xóa lọc
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                        <table className="w-full text-sm text-left text-gray-500">
+                            <thead className="text-xs text-gray-500 uppercase bg-gray-50 font-heading font-black tracking-widest">
+                                <tr>
+                                    <th className="px-6 py-4">Tên file</th>
+                                    <th className="px-6 py-4">Cấp độ</th>
+                                    <th className="px-6 py-4">Cập nhật</th>
+                                    <th className="px-6 py-4 text-center">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {filteredLibraryItems.length > 0 ? filteredLibraryItems.map((it) => (
+                                    <tr key={it.id} className="bg-white hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4 font-bold text-gray-900">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">🧩</div>
+                                                <div>
+                                                    <div>{it.name}</div>
+                                                    <div className="text-[10px] text-gray-400 font-mono mt-0.5">{it.id}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-700">
+                                                {(it as any).level_name || (it.level_symbol ? getLevelLabel(it.level_symbol) : 'Chưa gán')}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                                            {new Date(it.updated_at || it.created_at).toLocaleString('vi-VN')}
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button onClick={() => setPreview(it)} className="text-blue-600 hover:text-blue-800 font-heading-bold text-xs uppercase px-3">Xem</button>
+                                            <button onClick={() => trackDayLibraryService.downloadJson(it)} className="text-ucmas-blue hover:text-blue-800 font-heading-bold text-xs uppercase px-3">Tải về</button>
+                                            <button onClick={() => handleDeleteTrackLibrary(it.id)} className="text-red-500 hover:text-red-700 font-heading-bold text-xs uppercase px-3">Xóa</button>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-10 text-center text-gray-400 italic font-medium">
+                                            {libraryItems.length === 0
+                                                ? 'Chưa có file nào. Hãy bấm “Upload JSON” hoặc tải “JSON mẫu” để bắt đầu.'
+                                                : 'Không có file phù hợp với bộ lọc hiện tại.'}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    </div>
                 )}
             </div>
+
+            {preview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+                    <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                                <div className="text-xs text-gray-400 font-heading font-black uppercase tracking-widest">KHO BÀI LUYỆN TẬP</div>
+                                <div className="text-2xl font-heading font-black text-gray-900 mt-1">{preview.name}</div>
+                                {preview.description && <div className="text-sm text-gray-600 mt-2">{preview.description}</div>}
+                            </div>
+                            <button className="text-gray-400 hover:text-gray-700 text-2xl leading-none" onClick={() => setPreview(null)}>×</button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {(['visual', 'audio', 'flash'] as const).map((m) => {
+                                const ex = preview.payload?.exercises?.[m];
+                                const count = ex?.questions?.length || 0;
+                                return (
+                                    <div key={m} className="rounded-2xl border border-gray-100 p-4 bg-gray-50">
+                                        <div className="text-xs font-heading font-black uppercase tracking-widest text-gray-500">{m}</div>
+                                        <div className="text-sm font-bold text-gray-800 mt-1">{count} câu</div>
+                                        <div className="text-xs text-gray-600 mt-2">
+                                            {ex?.digits} chữ số • {ex?.rows} dòng • tốc độ {ex?.speed_seconds}s
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1">Độ khó: {ex?.difficulty}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-heading font-black text-xs uppercase hover:bg-gray-50"
+                                onClick={() => setPreview(null)}
+                            >
+                                Đóng
+                            </button>
+                            <button
+                                className="px-5 py-2.5 rounded-xl bg-ucmas-blue text-white font-heading font-black text-xs uppercase hover:bg-blue-700 shadow-md"
+                                onClick={() => trackDayLibraryService.downloadJson(preview)}
+                            >
+                                Tải JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

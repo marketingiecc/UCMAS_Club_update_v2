@@ -1,4 +1,5 @@
 import { supabase } from './mockBackend';
+import type { TrackDayTemplatePayloadV1, TrackModeKey as TemplateModeKey } from './trackDayLibraryService';
 
 type ModeKey = 'visual' | 'audio' | 'flash';
 
@@ -17,6 +18,10 @@ export type TrackExercise = {
   rows: number;
   speed_seconds: number;
   source: 'generated' | 'json_upload';
+  /** Nếu bài được tạo từ Kho bài luyện tập */
+  template_id?: string | null;
+  template_name?: string | null;
+  template_level_name?: string | null;
   questions?: Array<{ id: string; operands: number[]; correctAnswer: number }>;
   created_at: string;
 };
@@ -109,6 +114,10 @@ async function fetchExercisesForDayIds(dayIds: string[], levelSymbol: string, da
   return (data || []).map((r: any) => {
     const payload = r.exercise_payload || {};
     const qs = Array.isArray(payload?.questions) ? payload.questions : undefined;
+    const tmpl = payload?.template && typeof payload.template === 'object' ? payload.template : null;
+    const template_id = tmpl?.id != null ? String(tmpl.id) : null;
+    const template_name = tmpl?.name != null ? String(tmpl.name) : null;
+    const template_level_name = tmpl?.level_name != null ? String(tmpl.level_name) : null;
     const dayId = String(r.day_id);
     return {
       id: String(r.id),
@@ -123,6 +132,9 @@ async function fetchExercisesForDayIds(dayIds: string[], levelSymbol: string, da
       rows: clampInt(r.rows ?? 5, 1, 100),
       speed_seconds: clampSpeedSeconds(r.speed_seconds ?? 1.2),
       source: (r.source === 'json_upload' ? 'json_upload' : 'generated') as 'generated' | 'json_upload',
+      template_id,
+      template_name,
+      template_level_name,
       questions: qs,
       created_at: String(r.created_at ?? new Date().toISOString()),
     } satisfies TrackExercise;
@@ -209,6 +221,8 @@ export const trainingTrackService = {
     speed_seconds: number;
     source: 'generated' | 'json_upload';
     questions?: Array<{ id: string; operands: number[]; correctAnswer: number }>;
+    /** Nếu source=json_upload: lưu metadata tệp từ Kho bài luyện tập */
+    template?: { id: string; name: string; level_name?: string | null } | null;
     /** existing training_day_exercises.id if editing */
     id?: string | null;
     /** optional: override order number (editing keeps current) */
@@ -221,21 +235,44 @@ export const trainingTrackService = {
       const dayId = dayIdByNo[dayNo];
       if (!dayId) return { success: false, error: 'Không tìm thấy day_id cho ngày này.' };
 
-      const payloadQuestions = input.source === 'json_upload' && input.questions?.length ? { questions: input.questions } : null;
+      const payloadQuestions =
+        input.source === 'json_upload' && input.questions?.length
+          ? {
+              questions: input.questions,
+              template: input.template
+                ? {
+                    id: String(input.template.id),
+                    name: String(input.template.name),
+                    level_name: input.template.level_name != null ? String(input.template.level_name) : null,
+                  }
+                : null,
+            }
+          : null;
 
       let orderNo = input.order_no ?? null;
-      if (!input.id) {
-        // New exercise: assign next order_no within the day.
-        const { data: maxRow, error: maxErr } = await supabase
+
+      // Keep order_no when editing if not explicitly provided
+      if (input.id && (orderNo == null)) {
+        const { data: cur, error: curErr } = await supabase
           .from('training_day_exercises' as any)
           .select('order_no')
-          .eq('day_id', dayId)
-          .order('order_no', { ascending: false })
-          .limit(1)
+          .eq('id', input.id)
           .maybeSingle();
-        if (maxErr) throw new Error(maxErr.message);
-        const maxOrder = maxRow?.order_no != null ? Number(maxRow.order_no) : 0;
-        orderNo = maxOrder + 1;
+        if (curErr) throw new Error(curErr.message);
+        orderNo = cur?.order_no != null ? Number(cur.order_no) : 1;
+      }
+
+      if (!input.id && (orderNo == null)) {
+        // New exercise: assign first available order_no within the day (1..3).
+        const { data: rows, error: rowsErr } = await supabase
+          .from('training_day_exercises' as any)
+          .select('order_no')
+          .eq('day_id', dayId);
+        if (rowsErr) throw new Error(rowsErr.message);
+        const used = new Set<number>((rows || []).map((r: any) => Number(r.order_no)).filter((n: any) => Number.isFinite(n)));
+        const candidates = [1, 2, 3].filter((n) => !used.has(n));
+        if (candidates.length === 0) throw new Error('Ngày này đã có đủ 3 bài (order_no 1-3).');
+        orderNo = candidates[0];
       }
 
       const row = {
@@ -267,6 +304,89 @@ export const trainingTrackService = {
 
       if (error) throw new Error(error.message);
       return { success: true, id: String(data?.id) };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Lỗi không xác định' };
+    }
+  },
+
+  /**
+   * Admin: Apply a full-day JSON template (3 modes) to a specific (level_symbol, day_no).
+   * This will upsert 3 exercises (visual/audio/flash) using existing rows when possible.
+   */
+  async adminUpsertDayFromTemplate(input: {
+    level_symbol: string;
+    day_no: number;
+    templatePayload: TrackDayTemplatePayloadV1;
+    templateMeta?: { id: string; name: string; level_name?: string | null } | null;
+  }): Promise<{ success: boolean; ids?: Record<TemplateModeKey, string>; error?: string }> {
+    try {
+      const totalDays = 96;
+      const { dayIdByNo } = await trainingTrackService.ensurePublishedTrack(input.level_symbol, totalDays);
+      const dayNo = clampInt(input.day_no, 1, totalDays);
+      const dayId = dayIdByNo[dayNo];
+      if (!dayId) return { success: false, error: 'Không tìm thấy day_id cho ngày này.' };
+
+      const template = input.templatePayload;
+      const modes: TemplateModeKey[] = ['visual', 'audio', 'flash'];
+
+      // Fetch existing exercises in this day (at most 3 by constraint)
+      const { data: existing, error: exErr } = await supabase
+        .from('training_day_exercises' as any)
+        .select('id, mode, order_no')
+        .eq('day_id', dayId)
+        .order('order_no', { ascending: true });
+      if (exErr) throw new Error(exErr.message);
+
+      const remaining = (existing || []).map((r: any) => ({
+        id: String(r.id),
+        mode: (r.mode === 'audio' || r.mode === 'flash' ? r.mode : 'visual') as TemplateModeKey,
+        order_no: Number(r.order_no ?? 0),
+      }));
+
+      const takeRowForMode = (mode: TemplateModeKey) => {
+        const idxExact = remaining.findIndex((r) => r.mode === mode);
+        if (idxExact >= 0) return remaining.splice(idxExact, 1)[0];
+        // otherwise reuse any row (repurpose) if exists
+        return remaining.length ? remaining.shift()! : null;
+      };
+
+      // Compute free order_nos for potential inserts
+      const used = new Set<number>((existing || []).map((r: any) => Number(r.order_no)).filter((n: any) => Number.isFinite(n)));
+      const free = [1, 2, 3].filter((n) => !used.has(n));
+
+      const ids: Record<TemplateModeKey, string> = { visual: '', audio: '', flash: '' };
+
+      for (const mode of modes) {
+        const ex = template?.exercises?.[mode];
+        if (!ex || !Array.isArray(ex.questions) || ex.questions.length === 0) {
+          throw new Error(`Template thiếu questions cho mode ${mode}.`);
+        }
+
+        const rowToUse = takeRowForMode(mode);
+        const order_no = rowToUse?.order_no && Number.isFinite(rowToUse.order_no) ? rowToUse.order_no : (free.shift() ?? null);
+        if (!order_no) throw new Error('Không còn slot order_no để lưu đủ 3 mode.');
+
+        const res = await trainingTrackService.adminUpsertExercise({
+          id: rowToUse?.id ?? null,
+          order_no,
+          level_symbol: input.level_symbol,
+          day_no: dayNo,
+          mode,
+          source: 'json_upload',
+          template: input.templateMeta ?? null,
+          difficulty: String(ex.difficulty || 'basic'),
+          question_count: clampInt(ex.question_count ?? ex.questions.length, 1, 200),
+          digits: clampInt(ex.digits ?? 2, 1, 10),
+          rows: clampInt(ex.rows ?? 5, 1, 100),
+          speed_seconds: clampSpeedSeconds(ex.speed_seconds ?? 1.2),
+          questions: ex.questions as any,
+        });
+
+        if (!res.success || !res.id) throw new Error(res.error || `Lưu mode ${mode} thất bại.`);
+        ids[mode] = res.id;
+      }
+
+      return { success: true, ids };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Lỗi không xác định' };
     }

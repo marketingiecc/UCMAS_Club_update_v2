@@ -26,6 +26,35 @@ export function getLevelLabel(symbol: string | undefined | null): string {
   return map[symbol] ?? 'Cấp độ (không xác định)';
 }
 
+function normalizeComparableText(input: string): string {
+  // Lowercase + trim + remove accents for tolerant matching
+  return input
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Danh sách cấp độ (kí hiệu + tên) để dùng cho dropdown/filter */
+export const LEVEL_OPTIONS: ReadonlyArray<{ symbol: LevelSymbol; name: string }> = LEVEL_SYMBOLS_ORDER.map((symbol) => ({
+  symbol: symbol as LevelSymbol,
+  name: getLevelLabel(symbol),
+}));
+
+/** Tìm ký hiệu theo tên cấp độ (tolerant: bỏ dấu, không phân biệt hoa thường) */
+export function getLevelSymbolFromName(name: string | undefined | null): LevelSymbol | null {
+  if (!name) return null;
+  const raw = String(name).trim();
+  if (!raw) return null;
+
+  // Accept symbol directly (backward compatible)
+  if ((LEVEL_SYMBOLS_ORDER as readonly string[]).includes(raw)) return raw as LevelSymbol;
+
+  const key = normalizeComparableText(raw);
+  const found = LEVEL_OPTIONS.find((o) => normalizeComparableText(o.name) === key);
+  return found?.symbol ?? null;
+}
+
 /** Chuyển ký hiệu cấp độ → chỉ số 1–10 (dùng cho API/rule cũ) */
 export function getLevelIndex(symbol: string | undefined | null): number {
   if (symbol == null || symbol === '') return 1;

@@ -4,6 +4,8 @@ import { UserProfile, AttemptResult, Question } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
 import { trainingTrackService, type TrackExercise as DbTrackExercise } from '../services/trainingTrackService';
+import TrackDayLibraryPickerModal from '../components/TrackDayLibraryPickerModal';
+import { downloadTrackDayTemplateSampleJson, trackDayLibraryService, type TrackDayTemplatePayloadV1 } from '../services/trackDayLibraryService';
 
 const MODES = [
   { id: 'visual', label: 'Nhìn tính' },
@@ -29,15 +31,12 @@ export interface TrackExerciseEntry {
   rows: number;
   speed_seconds: number;
   source: 'generated' | 'json_upload';
+  template_id?: string | null;
+  template_name?: string | null;
+  template_level_name?: string | null;
   questions?: Question[];
   created_at: string;
 }
-
-const SAMPLE_QUESTIONS_JSON: Question[] = [
-  { id: 'q-1', operands: [12, -5, 8], correctAnswer: 15 },
-  { id: 'q-2', operands: [7, 3, -2], correctAnswer: 8 },
-  { id: 'q-3', operands: [20, -10, 5], correctAnswer: 15 },
-];
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -72,6 +71,14 @@ const AdminPage: React.FC = () => {
   /** Khi set: hiển thị danh sách 120 ngày để thiết lập cho cấp này */
   const [selectedLevelForDays, setSelectedLevelForDays] = useState<string | null>(null);
   const [selectedTrackWeekIndex, setSelectedTrackWeekIndex] = useState(0);
+  const [trackTemplatePickerOpen, setTrackTemplatePickerOpen] = useState(false);
+  const [dayQuickTemplatePicker, setDayQuickTemplatePicker] = useState<{ level_symbol: string; day_no: number } | null>(null);
+  const [templateViewer, setTemplateViewer] = useState<{ open: boolean; loading: boolean; item: any | null; error: string | null }>({
+    open: false,
+    loading: false,
+    item: null,
+    error: null,
+  });
   const [trackForm, setTrackForm] = useState({
     level_symbol: 'A',
     day_no: 1,
@@ -81,8 +88,9 @@ const AdminPage: React.FC = () => {
     digits: 2,
     rows: 5,
     speed_seconds: 1.2,
-    jsonFile: null as File | null,
-    questionsFromJson: null as Question[] | null,
+    template_id: null as string | null,
+    template_name: null as string | null,
+    template_payload: null as TrackDayTemplatePayloadV1 | null,
     editingId: null as string | null,
   });
 
@@ -120,6 +128,9 @@ const AdminPage: React.FC = () => {
             rows: ex.rows,
             speed_seconds: ex.speed_seconds,
             source: ex.source,
+            template_id: ex.template_id ?? null,
+            template_name: ex.template_name ?? null,
+            template_level_name: ex.template_level_name ?? null,
             questions: ex.questions,
             created_at: ex.created_at,
           });
@@ -147,6 +158,7 @@ const AdminPage: React.FC = () => {
     const byDay = trackExercises.filter(e => e.level_symbol === levelSymbol && e.day_no === day);
     const existing = editId ? byDay.find(e => e.id === editId) : null;
     const defaultsFrom = existing ?? byDay[byDay.length - 1] ?? null;
+    const existingTemplate = byDay.find((e) => e.source === 'json_upload' && e.template_id && e.template_name) ?? null;
     setTrackForm({
       level_symbol: levelSymbol,
       day_no: day,
@@ -156,8 +168,9 @@ const AdminPage: React.FC = () => {
       digits: defaultsFrom?.digits ?? 2,
       rows: defaultsFrom?.rows ?? 5,
       speed_seconds: defaultsFrom?.speed_seconds ?? 1.2,
-      jsonFile: null,
-      questionsFromJson: existing?.questions ?? null,
+      template_id: existingTemplate?.template_id ?? null,
+      template_name: existingTemplate?.template_name ?? null,
+      template_payload: null, // payload sẽ được load khi bấm Xem hoặc khi chọn tệp mới
       editingId: editId ?? null,
     });
     setModalOpen(true);
@@ -170,9 +183,27 @@ const AdminPage: React.FC = () => {
 
   const handleTrackFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const questions = trackForm.questionsFromJson && trackForm.questionsFromJson.length > 0
-      ? trackForm.questionsFromJson
-      : undefined;
+    // If a day template is selected: apply full 3-mode payload; ignore other fields (except level/day).
+    if (trackForm.template_payload) {
+      setTrackSyncStatus('⏳ Đang lưu theo tệp (3 chế độ) lên Supabase...');
+      const res = await trainingTrackService.adminUpsertDayFromTemplate({
+        level_symbol: trackForm.level_symbol,
+        day_no: trackForm.day_no,
+        templatePayload: trackForm.template_payload,
+        templateMeta: trackForm.template_id && trackForm.template_name
+          ? { id: trackForm.template_id, name: trackForm.template_name, level_name: trackForm.template_payload.level_name ?? null }
+          : null,
+      });
+      if (!res.success) {
+        setTrackSyncStatus(`❌ Lưu thất bại: ${res.error || 'Unknown error'}`);
+        return;
+      }
+      await refreshTrackFromSupabase(trackForm.level_symbol);
+      closeModal();
+      return;
+    }
+
+    // Default behavior: create/update a single exercise (generated)
     setTrackSyncStatus('⏳ Đang lưu bài lên Supabase...');
     const res = await trainingTrackService.adminUpsertExercise({
       id: trackForm.editingId,
@@ -184,8 +215,8 @@ const AdminPage: React.FC = () => {
       digits: trackForm.digits,
       rows: trackForm.rows,
       speed_seconds: trackForm.speed_seconds,
-      source: questions ? 'json_upload' : 'generated',
-      questions,
+      source: 'generated',
+      questions: undefined,
     });
     if (!res.success) {
       setTrackSyncStatus(`❌ Lưu thất bại: ${res.error || 'Unknown error'}`);
@@ -213,36 +244,29 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = reader.result as string;
-        const parsed = JSON.parse(text);
-        const arr = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
-        if (arr.length && typeof arr[0]?.operands !== 'undefined' && typeof arr[0]?.correctAnswer !== 'undefined') {
-          setTrackForm(f => ({ ...f, questionsFromJson: arr as Question[], jsonFile: file }));
-        } else {
-          alert('File JSON không đúng định dạng. Cần mảng các object có operands và correctAnswer.');
-        }
-      } catch (err) {
-        alert('Không đọc được file JSON.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+  const deleteJsonTemplateForDay = async (levelSymbol: string, dayNo: number) => {
+    const list = trackExercises.filter((e) => e.level_symbol === levelSymbol && e.day_no === dayNo && e.source === 'json_upload');
+    if (list.length === 0) return;
+    if (!window.confirm(`Xóa toàn bộ bài JSON của ngày ${dayNo} (${list.length} bài)?`)) return;
+    setTrackSyncStatus('⏳ Đang xóa tệp JSON khỏi ngày...');
+    for (const ex of list) {
+      await trainingTrackService.adminDeleteExercise(ex.id);
+    }
+    await refreshTrackFromSupabase(levelSymbol);
+    setTrackSyncStatus('✅ Đã xóa tệp khỏi ngày');
+    setTimeout(() => setTrackSyncStatus(''), 1500);
   };
 
-  const downloadSampleJson = () => {
-    const blob = new Blob([JSON.stringify(SAMPLE_QUESTIONS_JSON, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'bai-luyen-tap-mau.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const openTemplateViewer = async (templateId: string) => {
+    setTemplateViewer({ open: true, loading: true, item: null, error: null });
+    try {
+      const item = await trackDayLibraryService.getById(templateId);
+      setTemplateViewer({ open: true, loading: false, item, error: null });
+    } catch (e: any) {
+      setTemplateViewer({ open: true, loading: false, item: null, error: e?.message || 'Không tải được tệp.' });
+    }
   };
+  const usingTemplate = !!trackForm.template_payload;
 
   useEffect(() => {
     loadData();
@@ -657,6 +681,7 @@ const AdminPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
                       {days.map((day) => {
                         const dayList = trackExercises.filter(e => e.level_symbol === selectedLevelForDays && e.day_no === day);
+                        const dayTemplate = dayList.find((e) => e.source === 'json_upload' && e.template_id && e.template_name) ?? null;
                         const summary = dayList.length
                           ? dayList
                             .map(ex => `${MODES.find(m => m.id === ex.mode)?.label ?? ex.mode} • ${ex.question_count} câu`)
@@ -676,6 +701,34 @@ const AdminPage: React.FC = () => {
                                 </div>
                                 <div className="text-lg font-heading font-black text-gray-800 mt-1">Tổng ngày {day}</div>
                                 <div className="text-xs text-gray-600 mt-1 truncate" title={summary}>{summary}</div>
+                                {dayTemplate && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-heading font-black uppercase tracking-wider">
+                                      JSON: {dayTemplate.template_name}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => openTemplateViewer(dayTemplate.template_id as string)}
+                                      className="px-3 py-1 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
+                                    >
+                                      Xem
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDayQuickTemplatePicker({ level_symbol: selectedLevelForDays, day_no: day })}
+                                      className="px-3 py-1 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
+                                    >
+                                      Đổi tệp
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteJsonTemplateForDay(selectedLevelForDays, day)}
+                                      className="px-3 py-1 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100"
+                                    >
+                                      Xóa tệp
+                                    </button>
+                                  </div>
+                                )}
                                 {dayList.length > 2 && <div className="text-[10px] text-gray-400 mt-1">+{dayList.length - 2} bài khác</div>}
                               </div>
                               <div className="flex flex-col gap-2">
@@ -698,7 +751,7 @@ const AdminPage: React.FC = () => {
                                         {MODES.find(m => m.id === ex.mode)?.label ?? ex.mode} • {ex.question_count} câu
                                       </div>
                                       <div className="text-[10px] text-gray-500 truncate">
-                                        {DIFFICULTIES.find(d => d.id === ex.difficulty)?.label ?? ex.difficulty} • {ex.digits} chữ số • {ex.rows} dòng • {ex.source === 'json_upload' ? 'JSON' : 'Tự sinh'}
+                                        {DIFFICULTIES.find(d => d.id === ex.difficulty)?.label ?? ex.difficulty} • {ex.digits} chữ số • {ex.rows} dòng • {ex.source === 'json_upload' ? `JSON${ex.template_name ? `: ${ex.template_name}` : ''}` : 'Tự sinh'}
                                       </div>
                                     </div>
                                     <div className="flex gap-2 shrink-0">
@@ -806,6 +859,55 @@ const AdminPage: React.FC = () => {
                   );
                 })()}
 
+                {/* Chọn tệp (đặt lên đầu popup) */}
+                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Chọn tệp (từ kho)</div>
+                      <p className="text-xs text-gray-500">
+                        Nếu chọn tệp, toàn bộ bài của 3 chế độ sẽ theo tệp này. Các thiết lập bên dưới sẽ không áp dụng (trừ Cấp độ & Ngày).
+                      </p>
+                      {trackForm.template_name && (
+                        <div className="mt-2 text-xs font-medium text-ucmas-green truncate">
+                          Đang dùng: <span className="font-heading font-black">{trackForm.template_name}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {trackForm.template_id && (
+                        <button
+                          type="button"
+                          onClick={() => openTemplateViewer(trackForm.template_id as string)}
+                          className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-heading font-black text-[10px] uppercase hover:bg-gray-50"
+                        >
+                          Xem
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setTrackTemplatePickerOpen(true)}
+                        className="px-4 py-2 rounded-xl bg-ucmas-blue text-white font-heading font-black text-[10px] uppercase shadow hover:bg-blue-700"
+                      >
+                        Chọn tệp
+                      </button>
+                      {trackForm.template_payload && (
+                        <button
+                          type="button"
+                          onClick={() => setTrackForm((f) => ({ ...f, template_id: null, template_name: null, template_payload: null }))}
+                          className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-heading font-black text-[10px] uppercase hover:bg-gray-50"
+                        >
+                          Bỏ chọn
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <button type="button" onClick={downloadTrackDayTemplateSampleJson} className="text-ucmas-blue text-sm font-heading font-bold hover:underline">
+                      📥 Tải JSON mẫu
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Cấp độ</label>
@@ -834,7 +936,8 @@ const AdminPage: React.FC = () => {
                   <select
                     value={trackForm.mode}
                     onChange={e => setTrackForm(f => ({ ...f, mode: e.target.value as 'visual' | 'audio' | 'flash' }))}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                    disabled={usingTemplate}
+                    className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                   >
                     {MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                   </select>
@@ -848,7 +951,8 @@ const AdminPage: React.FC = () => {
                       max={200}
                       value={trackForm.question_count}
                       onChange={e => setTrackForm(f => ({ ...f, question_count: Math.max(1, Math.min(200, Number(e.target.value) || 1)) }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                      disabled={usingTemplate}
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     />
                   </div>
                   <div>
@@ -856,7 +960,8 @@ const AdminPage: React.FC = () => {
                     <select
                       value={trackForm.difficulty}
                       onChange={e => setTrackForm(f => ({ ...f, difficulty: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                      disabled={usingTemplate}
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     >
                       {DIFFICULTIES.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
                     </select>
@@ -871,7 +976,8 @@ const AdminPage: React.FC = () => {
                       max={10}
                       value={trackForm.digits}
                       onChange={e => setTrackForm(f => ({ ...f, digits: Math.max(1, Math.min(10, Number(e.target.value) || 1)) }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                      disabled={usingTemplate}
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     />
                   </div>
                   <div>
@@ -882,7 +988,8 @@ const AdminPage: React.FC = () => {
                       max={100}
                       value={trackForm.rows}
                       onChange={e => setTrackForm(f => ({ ...f, rows: Math.max(1, Math.min(100, Number(e.target.value) || 1)) }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                      disabled={usingTemplate}
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     />
                   </div>
                 </div>
@@ -898,39 +1005,117 @@ const AdminPage: React.FC = () => {
                       step={0.1}
                       value={trackForm.speed_seconds}
                       onChange={e => setTrackForm(f => ({ ...f, speed_seconds: Math.max(0.1, Math.min(1.5, Number(e.target.value) || 0.1)) }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
+                      disabled={usingTemplate}
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue ${usingTemplate ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     />
                   </div>
                 )}
-                <div className="border-t border-gray-100 pt-5 space-y-3">
-                  <div>
-                    <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Upload file JSON (tùy chọn)</label>
-                    <p className="text-xs text-gray-500 mb-2">Nếu upload, học sinh sẽ làm đúng đề từ file này.</p>
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={handleJsonUpload}
-                      className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-ucmas-blue file:text-white file:font-black file:text-xs"
-                    />
-                    {trackForm.questionsFromJson && (
-                      <p className="mt-2 text-xs text-ucmas-green font-medium">Đã tải {trackForm.questionsFromJson.length} câu từ file.</p>
-                    )}
-                  </div>
-                  <div>
-                    <button type="button" onClick={downloadSampleJson} className="text-ucmas-blue text-sm font-heading font-bold hover:underline">
-                      📥 Tải file JSON mẫu
-                    </button>
-                  </div>
-                </div>
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={closeModal} className="flex-1 py-3 border-2 border-gray-200 text-gray-600 font-heading font-black rounded-xl uppercase text-sm hover:bg-gray-50">
                     Hủy
                   </button>
                   <button type="submit" className="flex-1 py-3 bg-ucmas-blue text-white font-heading font-black rounded-xl uppercase text-sm hover:bg-blue-700 shadow-lg">
-                    {trackForm.editingId ? 'Cập nhật bài' : 'Lưu bài luyện tập'}
+                    {usingTemplate ? 'Lưu theo tệp' : (trackForm.editingId ? 'Cập nhật bài' : 'Lưu bài luyện tập')}
                   </button>
                 </div>
               </form>
+
+              <TrackDayLibraryPickerModal
+                isOpen={trackTemplatePickerOpen}
+                presetLevelSymbol={trackForm.level_symbol}
+                onClose={() => setTrackTemplatePickerOpen(false)}
+                onSelect={(item) => {
+                  setTrackForm((f) => ({
+                    ...f,
+                    template_id: item.id,
+                    template_name: item.name,
+                    template_payload: item.payload,
+                    editingId: null,
+                  }));
+                  setTrackTemplatePickerOpen(false);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Quick picker: đổi tệp JSON ngay trên card ngày */}
+        <TrackDayLibraryPickerModal
+          isOpen={!!dayQuickTemplatePicker}
+          presetLevelSymbol={dayQuickTemplatePicker?.level_symbol || null}
+          onClose={() => setDayQuickTemplatePicker(null)}
+          onSelect={async (item) => {
+            const ctx = dayQuickTemplatePicker;
+            if (!ctx) return;
+            setDayQuickTemplatePicker(null);
+            setTrackSyncStatus('⏳ Đang đổi tệp JSON cho ngày...');
+            const res = await trainingTrackService.adminUpsertDayFromTemplate({
+              level_symbol: ctx.level_symbol,
+              day_no: ctx.day_no,
+              templatePayload: item.payload,
+              templateMeta: { id: item.id, name: item.name, level_name: item.payload.level_name ?? null },
+            });
+            if (!res.success) {
+              setTrackSyncStatus(`❌ Đổi tệp thất bại: ${res.error || 'Unknown error'}`);
+              return;
+            }
+            await refreshTrackFromSupabase(ctx.level_symbol);
+            setTrackSyncStatus('✅ Đã đổi tệp JSON');
+            setTimeout(() => setTrackSyncStatus(''), 1500);
+          }}
+        />
+
+        {/* Viewer: xem chi tiết tệp JSON đang dùng */}
+        {templateViewer.open && (
+          <div className="fixed inset-0 z-[130] bg-black/40 flex items-center justify-center p-4" onClick={() => setTemplateViewer((s) => ({ ...s, open: false }))}>
+            <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <div className="text-xs text-gray-400 font-heading font-black uppercase tracking-widest">TỆP JSON (KHO BÀI LUYỆN TẬP)</div>
+                  <div className="text-2xl font-heading font-black text-gray-900 mt-1">
+                    {templateViewer.loading ? 'Đang tải...' : (templateViewer.item?.name || 'Không tên')}
+                  </div>
+                  {!templateViewer.loading && templateViewer.item?.description && <div className="text-sm text-gray-600 mt-2">{templateViewer.item.description}</div>}
+                  {!templateViewer.loading && templateViewer.error && <div className="text-sm text-red-600 mt-2">{templateViewer.error}</div>}
+                </div>
+                <button className="text-gray-400 hover:text-gray-700 text-2xl leading-none" onClick={() => setTemplateViewer((s) => ({ ...s, open: false }))}>×</button>
+              </div>
+
+              {!templateViewer.loading && templateViewer.item?.payload && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {(['visual', 'audio', 'flash'] as const).map((m) => {
+                    const ex = templateViewer.item.payload?.exercises?.[m];
+                    const count = ex?.questions?.length || 0;
+                    return (
+                      <div key={m} className="rounded-2xl border border-gray-100 p-4 bg-gray-50">
+                        <div className="text-xs font-heading font-black uppercase tracking-widest text-gray-500">{m}</div>
+                        <div className="text-sm font-bold text-gray-800 mt-1">{count} câu</div>
+                        <div className="text-xs text-gray-600 mt-2">
+                          {ex?.digits} chữ số • {ex?.rows} dòng • tốc độ {ex?.speed_seconds}s
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Độ khó: {ex?.difficulty}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-heading font-black text-xs uppercase hover:bg-gray-50"
+                  onClick={() => setTemplateViewer((s) => ({ ...s, open: false }))}
+                >
+                  Đóng
+                </button>
+                {!templateViewer.loading && templateViewer.item && (
+                  <button
+                    className="px-5 py-2.5 rounded-xl bg-ucmas-blue text-white font-heading font-black text-xs uppercase hover:bg-blue-700 shadow-md"
+                    onClick={() => trackDayLibraryService.downloadJson(templateViewer.item)}
+                  >
+                    Tải JSON
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
