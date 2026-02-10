@@ -29,6 +29,7 @@ import AdminTeacherManagerPage from './pages/AdminTeacherManagerPage';
 import AdminStudentProgressPage from './pages/AdminStudentProgressPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
 import AdminInfoManagerPage from './pages/AdminInfoManagerPage';
+import AdminSeoSetupPage from './pages/AdminSeoSetupPage';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -174,6 +175,7 @@ const AppContent: React.FC = () => {
         <Route path="/admin/teachers" element={user?.role === 'admin' ? <AdminTeacherManagerPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/progress" element={user?.role === 'admin' ? <AdminStudentProgressPage /> : <Navigate to="/dashboard" />} />
         <Route path="/admin/info" element={user?.role === 'admin' ? <AdminInfoManagerPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/admin/seo" element={user?.role === 'admin' ? <AdminSeoSetupPage /> : <Navigate to="/dashboard" />} />
 
 
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />

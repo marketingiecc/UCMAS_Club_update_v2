@@ -4,6 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
 import { trainingTrackService } from '../services/trainingTrackService';
+import { applySiteSeoToDocument, loadSiteSeoSettings, onSiteSeoUpdated, svgTextToDataUrl, type SiteSeoSettings } from '../services/siteSeoService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -15,6 +16,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [siteSeo, setSiteSeo] = useState<SiteSeoSettings | null>(null);
 
   const isAdminRoute = location.pathname.startsWith('/admin');
   const showMobileNav = !isAdminRoute;
@@ -22,6 +24,29 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Load & apply site SEO settings (best-effort)
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      const res = await loadSiteSeoSettings();
+      if (!mounted) return;
+      setSiteSeo(res.settings);
+      if (res.settings) applySiteSeoToDocument(res.settings);
+    };
+    void refresh();
+    const off = onSiteSeoUpdated(() => void refresh());
+    return () => {
+      mounted = false;
+      off();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (siteSeo) applySiteSeoToDocument(siteSeo);
+    // Re-apply on route changes (HashRouter doesn't change HTML head by itself)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, siteSeo?.updated_at]);
 
   const handleLogout = async () => {
     await backend.logout();
@@ -80,6 +105,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
   const navLinkClass = (active: boolean) =>
     active ? 'text-ucmas-red border-b-2 border-ucmas-red pb-1' : 'text-gray-700 hover:text-ucmas-red';
 
+  const logoSrc =
+    siteSeo?.logo_svg && String(siteSeo.logo_svg).trim()
+      ? svgTextToDataUrl(String(siteSeo.logo_svg))
+      : "https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro";
+  const logoAlt = (siteSeo?.site_name || 'UCMAS') + ' Logo';
+
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <nav className="bg-white border-b-2 border-ucmas-blue/10 sticky top-0 z-50 shadow-sm">
@@ -88,8 +119,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
             {/* Logo with Tagline */}
             <div className="flex items-center gap-3 cursor-pointer group flex-shrink-0" onClick={() => navigate('/')}>
               <img
-                src="https://rwtpwdyoxirfpposmdcg.supabase.co/storage/v1/object/sign/UCMAS/logo%20UCMAS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84MzcyMmZjMi1kNTFiLTQzYWItYmQ5OC1kYjY5MTc1ZjAxYWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJVQ01BUy9sb2dvIFVDTUFTLnBuZyIsImlhdCI6MTc2Nzg2MDYzMiwiZXhwIjoxODU0MjYwNjMyfQ.-gXR6eggFwBAK-zmgXRHhB3rs8SNogaV2am-1V4GJro"
-                alt="UCMAS Logo"
+                src={logoSrc}
+                alt={logoAlt}
                 className="h-12 sm:h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
               />
             </div>
@@ -268,12 +299,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
       <footer className="bg-gradient-to-r from-ucmas-blue to-ucmas-blue/90 text-white py-6 sm:py-10 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
           <div className="mb-3 sm:mb-4">
-            <p className="text-base sm:text-lg font-heading-bold mb-1 sm:mb-2">UCMAS VIỆT NAM</p>
+            <p className="text-base sm:text-lg font-heading-bold mb-1 sm:mb-2">{(siteSeo?.footer_company_name || '').trim() || 'UCMAS VIỆT NAM'}</p>
             <p className="text-xs sm:text-sm font-heading font-semibold opacity-90 uppercase tracking-widest">Education With A Difference</p>
           </div>
           <div className="border-t border-white/20 pt-3 sm:pt-4 mt-3 sm:mt-4">
             <p className="text-[10px] sm:text-xs opacity-75">
-              &copy; {new Date().getFullYear()} Bản quyền thuộc về UCMAS Vietnam.
+              &copy; {new Date().getFullYear()} Bản quyền thuộc về {(siteSeo?.footer_company_name || '').trim() || 'UCMAS Vietnam'}.
               <span className="mx-2 max-sm:hidden">|</span>
               <span className="block sm:inline mt-1 sm:mt-0">Phát triển bởi IECC</span>
             </p>

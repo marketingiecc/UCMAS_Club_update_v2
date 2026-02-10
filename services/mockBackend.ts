@@ -1299,6 +1299,59 @@ export const backend = {
     return { success: true };
   },
 
+  // --- Site SEO settings (Admin) ---
+  getSiteSeoSettings: async () => {
+    const singletonId = 'default';
+    const { data, error } = await supabase
+      .from('site_seo_settings' as any)
+      .select('*')
+      .eq('id', singletonId)
+      .single();
+
+    if (error) {
+      const msg = error.message || '';
+      const missingTable =
+        msg.includes("Could not find the table") ||
+        msg.toLowerCase().includes('does not exist') ||
+        msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('does not exist');
+      if (missingTable) return { settings: null as any, warning: 'Chưa có bảng `site_seo_settings` trong Supabase.' };
+      throw error;
+    }
+    return { settings: data as any };
+  },
+
+  adminUpsertSiteSeoSettings: async (settings: any) => {
+    const singletonId = 'default';
+    const payload = {
+      ...(settings || {}),
+      id: singletonId,
+      updated_at: new Date().toISOString(),
+    };
+
+    const up = await supabase
+      .from('site_seo_settings' as any)
+      .upsert(payload as any, { onConflict: 'id' })
+      .select('*')
+      .single();
+
+    if (up.error) {
+      const msg = up.error.message || '';
+      const missingTable =
+        msg.includes("Could not find the table") ||
+        msg.toLowerCase().includes('does not exist') ||
+        msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('does not exist');
+      if (missingTable) {
+        return {
+          success: false,
+          message: 'Bảng `site_seo_settings` chưa tồn tại. Hãy chạy SQL migration để tạo bảng.',
+        };
+      }
+      return { success: false, message: up.error.message };
+    }
+
+    return { success: true, settings: up.data as any };
+  },
+
   adminActivateUser: async (userId: string, months: number) => {
     const startsAt = new Date().toISOString();
     const expiresAt = new Date();
