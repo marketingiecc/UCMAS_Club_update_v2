@@ -135,9 +135,15 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [initialTimeLimit, setInitialTimeLimit] = useState(0);
 
   // Flash States
-  const [flashNumber, setFlashNumber] = useState<number | string | null>(null);
+  type FlashFrame = { value: number | string; token: number };
+  type FlashOverlayState =
+    | null
+    | { kind: 'intro'; digits: number; rows: number; secondsPerItem: number }
+    | { kind: 'countdown'; text: string };
+
+  const [flashFrame, setFlashFrame] = useState<FlashFrame | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
-  const [flashOverlay, setFlashOverlay] = useState<string | null>(null); // State cho đếm ngược
+  const [flashOverlay, setFlashOverlay] = useState<FlashOverlayState>(null); // Intro + đếm ngược (Flash)
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showResult, setShowResult] = useState(false);
@@ -218,7 +224,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       setCurrentQIndex(0);
       setAnswers({});
       setPlayCounts({});
-      setFlashNumber(null);
+      setFlashFrame(null);
       setFlashOverlay(null);
     } catch (e) {
       console.error("Start from hub failed", e);
@@ -280,7 +286,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
       setCurrentQIndex(0);
       setAnswers({});
       setPlayCounts({});
-      setFlashNumber(null);
+      setFlashFrame(null);
       setFlashOverlay(null);
     } catch (e) {
       console.error("Failed to start", e);
@@ -349,30 +355,63 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     }
   }, [currentQIndex, status]);
 
+  const formatSecondsVi = (s: number) => {
+    if (!Number.isFinite(s)) return String(s);
+    const rounded = Math.round(s * 10) / 10;
+    return String(rounded).replace(/\.0$/, '');
+  };
+  const getFlashMeta = (q: Question, secondsPerItem: number) => {
+    const rows = Array.isArray(q?.operands) ? q.operands.length : 0;
+    const digitCounts = (q?.operands || []).map((op) => {
+      const onlyDigits = String(op).replace(/[^\d]/g, '');
+      return Math.max(1, onlyDigits.length);
+    });
+    const digits = digitCounts.length ? Math.max(...digitCounts) : 1;
+    return { digits, rows, secondsPerItem };
+  };
+
   const runFlashSequence = async (qIndex: number) => {
     if (!canPlay(qIndex)) return;
 
     setPlayCounts(prev => ({ ...prev, [qIndex]: (prev[qIndex] || 0) + 1 }));
     setIsFlashing(true);
 
-    // --- 1. Countdown Sequence (Blue bg, White text) ---
+    // Preload calculation font to avoid first digits rendering in fallback font
+    const fontReadyPromise = (async () => {
+      try {
+        if (typeof document === 'undefined') return;
+        await document.fonts.load('1em DnEalianManuscript');
+        await document.fonts.ready;
+      } catch { /* ignore */ }
+    })();
+
+    // --- 0. Intro: thông tin phép tính ---
+    const q = questions[qIndex];
+    const meta = getFlashMeta(q, speed);
+    setFlashOverlay({ kind: 'intro', ...meta });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // --- 1. Countdown Sequence ---
     const countdowns = ['3...', '2...', '1...', 'Bắt Đầu'];
-    for (const count of countdowns) {
-      setFlashOverlay(count);
+    for (const text of countdowns) {
+      setFlashOverlay({ kind: 'countdown', text });
       await new Promise(r => setTimeout(r, 1000));
     }
     setFlashOverlay(null); // Tắt overlay, hiện số
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1000)); // giữ nhịp chuẩn bị như cũ
 
     // --- 2. Number Sequence ---
-    const q = questions[qIndex];
+    await fontReadyPromise;
+    let token = 0;
     for (const num of q.operands) {
-      setFlashNumber(num);
+      token += 1;
+      setFlashFrame({ value: num, token });
       await new Promise(r => setTimeout(r, speed * 1000));
     }
 
     // --- 3. End with Equals Sign ---
-    setFlashNumber('=');
+    token += 1;
+    setFlashFrame({ value: '=', token });
     setIsFlashing(false);
   };
 
@@ -799,12 +838,35 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
   // FLASH MODE: full-screen white focus view
   if (currentMode === Mode.FLASH) {
-    const showAnswerArea = !flashOverlay && !isFlashing && flashNumber === '=';
-    const showStart = !flashOverlay && !isFlashing && (flashNumber === null);
+    const flashValue = flashFrame?.value ?? null;
+    const showAnswerArea = !flashOverlay && !isFlashing && flashValue === '=';
+    const showStart = !flashOverlay && !isFlashing && (flashValue === null);
     const timeText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+    const displayMs = Math.max(80, Math.round(speed * 1000));
+    const inMs = Math.min(120, Math.max(50, Math.round(displayMs * 0.25)));
+    const outMs = Math.min(140, Math.max(60, Math.round(displayMs * 0.3)));
 
     return (
       <div className="fixed inset-0 bg-white z-50">
+        <style>{`
+          @keyframes ucmasFlashZoomIn {
+            0% { opacity: 0; transform: scale(0.88); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          @keyframes ucmasFlashFadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          .ucmas-flash-number-anim {
+            animation:
+              ucmasFlashZoomIn var(--in-ms) ease-out 0ms 1 both,
+              ucmasFlashFadeOut var(--out-ms) ease-in calc(var(--display-ms) - var(--out-ms)) 1 both;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .ucmas-flash-number-anim { animation: none !important; }
+          }
+        `}</style>
+
         <div className="absolute top-4 left-4 text-xs font-heading font-black uppercase tracking-widest text-gray-500">
           Câu {currentQIndex + 1}/{questions.length}
         </div>
@@ -813,18 +875,48 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         </div>
 
         <div className="h-full w-full flex flex-col items-center justify-center px-4">
-          {flashOverlay ? (
+          {/* Font preloader to avoid first frames using fallback font */}
+          <span aria-hidden className="absolute opacity-0 pointer-events-none select-none" style={{ fontFamily: 'DnEalianManuscript' }}>
+            88888888
+          </span>
+          {flashOverlay?.kind === 'intro' ? (
             <div
-              className={`text-gray-900 font-heading font-normal leading-none tracking-[0.06em] text-center ${flashOverlay === 'Bắt Đầu'
+              className="text-gray-900 leading-snug text-center select-none tabular-nums"
+              style={{ fontFamily: 'Arial, sans-serif' }}
+            >
+              <div className="text-[clamp(1.6rem,4.5vw,3.2rem)] font-bold">
+                Phép tính <span className="text-ucmas-red">{flashOverlay.digits}</span> chữ số{' '}
+                <span className="text-ucmas-red">{flashOverlay.rows}</span> dòng
+              </div>
+              <div className="mt-4 text-[clamp(1.2rem,3.2vw,2.2rem)] font-normal">
+                Khoảng thời gian xuất hiện mỗi phép tính:{' '}
+                <span className="text-ucmas-red">{formatSecondsVi(flashOverlay.secondsPerItem)}</span> giây
+              </div>
+            </div>
+          ) : flashOverlay?.kind === 'countdown' ? (
+            <div
+              className={`text-gray-900 leading-none tracking-[0.06em] text-center ${flashOverlay.text === 'Bắt Đầu'
                 ? 'text-[clamp(5.18rem,18.72vw,15.55rem)]'
                 : 'text-[clamp(6.48rem,23.4vw,19.44rem)]'
                 } select-none tabular-nums uppercase`}
+              style={{ fontFamily: 'Arial, sans-serif' }}
             >
-              {flashOverlay}
+              {flashOverlay.text}
             </div>
           ) : (
-            <div className="text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10" style={{ fontFamily: 'DnEalianManuscript' }}>
-              {flashNumber ?? ''}
+            <div
+              key={flashFrame?.token ?? 'blk'}
+              className={`text-gray-900 font-heading font-bold leading-none tracking-[0.06em] text-center text-[clamp(7.2rem,26vw,21.6rem)] select-none tabular-nums w-full max-w-4xl mx-auto px-10 ${flashValue !== null && flashValue !== '=' ? 'ucmas-flash-number-anim' : ''}`}
+              style={{
+                fontFamily: 'DnEalianManuscript',
+                ...(flashValue !== null && flashValue !== '=' ? ({
+                  ['--display-ms' as any]: `${displayMs}ms`,
+                  ['--in-ms' as any]: `${inMs}ms`,
+                  ['--out-ms' as any]: `${outMs}ms`,
+                } as React.CSSProperties) : {}),
+              }}
+            >
+              {flashValue ?? ''}
             </div>
           )}
 
@@ -837,6 +929,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 disabled={!canPlay(currentQIndex)}
+                style={{ fontFamily: 'Arial, sans-serif' }}
               >
                 Bắt đầu
               </button>
@@ -865,7 +958,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
                     if (currentQIndex < questions.length - 1) {
                       setCurrentQIndex(p => p + 1);
-                      setFlashNumber(null);
+                      setFlashFrame(null);
                     } else submitExam();
                   }
                 }}
@@ -890,7 +983,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                 {canPlay(currentQIndex) && (
                   <button
                     onClick={() => {
-                      setFlashNumber(null);
+                      setFlashFrame(null);
                       runFlashSequence(currentQIndex);
                     }}
                     className="w-full px-8 py-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-700 font-heading font-black hover:bg-gray-50 transition uppercase shadow-sm"
@@ -904,7 +997,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                     onClick={() => {
                       if (answers[currentQIndex] === undefined) setAnswers(prev => ({ ...prev, [currentQIndex]: '' }));
                       setCurrentQIndex(p => p + 1);
-                      setFlashNumber(null);
+                      setFlashFrame(null);
                     }}
                     className="w-full px-8 py-5 rounded-2xl bg-ucmas-blue text-white font-heading font-black text-xl hover:bg-ucmas-red transition-all uppercase shadow-lg"
                   >
@@ -1014,40 +1107,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                 ))}
                 <div className="border-t-4 border-gray-300 w-full mt-4 mb-4"></div>
                 <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
-              </div>
-            )}
-
-            {/* FLASH MODE DISPLAY */}
-            {currentMode === Mode.FLASH && (
-              <div className="text-center w-full h-full flex items-center justify-center min-h-[50vh] px-2">
-                {flashOverlay ? (
-                  <div className="absolute inset-0 bg-ucmas-blue z-50 flex items-center justify-center">
-                    <div
-                      className={`text-white font-heading font-normal ${flashOverlay === 'Bắt Đầu'
-                        ? 'text-[clamp(1.8rem,7.2vw,4.32rem)]'
-                        : 'text-[clamp(2.25rem,9vw,5.4rem)]'
-                        } uppercase animate-bounce`}
-                    >
-                      {flashOverlay}
-                    </div>
-                  </div>
-                ) : (isFlashing || flashNumber !== null) ? (
-                  <div className="font-heading font-bold text-ucmas-blue leading-none tracking-[0.06em] text-center text-[clamp(6rem,22vw,16rem)] tabular-nums w-full max-w-lg mx-auto" style={{ fontFamily: 'DnEalianManuscript' }}>
-                    {flashNumber}
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => runFlashSequence(currentQIndex)}
-                    className={`cursor-pointer group ${!canPlay(currentQIndex) ? 'opacity-50 pointer-events-none' : ''}`}
-                  >
-                    <div className="w-28 h-28 md:w-36 md:h-36 bg-ucmas-blue rounded-full flex items-center justify-center text-white text-5xl shadow-2xl group-hover:scale-105 transition-all mx-auto mb-4">
-                      ▶
-                    </div>
-                    <p className="text-gray-400 font-heading font-bold uppercase tracking-widest text-[10px]">
-                      {canPlay(currentQIndex) ? 'Bắt đầu (Tối đa 2 lần)' : 'Hết lượt xem'}
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 

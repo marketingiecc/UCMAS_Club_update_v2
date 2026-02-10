@@ -10,7 +10,14 @@ const SpeedTrainingPage: React.FC = () => {
   const [count, setCount] = useState(8);
   const [speed, setSpeed] = useState(0.8);
   const [status, setStatus] = useState<'setup' | 'running' | 'answer' | 'done'>('setup');
-  const [flashNumber, setFlashNumber] = useState<number | null>(null);
+  type FlashFrame = { value: number | string; token: number };
+  type FlashOverlayState =
+    | null
+    | { kind: 'intro'; digits: number; rows: number; secondsPerItem: number }
+    | { kind: 'countdown'; text: string };
+
+  const [flashFrame, setFlashFrame] = useState<FlashFrame | null>(null);
+  const [flashOverlay, setFlashOverlay] = useState<FlashOverlayState>(null);
   const [answer, setAnswer] = useState('');
   const [result, setResult] = useState<{ correct: boolean; sum: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -24,15 +31,39 @@ const SpeedTrainingPage: React.FC = () => {
 
   const sum = useMemo(() => numbers.reduce((a, b) => a + b, 0), [numbers]);
 
+  const formatSecondsVi = (s: number) => {
+    if (!Number.isFinite(s)) return String(s);
+    const rounded = Math.round(s * 10) / 10;
+    return String(rounded).replace(/\.0$/, '');
+  };
+
   const runSequence = async () => {
     setStatus('running');
     startedAtRef.current = Date.now();
-    for (const n of numbers) {
-      setFlashNumber(n);
-      await new Promise(r => setTimeout(r, speed * 1000));
-      setFlashNumber(null);
-      await new Promise(r => setTimeout(r, 150));
+    setFlashFrame(null);
+
+    // 0) Intro: thông tin phép tính
+    setFlashOverlay({ kind: 'intro', digits, rows: count, secondsPerItem: speed });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // 1) Countdown
+    const countdowns = ['3...', '2...', '1...', 'Bắt Đầu'];
+    for (const text of countdowns) {
+      setFlashOverlay({ kind: 'countdown', text });
+      await new Promise(r => setTimeout(r, 1000));
     }
+    setFlashOverlay(null);
+    await new Promise(r => setTimeout(r, 600));
+
+    // 2) Numbers (giữ đúng timing speed; hiệu ứng qua CSS)
+    let token = 0;
+    for (const n of numbers) {
+      token += 1;
+      setFlashFrame({ value: n, token });
+      await new Promise(r => setTimeout(r, speed * 1000));
+    }
+
+    setFlashFrame(null);
     setStatus('answer');
   };
 
@@ -136,9 +167,66 @@ const SpeedTrainingPage: React.FC = () => {
 
         {status === 'running' && (
           <div className="min-h-[45vh] flex items-center justify-center">
-            <div className="text-[clamp(6rem,22vw,16rem)] font-black text-ucmas-blue leading-none">
-              {flashNumber ?? ''}
-            </div>
+            <style>{`
+              @keyframes ucmasFlashZoomIn {
+                0% { opacity: 0; transform: scale(0.88); }
+                100% { opacity: 1; transform: scale(1); }
+              }
+              @keyframes ucmasFlashFadeOut {
+                0% { opacity: 1; }
+                100% { opacity: 0; }
+              }
+              .ucmas-flash-number-anim {
+                animation:
+                  ucmasFlashZoomIn var(--in-ms) ease-out 0ms 1 both,
+                  ucmasFlashFadeOut var(--out-ms) ease-in calc(var(--display-ms) - var(--out-ms)) 1 both;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .ucmas-flash-number-anim { animation: none !important; }
+              }
+            `}</style>
+
+            {flashOverlay?.kind === 'intro' ? (
+              <div className="text-center text-gray-900" style={{ fontFamily: 'Arial, sans-serif' }}>
+                <div className="text-[clamp(1.6rem,4.5vw,3.2rem)] font-bold">
+                  Phép tính <span className="text-ucmas-red">{flashOverlay.digits}</span> chữ số{' '}
+                  <span className="text-ucmas-red">{flashOverlay.rows}</span> dòng
+                </div>
+                <div className="mt-4 text-[clamp(1.2rem,3.2vw,2.2rem)] font-normal">
+                  Khoảng thời gian xuất hiện mỗi phép tính:{' '}
+                  <span className="text-ucmas-red">{formatSecondsVi(flashOverlay.secondsPerItem)}</span> giây
+                </div>
+              </div>
+            ) : flashOverlay?.kind === 'countdown' ? (
+              <div
+                className={`text-center text-gray-900 uppercase leading-none tracking-[0.06em] select-none tabular-nums ${flashOverlay.text === 'Bắt Đầu'
+                  ? 'text-[clamp(4.66rem,16.85vw,14.0rem)]'
+                  : 'text-[clamp(5.83rem,21.06vw,17.5rem)]'
+                  }`}
+                style={{ fontFamily: 'Arial, sans-serif' }}
+              >
+                {flashOverlay.text}
+              </div>
+            ) : (
+              <div
+                key={flashFrame?.token ?? 'blk'}
+                className={`text-[clamp(6rem,22vw,16rem)] font-black text-ucmas-blue leading-none tabular-nums ${flashFrame?.value != null ? 'ucmas-flash-number-anim' : ''}`}
+                style={{
+                  ...(flashFrame?.value != null ? (() => {
+                    const displayMs = Math.max(80, Math.round(speed * 1000));
+                    const inMs = Math.min(120, Math.max(50, Math.round(displayMs * 0.25)));
+                    const outMs = Math.min(140, Math.max(60, Math.round(displayMs * 0.3)));
+                    return ({
+                      ['--display-ms' as any]: `${displayMs}ms`,
+                      ['--in-ms' as any]: `${inMs}ms`,
+                      ['--out-ms' as any]: `${outMs}ms`,
+                    } as React.CSSProperties);
+                  })() : {}),
+                }}
+              >
+                {flashFrame?.value ?? ''}
+              </div>
+            )}
           </div>
         )}
 
