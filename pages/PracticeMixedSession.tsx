@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/mockBackend';
 import { practiceService } from '../src/features/practice/services/practiceService';
 import { Mode, Question, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playListeningPhraseVi } from '../services/googleTts';
 
 interface PracticeMixedSessionProps {
   user: UserProfile;
@@ -163,8 +163,7 @@ const PracticeMixedSession: React.FC<PracticeMixedSessionProps> = ({ user }) => 
 
     // Adjust rate based on speed; use Vietnamese number words so TTS reads in Vietnamese
     const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-    const fullText = buildListeningPhraseVi(q.operands);
-    await playStableTts(fullText, TTS_LANG, rate, {
+    await playListeningPhraseVi(q.operands, TTS_LANG, rate, {
       onAudio: (a) => {
         audioRef.current = a;
       },

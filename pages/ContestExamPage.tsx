@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
 import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playListeningPhraseVi } from '../services/googleTts';
 
 interface ContestExamPageProps {
   user: UserProfile;
@@ -214,9 +214,9 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
     return Math.min(Math.max(rate, 0.5), 2.5);
   };
 
-  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+  const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
     const lang = 'vi-VN';
-    await playStableTts(text, lang, rate, {
+    await playListeningPhraseVi(operands, lang, rate, {
       onAudio: (a) => {
         audioRef.current = a;
       },
@@ -246,8 +246,7 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
     const q = questions[qIndex];
     const readSpeed = exam?.read_seconds_per_number || exam?.config?.read_speed || 2.0;
     const rate = getSpeechRate(readSpeed);
-    const text = buildListeningPhraseVi(q.operands);
-    await playSingleAudio(text, rate);
+    await playSingleAudio(q.operands, rate);
 
     setIsPlayingAudio(false);
   };

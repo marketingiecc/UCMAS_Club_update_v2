@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playListeningPhraseVi } from '../services/googleTts';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 import { canUseTrial, consumeTrial } from '../services/trialUsage';
@@ -305,9 +305,9 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     setIsFlashing(false);
   };
 
-  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
+  const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
     const lang = 'vi-VN';
-    await playStableTts(text, lang, rate, {
+    await playListeningPhraseVi(operands, lang, rate, {
       onAudio: (a) => {
         audioRef.current = a;
       },
@@ -332,8 +332,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     const speed = navState?.customConfig?.speed || 1.0;
 
     const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
-    const text = buildListeningPhraseVi(q.operands);
-    await playSingleAudio(text, rate);
+    await playSingleAudio(q.operands, rate);
 
     setIsPlayingAudio(false);
     audioRef.current = null;

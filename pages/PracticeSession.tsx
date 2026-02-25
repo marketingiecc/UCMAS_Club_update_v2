@@ -7,7 +7,7 @@ import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
-import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playListeningPhraseVi, playStableTts } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 import { trainingTrackService } from '../services/trainingTrackService';
 
@@ -411,9 +411,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     setIsFlashing(false);
   };
 
-  const playSingleAudio = async (text: string, rate: number): Promise<void> => {
-    // Unified listening voice across all flows: Google Cloud-first strategy.
-    await playStableTts(text, selectedLang, rate, {
+  const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
+    await playListeningPhraseVi(operands, selectedLang, rate, {
       onAudio: (a) => {
         audioRef.current = a;
       },
@@ -429,9 +428,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
     const q = questions[currentQIndex];
     const rate = getSpeechRate(speed);
-    // Vietnamese phrase with numbers as words so TTS reads in Vietnamese
-    const text = buildListeningPhraseVi(q.operands);
-    await playSingleAudio(text, rate);
+    await playSingleAudio(q.operands, rate);
 
     setIsPlayingAudio(false);
     audioRef.current = null;

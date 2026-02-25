@@ -11,7 +11,6 @@ const NgheTinhTestPage: React.FC = () => {
   const [status, setStatus] = useState('Sẵn sàng');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hasGoogleCloudKey = !!((import.meta as any)?.env?.VITE_GOOGLE_TTS_API_KEY as string | undefined);
 
   const stopPlayback = () => {
     if (audioRef.current) {
@@ -27,10 +26,6 @@ const NgheTinhTestPage: React.FC = () => {
     const safeText = text.trim();
     if (!safeText) {
       alert('Vui lòng nhập nội dung để nghe thử.');
-      return;
-    }
-    if (!hasGoogleCloudKey) {
-      setStatus('Thiếu VITE_GOOGLE_TTS_API_KEY trong .env.local');
       return;
     }
 
