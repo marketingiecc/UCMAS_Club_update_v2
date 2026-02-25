@@ -30,6 +30,7 @@ import AdminStudentProgressPage from './pages/AdminStudentProgressPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
 import AdminInfoManagerPage from './pages/AdminInfoManagerPage';
 import AdminSeoSetupPage from './pages/AdminSeoSetupPage';
+import NgheTinhTestPage from './pages/NgheTinhTestPage';
 
 const AppContent: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -181,6 +182,7 @@ const AppContent: React.FC = () => {
         <Route path="/contests" element={user ? <ContestListPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId" element={user ? <ContestLobbyPage user={user} /> : <Navigate to="/login" />} />
         <Route path="/contests/:contestId/exam/:mode" element={user ? <ContestExamPage user={user} /> : <Navigate to="/login" />} />
+        <Route path="/test/nghetinh" element={<NgheTinhTestPage />} />
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

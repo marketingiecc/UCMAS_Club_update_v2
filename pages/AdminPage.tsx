@@ -355,6 +355,10 @@ const AdminPage: React.FC = () => {
             <span>Setup SEO</span>
             <span>🔎</span>
           </button>
+          <button onClick={() => navigate('/test/nghetinh')} className="w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800 hover:bg-fuchsia-100 shadow-sm flex items-center justify-between">
+            <span>Test Giọng Nghe Tính</span>
+            <span>🎧</span>
+          </button>
           <div className="h-px bg-gray-100 my-6"></div>
           <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition ${activeTab === 'reports' ? 'bg-gray-800 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>📈 Báo Cáo</button>
           <button onClick={() => setActiveTab('users')} className={`w-full text-left px-5 py-4 rounded-2xl font-heading font-black text-xs uppercase transition ${activeTab === 'users' ? 'bg-gray-800 text-white shadow-xl' : 'text-gray-400 hover:bg-gray-50'}`}>👥 Học Viên</button>

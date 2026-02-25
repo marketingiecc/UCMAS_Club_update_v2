@@ -7,7 +7,7 @@ import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
-import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, getGoogleTranslateTtsUrl, playGoogleTranslateTts, playStableTts, speakWithBrowserTts, splitTtsText } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, buildListeningPhraseVi, playStableTts } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 import { trainingTrackService } from '../services/trainingTrackService';
 
@@ -242,10 +242,6 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     startFromHub();
   }, [fromHub, hubConfig, user.full_name]);
 
-  const getGoogleTTSUrl = (text: string, lang: string) => {
-    return getGoogleTranslateTtsUrl(text, lang);
-  };
-
   const startExam = async () => {
     if (!formName) {
       alert("Vui lòng nhập họ và tên!");
@@ -312,7 +308,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
 
     (async () => {
       const rate = getSpeechRate(speed);
-      await playGoogleTranslateTts(langConfig.sample, selectedLang, rate, {
+      await playStableTts(langConfig.sample, selectedLang, rate, {
         onAudio: (a) => {
           audioRef.current = a;
         },
@@ -416,16 +412,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   };
 
   const playSingleAudio = async (text: string, rate: number): Promise<void> => {
-    // Cuộc thi → ✨ Sáng tạo phép tính → 🎧 Nghe: use Google Translate TTS (Vietnamese).
-    if (origin === 'contests_creative' && currentMode === Mode.LISTENING) {
-      await playGoogleTranslateTts(text, 'vi-VN', rate, {
-        onAudio: (a) => {
-          audioRef.current = a;
-        },
-      });
-      return;
-    }
-
+    // Unified listening voice across all flows: Google Cloud-first strategy.
     await playStableTts(text, selectedLang, rate, {
       onAudio: (a) => {
         audioRef.current = a;
@@ -672,7 +659,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                       onClick={testVoice}
                       className={`text-xs font-heading font-bold px-4 py-2 rounded-full border transition border-red-200 text-red-600 hover:bg-red-50`}
                     >
-                      🔊 Nghe thử giọng Google
+                      🔊 Nghe thử giọng Cloud
                     </button>
                   </div>
                 )}

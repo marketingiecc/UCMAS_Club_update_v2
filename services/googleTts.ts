@@ -2,6 +2,8 @@ function baseLang(lang: string) {
   return (lang || 'vi').split('-')[0]; // vi-VN -> vi
 }
 
+const DEFAULT_VI_CLOUD_VOICE = 'vi-VN-Standard-A';
+
 /** Digits 0-9 in Vietnamese (for reading numbers). */
 const VI_DIGITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'] as const;
 
@@ -70,12 +72,30 @@ export function buildListeningPhraseVi(operands: number[]): string {
 }
 
 function getBrowserApiKey(): string | null {
-  // This project already injects GEMINI_API_KEY into process.env via Vite config.
-  // We reuse it (optionally) for Google Cloud Text-to-Speech if that API is enabled.
+  // Prefer Vite public env var for Google Cloud Text-to-Speech.
+  // Fallback to legacy keys already used by this project.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const meta: any = typeof import.meta !== 'undefined' ? (import.meta as any) : null;
+    const viteKey =
+      meta?.env?.VITE_GOOGLE_TTS_API_KEY ||
+      meta?.env?.VITE_GOOGLE_CLOUD_TTS_API_KEY ||
+      meta?.env?.VITE_GEMINI_API_KEY ||
+      null;
+    if (typeof viteKey === 'string' && viteKey.trim()) return viteKey.trim();
+  } catch {
+    // ignore
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p: any = typeof process !== 'undefined' ? (process as any) : null;
-    const key = p?.env?.GEMINI_API_KEY || p?.env?.API_KEY || null;
+    const key =
+      p?.env?.GOOGLE_TTS_API_KEY ||
+      p?.env?.GOOGLE_CLOUD_TTS_API_KEY ||
+      p?.env?.GEMINI_API_KEY ||
+      p?.env?.API_KEY ||
+      null;
     return typeof key === 'string' && key.trim() ? key.trim() : null;
   } catch {
     return null;
@@ -258,9 +278,10 @@ function base64ToUint8Array(base64: string) {
 async function synthesizeWithGoogleCloudTextToSpeechMp3(
   text: string,
   lang: string,
-  speakingRate: number
+  speakingRate: number,
+  opts?: { voiceName?: string; apiKey?: string }
 ): Promise<{ audioUrl: string; revoke: () => void }> {
-  const apiKey = getBrowserApiKey();
+  const apiKey = opts?.apiKey?.trim() || getBrowserApiKey();
   if (!apiKey) throw new Error('Missing API key');
 
   const languageCode = lang || 'vi-VN';
@@ -269,13 +290,17 @@ async function synthesizeWithGoogleCloudTextToSpeechMp3(
 
   const endpoint = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`;
 
+  const preferredVoiceName =
+    opts?.voiceName?.trim() ||
+    (baseLang(languageCode).toLowerCase() === 'vi' ? DEFAULT_VI_CLOUD_VOICE : undefined);
+
   const bodyBase = {
     input: { text },
     voice: {
       languageCode,
       // Prefer a stable Vietnamese voice when available.
       // If the project doesn't have this voice, we'll retry without a specific name.
-      name: languageCode === 'vi-VN' ? 'vi-VN-Standard-A' : undefined,
+      name: preferredVoiceName,
     },
     audioConfig: {
       audioEncoding: 'MP3',
@@ -316,6 +341,48 @@ async function synthesizeWithGoogleCloudTextToSpeechMp3(
   const blob = new Blob([bytes], { type: 'audio/mpeg' });
   const audioUrl = URL.createObjectURL(blob);
   return { audioUrl, revoke: () => URL.revokeObjectURL(audioUrl) };
+}
+
+export async function playGoogleCloudTts(
+  text: string,
+  lang: string,
+  rate: number,
+  opts?: { onAudio?: (audio: HTMLAudioElement | null) => void; voiceName?: string; apiKey?: string }
+): Promise<void> {
+  const chunks = splitTtsText(text, 160);
+  if (chunks.length === 0) return;
+
+  const onAudio = opts?.onAudio;
+
+  const playAudioElement = (audio: HTMLAudioElement, revoke?: () => void) =>
+    new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        try { revoke?.(); } catch { /* ignore */ }
+        if (ok) resolve();
+        else reject(new Error('Google Cloud TTS playback failed'));
+      };
+      audio.onended = () => finish(true);
+      audio.onerror = () => finish(false);
+      audio.play().then(() => void 0).catch(() => finish(false));
+    });
+
+  for (const chunk of chunks) {
+    // eslint-disable-next-line no-await-in-loop
+    const { audioUrl, revoke } = await synthesizeWithGoogleCloudTextToSpeechMp3(chunk, lang, rate, {
+      voiceName: opts?.voiceName,
+      apiKey: opts?.apiKey,
+    });
+    const audio = new Audio(audioUrl);
+    // speakingRate is already synthesized in server output.
+    audio.playbackRate = 1.0;
+    onAudio?.(audio);
+    // eslint-disable-next-line no-await-in-loop
+    await playAudioElement(audio, revoke);
+    onAudio?.(null);
+  }
 }
 
 /**
@@ -480,11 +547,9 @@ export async function playBestEffortTts(
 
 /**
  * Stable TTS strategy (used for Nghe tính):
- * - Prefer Google Cloud Text-to-Speech when API key exists and API is enabled
- * - Fallback to browser SpeechSynthesis
- *
- * Intentionally does NOT use Google Translate TTS URL retries to avoid the
- * "re-reading many times after ended" issues on some browsers/environments.
+ * - LOCKED to Google Cloud Text-to-Speech for consistent voice
+ * - Fixed Vietnamese voice: vi-VN-Standard-A
+ * - No fallback to other engines (to keep timbre identical across sessions)
  */
 export async function playStableTts(
   text: string,
@@ -498,43 +563,41 @@ export async function playStableTts(
   const onAudio = opts?.onAudio;
 
   const playAudioElement = (audio: HTMLAudioElement, revoke?: () => void) =>
-    new Promise<void>((resolve) => {
+    new Promise<void>((resolve, reject) => {
       let settled = false;
-      const finish = () => {
+      const finish = (ok: boolean) => {
         if (settled) return;
         settled = true;
         try { revoke?.(); } catch { /* ignore */ }
-        resolve();
+        if (ok) resolve();
+        else reject(new Error('Google Cloud TTS playback failed'));
       };
 
-      audio.onended = () => finish();
-      audio.onerror = () => finish();
-      audio.play().then(() => void 0).catch(() => finish());
+      audio.onended = () => finish(true);
+      audio.onerror = () => finish(false);
+      audio.play().then(() => void 0).catch(() => finish(false));
     });
 
+  const cloudLang = baseLang(lang).toLowerCase() === 'vi' ? 'vi-VN' : (lang || 'vi-VN');
   for (const chunk of chunks) {
-    // 1) Cloud TTS (best Vietnamese quality)
-    try {
-      const { audioUrl, revoke } = await synthesizeWithGoogleCloudTextToSpeechMp3(chunk, lang, rate);
-      const audio = new Audio(audioUrl);
-      audio.playbackRate = 1.0; // already baked into speakingRate
-      onAudio?.(audio);
-      await playAudioElement(audio, revoke);
-      onAudio?.(null);
-      continue;
-    } catch {
-      // ignore and fall back
-    }
-
-    // 2) Browser TTS fallback
+    const { audioUrl, revoke } = await synthesizeWithGoogleCloudTextToSpeechMp3(chunk, cloudLang, rate, {
+      voiceName: baseLang(cloudLang).toLowerCase() === 'vi' ? DEFAULT_VI_CLOUD_VOICE : undefined,
+    });
+    const audio = new Audio(audioUrl);
+    audio.playbackRate = 1.0; // speakingRate is baked into generated audio
+    onAudio?.(audio);
+    // eslint-disable-next-line no-await-in-loop
+    await playAudioElement(audio, revoke);
     onAudio?.(null);
-    await speakWithBrowserTts(chunk, lang, rate);
   }
 }
 
 /**
- * Play TTS using unofficial Google Translate TTS endpoint first.
- * Falls back to browser SpeechSynthesis when audio playback is blocked/failed.
+ * Play TTS with Cloud-first strategy:
+ * 1) Google Cloud TTS (preferred; stable Vietnamese voice)
+ * 2) Google Translate unofficial endpoint fallbacks
+ * 3) FPT Vietnamese voice (when lang is vi and key exists)
+ * 4) Browser SpeechSynthesis
  *
  * IMPORTANT: playbackRate is kept at 1.0 to preserve natural Vietnamese voice.
  * Changing playbackRate causes the voice to sound distorted (like English reading Vietnamese).
@@ -564,24 +627,60 @@ export async function playGoogleTranslateTts(
     });
 
   for (const chunk of chunks) {
-    const urls = getGoogleTranslateTtsUrls(chunk, lang);
     let ok = false;
-    for (const url of urls) {
-      const audio = new Audio(url);
-      // CRITICAL: Keep playbackRate = 1.0 to preserve natural Vietnamese pronunciation.
-      // Setting playbackRate ≠ 1.0 causes pitch shift → sounds like English reading Vietnamese.
-      audio.playbackRate = 1.0;
-      onAudio?.(audio);
-      // eslint-disable-next-line no-await-in-loop
-      ok = await playAudioElement(audio);
-      onAudio?.(null);
-      if (ok) break;
-      try { audio.pause(); } catch { /* ignore */ }
+
+    // 1) Cloud-first (preferred for production stability and voice quality)
+    if (!ok) {
+      try {
+        const { audioUrl, revoke } = await synthesizeWithGoogleCloudTextToSpeechMp3(chunk, lang, 1.0, {
+          voiceName: baseLang(lang).toLowerCase() === 'vi' ? DEFAULT_VI_CLOUD_VOICE : undefined,
+        });
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = 1.0;
+        onAudio?.(audio);
+        // eslint-disable-next-line no-await-in-loop
+        ok = await playAudioElement(audio);
+        onAudio?.(null);
+        try { revoke(); } catch { /* ignore */ }
+      } catch {
+        // ignore and continue
+      }
+    }
+
+    // 2) Translate endpoint fallbacks (kept for compatibility when Cloud key unavailable)
+    if (!ok) {
+      const urls = getGoogleTranslateTtsUrls(chunk, lang);
+      for (const url of urls) {
+        const audio = new Audio(url);
+        // CRITICAL: Keep playbackRate = 1.0 to preserve natural Vietnamese pronunciation.
+        // Setting playbackRate ≠ 1.0 causes pitch shift → sounds like English reading Vietnamese.
+        audio.playbackRate = 1.0;
+        onAudio?.(audio);
+        // eslint-disable-next-line no-await-in-loop
+        ok = await playAudioElement(audio);
+        onAudio?.(null);
+        if (ok) break;
+        try { audio.pause(); } catch { /* ignore */ }
+      }
+    }
+
+    if (!ok && baseLang(lang) === 'vi') {
+      // 3) Vietnamese-specific fallback (if key exists).
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await playFptAiTts(chunk, 'vi-VN', 1.0, {
+          onAudio,
+          voice: 'banmai',
+        });
+        ok = true;
+      } catch {
+        // ignore and continue
+      }
     }
 
     if (!ok) {
       onAudio?.(null);
-      // Browser TTS fallback (prefers Vietnamese female voices when possible)
+      // 4) Last fallback only.
       // eslint-disable-next-line no-await-in-loop
       await speakWithBrowserTts(chunk, lang, 1.0);
     }
