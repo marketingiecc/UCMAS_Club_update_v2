@@ -553,9 +553,8 @@ export async function playBestEffortTts(
 
 /**
  * Stable TTS strategy (used for Nghe tính):
- * - LOCKED to Google Cloud Text-to-Speech for consistent voice
- * - Fixed Vietnamese voice: vi-VN-Standard-A
- * - No fallback to other engines (to keep timbre identical across sessions)
+ * - Prefers Google Cloud Text-to-Speech (vi-VN-Standard-A) when API key is set
+ * - Fallback to Google Translate / browser TTS when key is missing (e.g. production without env)
  */
 export async function playStableTts(
   text: string,
@@ -565,6 +564,13 @@ export async function playStableTts(
 ): Promise<void> {
   const chunks = splitTtsText(text, 160);
   if (chunks.length === 0) return;
+
+  // When API key is missing (e.g. prod build without VITE_GOOGLE_TTS_API_KEY env),
+  // fallback to playBestEffortTts so Nghe tính still works
+  if (!getBrowserApiKey()) {
+    await playBestEffortTts(text, lang, rate, opts);
+    return;
+  }
 
   const onAudio = opts?.onAudio;
 
