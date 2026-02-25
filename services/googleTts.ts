@@ -72,7 +72,7 @@ export function buildListeningPhraseVi(operands: number[]): string {
 }
 
 /** Pause (ms) sau "Chuẩn bị" trước khi đọc phép tính */
-const LISTENING_PAUSE_AFTER_CHUAN_BI_MS = 1500;
+const LISTENING_PAUSE_AFTER_CHUAN_BI_MS = 1000;
 
 /**
  * Phát câu Nghe tính với pause 1,5s sau "Chuẩn bị".
