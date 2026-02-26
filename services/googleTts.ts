@@ -9,6 +9,9 @@ const DEFAULT_VI_CLOUD_VOICE = 'vi-VN-Standard-A';
 /** Digits 0-9 in Vietnamese (for reading numbers). */
 const VI_DIGITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'] as const;
 
+/** Chỉ trim khoảng im lặng ở các token SỐ (0–9). Giữ nguyên nghìn, triệu, tỷ, mươi, trăm… để học sinh nghe rõ. */
+const TRIM_DIGIT_TOKENS = new Set<string>(VI_DIGITS);
+
 /**
  * Convert a number to Vietnamese words for TTS (so "12" is read as "mười hai" not "twelve").
  * Handles integers and decimals (e.g. 3.5 -> "ba phẩy năm").
@@ -469,17 +472,36 @@ function trimTrailingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
   return trimmed;
 }
 
-function concatenateAudioBuffers(ctx: AudioContext, buffers: AudioBuffer[], trimGaps = true): AudioBuffer {
-  const processed = trimGaps && buffers.length > 1
-    ? buffers.map((b, i) => (i < buffers.length - 1 ? trimTrailingSilence(b, ctx) : b))
-    : buffers;
-  const totalLength = processed.reduce((acc, b) => acc + b.length, 0);
-  const numChannels = Math.max(1, processed[0]?.numberOfChannels ?? 1);
-  const sampleRate = processed[0]?.sampleRate ?? ctx.sampleRate;
+function createSilenceBuffer(ctx: AudioContext, durationMs: number, sampleRate?: number): AudioBuffer {
+  const sr = sampleRate ?? ctx.sampleRate;
+  const numSamples = Math.max(0, Math.floor((durationMs / 1000) * sr));
+  if (numSamples === 0) return ctx.createBuffer(1, 1, sr);
+  const buf = ctx.createBuffer(1, numSamples, sr);
+  buf.getChannelData(0).fill(0);
+  return buf;
+}
+
+/** Ghép các buffer với khoảng im lặng (ms) sau mỗi buffer. gapMs[i] = ms sau buffer i. */
+function concatenateBuffersWithGaps(
+  ctx: AudioContext,
+  buffers: AudioBuffer[],
+  gapMs: number[],
+): AudioBuffer {
+  const sampleRate = buffers[0]?.sampleRate ?? ctx.sampleRate;
+  const numChannels = Math.max(1, buffers[0]?.numberOfChannels ?? 1);
+
+  const parts: AudioBuffer[] = [];
+  for (let i = 0; i < buffers.length; i++) {
+    parts.push(buffers[i]);
+    const gap = gapMs[i] ?? 0;
+    if (gap > 0) parts.push(createSilenceBuffer(ctx, gap, sampleRate));
+  }
+
+  const totalLength = parts.reduce((acc, b) => acc + b.length, 0);
   const result = ctx.createBuffer(numChannels, totalLength, sampleRate);
-  const channels = Array.from({ length: numChannels }, (_, i) => result.getChannelData(i));
+  const channels = Array.from({ length: numChannels }, (_, c) => result.getChannelData(c));
   let offset = 0;
-  for (const buf of processed) {
+  for (const buf of parts) {
     const len = buf.length;
     const ch = Math.min(buf.numberOfChannels, numChannels);
     for (let c = 0; c < ch; c++) {
@@ -501,8 +523,45 @@ function getGapMs(gapType: NgheTinhGapType, cfg: NgheTinhGapConfig): number {
 }
 
 /**
- * Phát Nghe tính bằng ghép âm pre-recorded. Âm thiếu → gọi Google TTS bổ sung.
- * Cùng API với playListeningPhraseVi. Dùng NgheTinhGapConfig để điều khiển khoảng chờ.
+ * Lấy AudioBuffer cho 1 token: fetch từ Storage/local, hoặc TTS nếu thiếu.
+ */
+async function getTokenAudioBuffer(
+  token: string,
+  ctx: AudioContext,
+  lang: string,
+  rate: number,
+  opts?: { onMissingTokens?: (tokens: string[]) => void; onAudio?: (a: HTMLAudioElement | null) => void },
+): Promise<AudioBuffer | null> {
+  const arr = await fetchTokenAudioOrNull(token);
+  if (arr) {
+    const buf = await decodeAudioBuffer(ctx, arr);
+    return buf;
+  }
+
+  opts?.onMissingTokens?.([token]);
+  if (typeof window === 'undefined' || token.length > 30) return null;
+
+  try {
+    const text = tokenToTtsText(token);
+    const { base64 } = await synthesizeWithGoogleCloudTextToSpeechMp3(text, 'vi-VN', 1.0, { voiceName: 'vi-VN-Standard-A' });
+    const uint8 = base64ToUint8Array(base64);
+    const buf = await decodeAudioBuffer(ctx, uint8.buffer);
+    if (buf) {
+      const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
+      const { uploadNgheTinhAudio } = await import('./ngheTinhStorageService');
+      await uploadNgheTinhAudio(fn, base64).catch(() => {});
+      await fetch('/__save-nghe-tinh-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: fn, base64 }) }).catch(() => {});
+      return buf;
+    }
+  } catch {
+    /* fallthrough */
+  }
+  return null;
+}
+
+/**
+ * Phát Nghe tính: ghép toàn bộ thành 1 buffer rồi phát một mạch, không ngắt.
+ * Âm thiếu → TTS bổ sung. Sau khi nghe xong buffer tự giải phóng (không tạo file).
  */
 export async function playConcatenatedListeningVi(
   operands: number[],
@@ -523,64 +582,33 @@ export async function playConcatenatedListeningVi(
   const { tokens, gapAfter } = operandsToTokensWithGapTypes(operands, 'addsub');
   if (tokens.length === 0) return;
 
-  const ttsFallback = async (text: string) => {
-    if (!text.trim()) return;
-    await playStableTts(text, lang, rate, opts);
-  };
+  const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  if (ctx.state === 'suspended') await ctx.resume();
 
-  const playOneToken = async (token: string): Promise<void> => {
-    const arr = await fetchTokenAudioOrNull(token);
-    if (arr) {
-      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      if (ctx.state === 'suspended') await ctx.resume();
-      const buf = await decodeAudioBuffer(ctx, arr);
-      if (buf) {
-        let trimmed = buf;
-        if (token !== 'Chuẩn_bị' && token !== 'Bằng') {
-          trimmed = trimLeadingSilence(trimmed, ctx);
-          trimmed = trimTrailingSilence(trimmed, ctx);
-        }
-        const src = ctx.createBufferSource();
-        src.buffer = trimmed;
-        src.playbackRate.value = rate;
-        src.connect(ctx.destination);
-        src.start(0);
-        await new Promise<void>((res) => { src.onended = () => res(); });
-        return;
-      }
-    }
-    opts?.onMissingTokens?.([token]);
-    if (token.length <= 6 && typeof window !== 'undefined') {
-      try {
-        const text = tokenToTtsText(token);
-        const { audioUrl, revoke, base64 } = await synthesizeWithGoogleCloudTextToSpeechMp3(text, lang, rate);
-        const audio = new Audio(audioUrl);
-        opts?.onAudio?.(audio);
-        await new Promise<void>((res, rej) => {
-          audio.onended = () => { revoke(); opts?.onAudio?.(null); res(); };
-          audio.onerror = () => { revoke(); opts?.onAudio?.(null); rej(new Error('TTS failed')); };
-          audio.play().catch(rej);
-        });
-        const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
-        // Upload lên Supabase Storage (tự động lưu âm mới)
-        const { uploadNgheTinhAudio } = await import('./ngheTinhStorageService');
-        await uploadNgheTinhAudio(fn, base64).catch(() => {});
-        // Fallback: lưu local khi chạy dev (Vite middleware)
-        await fetch('/__save-nghe-tinh-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: fn, base64 }) }).catch(() => {});
-        return;
-      } catch { /* fallthrough */ }
-    }
-    await ttsFallback(tokenToTtsText(token));
-  };
-
+  const buffers: AudioBuffer[] = [];
   for (let i = 0; i < tokens.length; i++) {
-    await playOneToken(tokens[i]);
-    const gapType = gapAfter[i];
-    const gap = getGapMs(gapType, gapConfig);
-    if (gap > 0) {
-      await new Promise((r) => setTimeout(r, gap));
+    const buf = await getTokenAudioBuffer(tokens[i], ctx, lang, rate, opts);
+    if (!buf) {
+      await playListeningPhraseVi(operands, lang, rate, opts);
+      return;
     }
+    let trimmed = buf;
+    if (TRIM_DIGIT_TOKENS.has(tokens[i])) {
+      trimmed = trimLeadingSilence(trimmed, ctx);
+      trimmed = trimTrailingSilence(trimmed, ctx);
+    }
+    buffers.push(trimmed);
   }
+
+  const gapMs = tokens.map((_, i) => getGapMs(gapAfter[i], gapConfig));
+  const full = concatenateBuffersWithGaps(ctx, buffers, gapMs);
+
+  const src = ctx.createBufferSource();
+  src.buffer = full;
+  src.playbackRate.value = rate;
+  src.connect(ctx.destination);
+  src.start(0);
+  await new Promise<void>((res) => { src.onended = () => res(); });
 }
 
 /**

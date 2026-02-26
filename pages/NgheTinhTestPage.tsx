@@ -69,7 +69,7 @@ const NgheTinhTestPage: React.FC = () => {
     try {
       const { saveNgheTinhGapConfig } = await import('../services/ngheTinhConfigService');
       await saveNgheTinhGapConfig(gapConfig);
-      setStatus('Đã lưu thành công. Cài đặt áp dụng cho toàn bộ trang Nghe tính (Luyện tập, Thi thử, Cuộc thi).');
+      setStatus('✓ Lưu thành công! Cài đặt áp dụng cho toàn bộ trang Nghe tính.');
     } catch {
       setStatus('Đã lưu cài đặt (chỉ áp dụng trên thiết bị này). Để áp dụng toàn hệ thống, cần kết nối Supabase.');
     }

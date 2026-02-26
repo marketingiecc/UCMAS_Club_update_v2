@@ -11,6 +11,8 @@ Nếu không có Supabase, dùng thư mục local: `public/audio/nghe-tinh/1.0/`
 **Định dạng:** MP3  
 **Quy ước tên file:** Không dấu (VD: `hai.mp3`, `muoi.mp3`, `chuan_bi.mp3`, `cong.mp3`)
 
+**Giọng TTS khi bổ sung âm thiếu:** Google Cloud TTS | vi-VN | vi-VN-Standard-A | Rate 1x
+
 ## Các token âm cần có
 
 | Token        | File      | Mô tả              |
