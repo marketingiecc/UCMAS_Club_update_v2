@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../supabase/src/types"
+		},
+		{
+			"path": "svg"
+		}
+	],
+	"settings": {}
+}

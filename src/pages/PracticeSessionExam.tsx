@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playStableTts, operandsToUcmasListeningPhraseVi } from '@/services/googleTts';
 
 interface PracticeSessionExamProps {
     user: UserProfile;
@@ -169,9 +169,9 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         // 1. "Chuẩn bị"
         await playSingleAudio("Chuẩn bị", 1.2);
 
-        // 2. Numbers
+        // 2. Numbers (quy tắc UCMAS: dấu giống liên tiếp chỉ đọc 1 lần)
         await new Promise(r => setTimeout(r, 300));
-        const text = q.operands.join(', ');
+        const text = operandsToUcmasListeningPhraseVi(q.operands);
         await playSingleAudio(text, rate);
 
         // 3. "Bằng"

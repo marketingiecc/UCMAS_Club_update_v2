@@ -63,12 +63,41 @@ export function numberToVietnameseWords(n: number): string {
 }
 
 /**
- * Build the Vietnamese listening phrase for Nghe tính: "Chuẩn bị. [numbers in words]. Bằng."
- * Phép trừ: đọc "trừ X" thay vì "âm X".
+ * Chuyển operands thành câu đọc theo quy tắc UCMAS Nghe tính:
+ * - Dấu cộng/trừ giống nhau liên tiếp: chỉ đọc 1 lần dấu, dấu phẩy thay cho các dấu lặp
+ * - Đổi dấu: đọc "cộng" hoặc "trừ" trước số
+ * VD: [8,5,3,-2,-1,7,4] → "tám cộng năm, ba trừ hai, một cộng bảy, bốn"
+ */
+export function operandsToUcmasListeningPhraseVi(operands: number[]): string {
+  if (!operands.length) return '';
+  const parts: string[] = [];
+  let prevOp: '+' | '-' | null = null;
+  for (let i = 0; i < operands.length; i++) {
+    const n = operands[i];
+    const op: '+' | '-' = n >= 0 ? '+' : '-';
+    const absVal = Math.abs(n);
+    const numWord = numberToVietnameseWords(absVal);
+    if (i === 0) {
+      parts.push(numWord);
+    } else {
+      if (op === prevOp) {
+        parts.push(`, ${numWord}`);
+      } else {
+        const opWord = op === '+' ? 'cộng' : 'trừ';
+        parts.push(` ${opWord} ${numWord}`);
+      }
+    }
+    prevOp = op;
+  }
+  return parts.join('');
+}
+
+/**
+ * Build the Vietnamese listening phrase for Nghe tính: "Chuẩn bị. [UCMAS phrase]. Bằng."
  */
 export function buildListeningPhraseVi(operands: number[]): string {
-  const parts = operands.map(numberToVietnameseWords);
-  return `Chuẩn bị. ${parts.join(', ')}. Bằng.`;
+  const calc = operandsToUcmasListeningPhraseVi(operands);
+  return `Chuẩn bị. ${calc}. Bằng.`;
 }
 
 /** Pause (ms) sau "Chuẩn bị" trước khi đọc phép tính */
@@ -84,9 +113,8 @@ export async function playListeningPhraseVi(
   rate: number,
   opts?: { onAudio?: (audio: HTMLAudioElement | null) => void }
 ): Promise<void> {
-  const parts = operands.map(numberToVietnameseWords);
   const partChuanBi = 'Chuẩn bị.';
-  const partCalculation = `${parts.join(', ')}. Bằng.`;
+  const partCalculation = `${operandsToUcmasListeningPhraseVi(operands)}. Bằng.`;
 
   await playStableTts(partChuanBi, lang, rate, opts);
   await new Promise((r) => setTimeout(r, LISTENING_PAUSE_AFTER_CHUAN_BI_MS));
