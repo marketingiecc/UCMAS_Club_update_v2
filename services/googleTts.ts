@@ -58,8 +58,142 @@ export function numberToVietnameseWords(n: number): string {
     if (rest <= 99) return k + ' linh ' + numberToVietnameseWords(rest);
     return k + ' ' + numberToVietnameseWords(rest);
   }
+  if (x <= 999_999_999) {
+    const millions = Math.floor(x / 1_000_000);
+    const rest = x % 1_000_000;
+    const m = millions <= 9 ? VI_DIGITS[millions] + ' triệu' : numberToVietnameseWords(millions) + ' triệu';
+    if (rest === 0) return m;
+    if (rest <= 99) return m + ' linh ' + numberToVietnameseWords(rest);
+    return m + ' ' + numberToVietnameseWords(rest);
+  }
+  if (x <= 999_999_999_999) {
+    const billions = Math.floor(x / 1_000_000_000);
+    const rest = x % 1_000_000_000;
+    const b = billions <= 9 ? VI_DIGITS[billions] + ' tỷ' : numberToVietnameseWords(billions) + ' tỷ';
+    if (rest === 0) return b;
+    if (rest <= 99) return b + ' linh ' + numberToVietnameseWords(rest);
+    return b + ' ' + numberToVietnameseWords(rest);
+  }
   // Fallback for very large numbers: spell digits
   return String(x).split('').map(d => VI_DIGITS[parseInt(d, 10)]).join(' ');
+}
+
+/** Map token → filename (no diacritics, for static assets). */
+const TOKEN_TO_FILENAME: Record<string, string> = {
+  không: 'khong', một: 'mot', hai: 'hai', ba: 'ba', bốn: 'bon', năm: 'nam',
+  sáu: 'sau', bảy: 'bay', tám: 'tam', chín: 'chin',
+  mười: 'muoi', mươi: 'muoi2', mốt: 'mot2', lăm: 'lam', linh: 'linh',
+  trăm: 'tram', nghìn: 'nghin', triệu: 'trieu', tỷ: 'ty',
+  cộng: 'cong', trừ: 'tru', nhân: 'nhan', chia: 'chia',
+  phẩy: 'phay', Chuẩn_bị: 'chuan_bi', Bằng: 'bang', _comma: '_comma',
+};
+
+export function tokenToFilename(token: string): string {
+  return TOKEN_TO_FILENAME[token] ?? token.toLowerCase().replace(/\s+/g, '_').replace(/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/g, (c) => {
+    const m: Record<string, string> = { à: 'a', á: 'a', ạ: 'a', ả: 'a', ã: 'a', â: 'a', ầ: 'a', ấ: 'a', ậ: 'a', ẩ: 'a', ẫ: 'a', ă: 'a', ằ: 'a', ắ: 'a', ặ: 'a', ẳ: 'a', ẵ: 'a', è: 'e', é: 'e', ẹ: 'e', ẻ: 'e', ẽ: 'e', ê: 'e', ề: 'e', ế: 'e', ệ: 'e', ể: 'e', ễ: 'e', ì: 'i', í: 'i', ị: 'i', ỉ: 'i', ĩ: 'i', ò: 'o', ó: 'o', ọ: 'o', ỏ: 'o', õ: 'o', ô: 'o', ồ: 'o', ố: 'o', ộ: 'o', ổ: 'o', ỗ: 'o', ơ: 'o', ờ: 'o', ớ: 'o', ợ: 'o', ở: 'o', ỡ: 'o', ù: 'u', ú: 'u', ụ: 'u', ủ: 'u', ũ: 'u', ư: 'u', ừ: 'u', ứ: 'u', ự: 'u', ử: 'u', ữ: 'u', ỳ: 'y', ý: 'y', ỵ: 'y', ỷ: 'y', ỹ: 'y', đ: 'd' };
+    return m[c] ?? c;
+  });
+}
+
+function numberToVietnameseTokensInner(x: number): string[] {
+  if (x <= 9) return [VI_DIGITS[x]];
+  if (x <= 19) {
+    if (x === 10) return ['mười'];
+    const u = x % 10;
+    if (u === 5) return ['mười', 'lăm'];
+    return ['mười', VI_DIGITS[u]];
+  }
+  if (x <= 99) {
+    const tens = Math.floor(x / 10);
+    const u = x % 10;
+    const t = tens === 1 ? 'mười' : VI_DIGITS[tens] + ' mươi';
+    const tTokens = tens === 1 ? ['mười'] : [VI_DIGITS[tens], 'mươi'];
+    if (u === 0) return tTokens;
+    if (u === 1) return [...tTokens, 'mốt'];
+    if (u === 5) return [...tTokens, 'lăm'];
+    return [...tTokens, VI_DIGITS[u]];
+  }
+  if (x <= 999) {
+    const hundreds = Math.floor(x / 100);
+    const rest = x % 100;
+    const h = [VI_DIGITS[hundreds], 'trăm'];
+    if (rest === 0) return h;
+    if (rest <= 9) return [...h, 'linh', VI_DIGITS[rest]];
+    return [...h, ...numberToVietnameseTokensInner(rest)];
+  }
+  if (x <= 999_999) {
+    const thousands = Math.floor(x / 1000);
+    const rest = x % 1000;
+    const k = thousands <= 9 ? [VI_DIGITS[thousands], 'nghìn'] : [...numberToVietnameseTokensInner(thousands), 'nghìn'];
+    if (rest === 0) return k;
+    if (rest <= 99) return [...k, 'linh', ...numberToVietnameseTokensInner(rest)];
+    return [...k, ...numberToVietnameseTokensInner(rest)];
+  }
+  if (x <= 999_999_999) {
+    const millions = Math.floor(x / 1_000_000);
+    const rest = x % 1_000_000;
+    const m = millions <= 9 ? [VI_DIGITS[millions], 'triệu'] : [...numberToVietnameseTokensInner(millions), 'triệu'];
+    if (rest === 0) return m;
+    if (rest <= 99) return [...m, 'linh', ...numberToVietnameseTokensInner(rest)];
+    return [...m, ...numberToVietnameseTokensInner(rest)];
+  }
+  if (x <= 999_999_999_999) {
+    const billions = Math.floor(x / 1_000_000_000);
+    const rest = x % 1_000_000_000;
+    const b = billions <= 9 ? [VI_DIGITS[billions], 'tỷ'] : [...numberToVietnameseTokensInner(billions), 'tỷ'];
+    if (rest === 0) return b;
+    if (rest <= 99) return [...b, 'linh', ...numberToVietnameseTokensInner(rest)];
+    return [...b, ...numberToVietnameseTokensInner(rest)];
+  }
+  return String(x).split('').map(d => VI_DIGITS[parseInt(d, 10)]);
+}
+
+/**
+ * Convert a number to an array of Vietnamese tokens for concatenative TTS.
+ */
+export function numberToVietnameseTokens(n: number): string[] {
+  if (!Number.isFinite(n)) return ['không'];
+  if (n < 0) return ['trừ', ...numberToVietnameseTokensInner(-n)];
+  return numberToVietnameseTokensInner(Math.floor(n));
+}
+
+export type ListeningOp = 'addsub' | 'mul' | 'div';
+
+/**
+ * Build token sequence for listening phrase: [Chuẩn_bị, ...calc, Bằng].
+ * addsub: operands as signed numbers (UCMAS cộng/trừ).
+ * mul/div: operands as [a, b] for "a nhân/chia b".
+ */
+export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'addsub'): string[] {
+  const tokens: string[] = ['Chuẩn_bị'];
+  if (op === 'addsub') {
+    if (!operands.length) return tokens;
+    let prevOp: '+' | '-' | null = null;
+    for (let i = 0; i < operands.length; i++) {
+      const n = operands[i];
+      const sign: '+' | '-' = n >= 0 ? '+' : '-';
+      const absVal = Math.abs(n);
+      const numTokens = numberToVietnameseTokens(absVal);
+      if (i === 0) {
+        tokens.push(...numTokens);
+      } else {
+        if (sign === prevOp) {
+          tokens.push('_comma');
+          tokens.push(...numTokens);
+        } else {
+          tokens.push(sign === '+' ? 'cộng' : 'trừ');
+          tokens.push(...numTokens);
+        }
+      }
+      prevOp = sign;
+    }
+  } else if (op === 'mul' && operands.length >= 2) {
+    tokens.push(...numberToVietnameseTokens(operands[0]), 'nhân', ...numberToVietnameseTokens(operands[1]));
+  } else if (op === 'div' && operands.length >= 2) {
+    tokens.push(...numberToVietnameseTokens(operands[0]), 'chia', ...numberToVietnameseTokens(operands[1]));
+  }
+  tokens.push('Bằng');
+  return tokens;
 }
 
 /**
@@ -102,6 +236,230 @@ export function buildListeningPhraseVi(operands: number[]): string {
 
 /** Pause (ms) sau "Chuẩn bị" trước khi đọc phép tính */
 const LISTENING_PAUSE_AFTER_CHUAN_BI_MS = 1000;
+
+/** Base path cho file âm pre-recorded (public folder) */
+const NGHE_TINH_AUDIO_PATH = 'audio/nghe-tinh/1.0';
+
+/** Token → text để TTS khi thiếu file. _comma → "," */
+function tokenToTtsText(token: string): string {
+  if (token === '_comma') return ',';
+  if (token === 'Chuẩn_bị') return 'Chuẩn bị';
+  return token;
+}
+
+/** MP3 magic: ID3 header or frame sync (0xFF 0xFx). HTML/404 starts with < or ! */
+function looksLikeMp3(arrayBuffer: ArrayBuffer): boolean {
+  if (arrayBuffer.byteLength < 3) return false;
+  const v = new Uint8Array(arrayBuffer);
+  if (v[0] === 0x49 && v[1] === 0x44 && v[2] === 0x33) return true; // ID3
+  if (v[0] === 0xff && (v[1] & 0xe0) === 0xe0) return true; // MPEG frame sync (0xFF 0xFx)
+  return false;
+}
+
+function getTokenAudioUrlAbsolute(token: string): string {
+  const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
+  const base = (typeof import.meta !== 'undefined' && (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL) || '';
+  const path = (`${base}/${NGHE_TINH_AUDIO_PATH}/${fn}.mp3`).replace(/\/+/g, '/');
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return new URL(path, window.location.origin).href;
+  }
+  return path;
+}
+
+async function fetchTokenAudioOrNull(token: string): Promise<ArrayBuffer | null> {
+  try {
+    const url = getTokenAudioUrlAbsolute(token);
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) return null;
+    const arr = await res.arrayBuffer();
+    if (!looksLikeMp3(arr)) return null; // likely HTML/404 page
+    return arr;
+  } catch {
+    return null;
+  }
+}
+
+async function decodeAudioBuffer(ctx: AudioContext, arrayBuffer: ArrayBuffer): Promise<AudioBuffer | null> {
+  try {
+    return await ctx.decodeAudioData(arrayBuffer.slice(0));
+  } catch {
+    return null;
+  }
+}
+
+function concatenateAudioBuffers(ctx: AudioContext, buffers: AudioBuffer[]): AudioBuffer {
+  const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+  const numChannels = Math.max(1, buffers[0]?.numberOfChannels ?? 1);
+  const sampleRate = buffers[0]?.sampleRate ?? ctx.sampleRate;
+  const result = ctx.createBuffer(numChannels, totalLength, sampleRate);
+  const channels = Array.from({ length: numChannels }, (_, i) => result.getChannelData(i));
+  let offset = 0;
+  for (const buf of buffers) {
+    const len = buf.length;
+    const ch = Math.min(buf.numberOfChannels, numChannels);
+    for (let c = 0; c < ch; c++) {
+      channels[c].set(buf.getChannelData(c), offset);
+    }
+    offset += len;
+  }
+  return result;
+}
+
+/**
+ * Phát Nghe tính bằng ghép âm pre-recorded. Âm thiếu → gọi Google TTS bổ sung.
+ * Cùng API với playListeningPhraseVi.
+ */
+export async function playConcatenatedListeningVi(
+  operands: number[],
+  lang: string,
+  rate: number,
+  opts?: { onAudio?: (audio: HTMLAudioElement | null) => void; onMissingTokens?: (tokens: string[]) => void }
+): Promise<void> {
+  if (typeof window === 'undefined' || !window.AudioContext) {
+    await playListeningPhraseVi(operands, lang, rate, opts);
+    return;
+  }
+
+  const tokens = operandsToTokenSequence(operands, 'addsub');
+  const idxChuanBi = tokens.indexOf('Chuẩn_bị');
+  const idxBang = tokens.lastIndexOf('Bằng');
+  const part1 = idxChuanBi >= 0 ? [tokens[idxChuanBi]] : [];
+  const part2 = idxBang > idxChuanBi ? tokens.slice(idxChuanBi + 1, idxBang) : [];
+  const part3 = idxBang >= 0 ? [tokens[idxBang]] : [];
+
+  const playSegment = async (
+    segmentTokens: string[],
+    ttsFallback: (text: string) => Promise<void>
+  ): Promise<void> => {
+    if (segmentTokens.length === 0) return;
+
+    const groups: Array<
+      | { kind: 'pre'; tokens: string[] }
+      | { kind: 'tts'; text: string; tokens: string[] }
+      | { kind: 'pause'; ms: number }
+    > = [];
+    let i = 0;
+    while (i < segmentTokens.length) {
+      const run: string[] = [];
+      while (i < segmentTokens.length) {
+        const t = segmentTokens[i];
+        const buf = await fetchTokenAudioOrNull(t);
+        if (buf) {
+          run.push(t);
+          i++;
+        } else break;
+      }
+      if (run.length > 0) groups.push({ kind: 'pre', tokens: run });
+      if (i < segmentTokens.length) {
+        const t = segmentTokens[i];
+        if (t === '_comma') {
+          opts?.onMissingTokens?.(['_comma']);
+          groups.push({ kind: 'pause', ms: 80 });
+          i++;
+        } else {
+          const ttsRun: string[] = [];
+          while (i < segmentTokens.length) {
+            const tok = segmentTokens[i];
+            if (tok === '_comma') break;
+            const buf = await fetchTokenAudioOrNull(tok);
+            if (!buf) {
+              ttsRun.push(tok);
+              opts?.onMissingTokens?.([tok]);
+              i++;
+            } else break;
+          }
+          if (ttsRun.length > 0) {
+            const text = ttsRun.map(tokenToTtsText).join(' ');
+            groups.push({ kind: 'tts', text, tokens: ttsRun });
+          }
+        }
+      }
+    }
+
+    const pauseMs = (ms: number) => Math.max(20, Math.round(ms / rate));
+    for (const g of groups) {
+      if (g.kind === 'pause') {
+        await new Promise((r) => setTimeout(r, pauseMs(g.ms)));
+      } else if (g.kind === 'pre') {
+        try {
+          let decodeFailed = false;
+          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+          if (ctx.state === 'suspended') await ctx.resume();
+          const buffers: AudioBuffer[] = [];
+          for (const t of g.tokens) {
+            const arr = await fetchTokenAudioOrNull(t);
+            if (arr) {
+              const buf = await decodeAudioBuffer(ctx, arr);
+              if (buf) buffers.push(buf);
+              else decodeFailed = true;
+            } else decodeFailed = true;
+          }
+          if (decodeFailed && buffers.length < g.tokens.length) {
+            await ttsFallback(g.tokens.map(tokenToTtsText).join(' '));
+          } else if (buffers.length > 0) {
+            const concat = concatenateAudioBuffers(ctx, buffers);
+            const src = ctx.createBufferSource();
+            src.buffer = concat;
+            src.playbackRate.value = rate;
+            src.connect(ctx.destination);
+            src.start(0);
+            await new Promise<void>((res) => {
+              src.onended = () => res();
+            });
+          }
+        } catch {
+          await ttsFallback(g.tokens.map(tokenToTtsText).join(' '));
+        }
+      } else if (g.kind === 'tts') {
+        if (g.tokens.length === 1 && typeof window !== 'undefined') {
+          const token = g.tokens[0];
+          try {
+            const { audioUrl, revoke, base64 } = await synthesizeWithGoogleCloudTextToSpeechMp3(g.text, lang, rate);
+            const audio = new Audio(audioUrl);
+            audio.playbackRate = 1.0;
+            opts?.onAudio?.(audio);
+            await new Promise<void>((res, rej) => {
+              audio.onended = () => {
+                revoke();
+                res();
+              };
+              audio.onerror = () => {
+                revoke();
+                rej(new Error('TTS playback failed'));
+              };
+              audio.play().catch(rej);
+            });
+            opts?.onAudio?.(null);
+            try {
+              const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
+              await fetch('/__save-nghe-tinh-audio', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: fn, base64 }),
+              });
+            } catch {
+              /* ignore save failure */
+            }
+          } catch {
+            await ttsFallback(g.text);
+          }
+        } else {
+          await ttsFallback(g.text);
+        }
+      }
+    }
+  };
+
+  const ttsFallback = async (text: string) => {
+    if (!text.trim()) return;
+    await playStableTts(text, lang, rate, opts);
+  };
+
+  await playSegment(part1, ttsFallback);
+  await new Promise((r) => setTimeout(r, LISTENING_PAUSE_AFTER_CHUAN_BI_MS));
+  await playSegment(part2, ttsFallback);
+  await playSegment(part3, ttsFallback);
+}
 
 /**
  * Phát câu Nghe tính với pause 1,5s sau "Chuẩn bị".
@@ -314,7 +672,7 @@ async function synthesizeWithGoogleCloudTextToSpeechMp3(
   lang: string,
   speakingRate: number,
   opts?: { voiceName?: string; apiKey?: string }
-): Promise<{ audioUrl: string; revoke: () => void }> {
+): Promise<{ audioUrl: string; revoke: () => void; base64: string }> {
   const apiKey = opts?.apiKey?.trim() || getBrowserApiKey();
   if (!apiKey) throw new Error('Missing API key');
 
@@ -374,7 +732,7 @@ async function synthesizeWithGoogleCloudTextToSpeechMp3(
   const bytes = base64ToUint8Array(audioContent);
   const blob = new Blob([bytes], { type: 'audio/mpeg' });
   const audioUrl = URL.createObjectURL(blob);
-  return { audioUrl, revoke: () => URL.revokeObjectURL(audioUrl) };
+  return { audioUrl, revoke: () => URL.revokeObjectURL(audioUrl), base64: audioContent };
 }
 
 export async function playGoogleCloudTts(
