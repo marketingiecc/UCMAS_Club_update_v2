@@ -67,7 +67,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                             <span className="text-2xl">👀</span>
                         </div>
                         <h3 className="text-lg font-bold text-gray-800 mb-2 group-hover:text-ucmas-blue">Luyện Nhìn Tính</h3>
-                        <p className="text-sm text-gray-500">Luyện tập kỹ năng nhìn tính với các bài tập đa dạng.</p>
+                        <p className="text-sm text-gray-500">Rèn tư duy trực quan, tăng khả năng tập trung và ghi nhớ hình ảnh số học.</p>
                     </Link>
 
                     <Link to="/practice/listening" className="group bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-ucmas-blue transition">
@@ -75,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                             <span className="text-2xl">🎧</span>
                         </div>
                         <h3 className="text-lg font-bold text-gray-800 mb-2 group-hover:text-ucmas-blue">Luyện Nghe Tính</h3>
-                        <p className="text-sm text-gray-500">Cải thiện khả năng tính toán qua việc nghe đọc số.</p>
+                        <p className="text-sm text-gray-500">Phát triển trí nhớ thính giác, phản xạ tính toán qua âm thanh.</p>
                     </Link>
 
                     <Link to="/history" className="group bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-ucmas-blue transition">

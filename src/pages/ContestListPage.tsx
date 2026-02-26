@@ -124,10 +124,15 @@ const ContestListPage: React.FC<ContestListPageProps> = ({ user }) => {
                       <div>
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">Chế độ luyện tập</label>
                           <div className="grid grid-cols-3 gap-4">
-                              {[Mode.VISUAL, Mode.LISTENING, Mode.FLASH].map(m => (
-                                  <button key={m} onClick={() => setPracticeMode(m)} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-2 transition-all ${practiceMode === m ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-lg scale-105' : 'border-gray-50 text-gray-300 hover:bg-gray-50'}`}>
-                                      <span className="text-3xl">{m === Mode.VISUAL ? '👁️' : m === Mode.LISTENING ? '🎧' : '⚡'}</span>
-                                      <span className="text-[10px] font-black uppercase tracking-tighter">{m === Mode.VISUAL ? 'Nhìn' : m === Mode.LISTENING ? 'Nghe' : 'Flash'}</span>
+                              {[
+                                  { mode: Mode.VISUAL, icon: '👁️', label: 'Nhìn tính', desc: 'Rèn luyện tư duy trực quan, tăng khả năng tập trung và ghi nhớ hình ảnh số học trong đầu.' },
+                                  { mode: Mode.LISTENING, icon: '🎧', label: 'Nghe tính', desc: 'Phát triển trí nhớ thính giác, phản xạ tính toán qua âm thanh – tăng tốc xử lý thông tin.' },
+                                  { mode: Mode.FLASH, icon: '⚡', label: 'Flash', desc: 'Luyện não phải chụp ảnh tức thời, rèn phản xạ nhanh và khả năng nhận diện số trong chớp mắt.' },
+                              ].map(({ mode: m, icon, label, desc }) => (
+                                  <button key={m} onClick={() => setPracticeMode(m)} className={`p-6 rounded-[2rem] border-2 flex flex-col items-center gap-2 transition-all text-center ${practiceMode === m ? 'border-ucmas-blue bg-blue-50 text-ucmas-blue shadow-lg scale-105' : 'border-gray-50 text-gray-300 hover:bg-gray-50'}`}>
+                                      <span className="text-3xl">{icon}</span>
+                                      <span className="text-[10px] font-black uppercase tracking-tighter">{label}</span>
+                                      <span className="text-[9px] text-gray-500 font-medium leading-tight mt-1">{desc}</span>
                                   </button>
                               ))}
                           </div>

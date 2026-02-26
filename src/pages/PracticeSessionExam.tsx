@@ -30,6 +30,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<number, string>>({});
+    const [visitedBlank, setVisitedBlank] = useState<Set<number>>(new Set());
     const [timeLeft, setTimeLeft] = useState(600);
 
     // Flash & Audio states
@@ -273,7 +274,23 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                         </div>
                     )}
                     {activeMode === Mode.LISTENING && (
-                        <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl text-white shadow-2xl transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse' : 'bg-ucmas-red/50'}`}>🎧</div>
+                        <div className="flex flex-col items-center gap-4">
+                            <button
+                                type="button"
+                                onClick={() => playAudio(currentQIndex)}
+                                disabled={isPlayingAudio}
+                                className={`w-40 h-40 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all ${isPlayingAudio ? 'bg-ucmas-red scale-105 animate-pulse cursor-wait' : 'bg-ucmas-red/50 hover:bg-ucmas-red/70 cursor-pointer'}`}
+                            >
+                                <span className="text-6xl">🎧</span>
+                                <span className="text-xs font-bold uppercase tracking-widest mt-1 px-2 text-center">
+                                    {isPlayingAudio
+                                        ? `Đang đọc câu ${currentQIndex + 1}`
+                                        : currentQIndex === questions.length - 1
+                                            ? 'HẾT'
+                                            : `Câu ${currentQIndex + 1}`}
+                                </span>
+                            </button>
+                        </div>
                     )}
                 </div>
 
@@ -281,11 +298,20 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                     <input
                         ref={inputRef} type="number" autoFocus disabled={isFlashing || isPlayingAudio}
                         value={answers[currentQIndex] || ''}
-                        onChange={(e) => setAnswers({ ...answers, [currentQIndex]: e.target.value })}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setAnswers({ ...answers, [currentQIndex]: val });
+                            if (val) setVisitedBlank(prev => { const s = new Set(prev); s.delete(currentQIndex); return s; });
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                                if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p + 1);
-                                else submitExam();
+                                const hasAnswer = !!(answers[currentQIndex] ?? '').trim();
+                                if (!hasAnswer && currentQIndex < questions.length) {
+                                    setVisitedBlank(prev => new Set([...prev, currentQIndex]));
+                                }
+                                if (currentQIndex < questions.length - 1) {
+                                    setCurrentQIndex(p => p + 1);
+                                } else submitExam();
                             }
                         }}
                         className="w-full h-24 border-4 border-gray-100 focus:border-ucmas-blue rounded-[2.5rem] text-center text-6xl font-black text-ucmas-blue bg-gray-50 focus:bg-white outline-none transition shadow-inner"
@@ -302,14 +328,34 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
                     >
                         ← Trước
                     </button>
-                    <div className="flex gap-2">
-                        {questions.map((_, i) => (
-                            <div key={i} className={`w-2.5 h-2.5 rounded-full transition-all ${currentQIndex === i ? 'bg-ucmas-blue w-8' : answers[i] ? 'bg-blue-200' : 'bg-gray-100'}`}></div>
-                        ))}
+                    <div className="flex flex-wrap gap-1.5 justify-center max-w-full">
+                        {questions.map((_, i) => {
+                            const isBlank = visitedBlank.has(i);
+                            const isCurrent = currentQIndex === i;
+                            const hasAnswer = !!(answers[i] ?? '').trim();
+                            const bg = isCurrent ? 'bg-ucmas-blue' : isBlank ? 'bg-red-200' : hasAnswer ? 'bg-blue-200' : 'bg-gray-100';
+                            return (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setCurrentQIndex(i)}
+                                    className={`min-w-[22px] h-2.5 rounded-full transition-all ${bg} ${isCurrent ? 'w-8' : 'w-2.5'} hover:ring-2 hover:ring-ucmas-blue/50 disabled:pointer-events-none`}
+                                    disabled={isFlashing || isPlayingAudio}
+                                    title={isBlank ? `Câu ${i + 1} chưa trả lời – bấm để làm lại` : `Câu ${i + 1}`}
+                                />
+                            );
+                        })}
                     </div>
                     <button
                         disabled={isFlashing || isPlayingAudio}
-                        onClick={() => { if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p + 1); else submitExam(); }}
+                        onClick={() => {
+                            const hasAnswer = !!(answers[currentQIndex] ?? '').trim();
+                            if (!hasAnswer && currentQIndex < questions.length) {
+                                setVisitedBlank(prev => new Set([...prev, currentQIndex]));
+                            }
+                            if (currentQIndex < questions.length - 1) setCurrentQIndex(p => p + 1);
+                            else submitExam();
+                        }}
                         className="text-ucmas-blue font-black uppercase text-xs hover:scale-105 transition disabled:opacity-50"
                     >
                         {currentQIndex < questions.length - 1 ? 'Tiếp ➜' : 'Nộp bài 🏁'}
