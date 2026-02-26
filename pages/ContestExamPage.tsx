@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { backend, supabase } from '../services/mockBackend';
 import { Contest, Question, ContestSession, Mode, ContestExam, UserProfile } from '../types';
-import { cancelBrowserSpeechSynthesis, playListeningPhraseVi } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, getNgheTinhGapConfig } from '../services/googleTts';
 
 interface ContestExamPageProps {
   user: UserProfile;
@@ -215,8 +215,9 @@ const ContestExamPage: React.FC<ContestExamPageProps> = ({ user }) => {
   };
 
   const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
-    const lang = 'vi-VN';
-    await playListeningPhraseVi(operands, lang, rate, {
+    const gapConfig = getNgheTinhGapConfig();
+    await playConcatenatedListeningVi(operands, 'vi-VN', rate, {
+      gapConfig,
       onAudio: (a) => {
         audioRef.current = a;
       },

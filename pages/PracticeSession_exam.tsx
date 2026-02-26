@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, playListeningPhraseVi } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, getNgheTinhGapConfig } from '../services/googleTts';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 import { canUseTrial, consumeTrial } from '../services/trialUsage';
@@ -306,8 +306,9 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   };
 
   const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
-    const lang = 'vi-VN';
-    await playListeningPhraseVi(operands, lang, rate, {
+    const gapConfig = getNgheTinhGapConfig();
+    await playConcatenatedListeningVi(operands, 'vi-VN', rate, {
+      gapConfig,
       onAudio: (a) => {
         audioRef.current = a;
       },

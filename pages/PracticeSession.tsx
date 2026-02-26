@@ -7,7 +7,7 @@ import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
 import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
-import { cancelBrowserSpeechSynthesis, playListeningPhraseVi, playStableTts } from '../services/googleTts';
+import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, playStableTts, getNgheTinhGapConfig } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 import { trainingTrackService } from '../services/trainingTrackService';
 
@@ -412,7 +412,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   };
 
   const playSingleAudio = async (operands: number[], rate: number): Promise<void> => {
-    await playListeningPhraseVi(operands, selectedLang, rate, {
+    const gapConfig = getNgheTinhGapConfig();
+    await playConcatenatedListeningVi(operands, selectedLang, rate, {
+      gapConfig,
       onAudio: (a) => {
         audioRef.current = a;
       },

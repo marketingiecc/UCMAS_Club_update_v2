@@ -5,7 +5,7 @@ import { practiceService } from '../src/features/practice/services/practiceServi
 import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
-import { cancelBrowserSpeechSynthesis, playStableTts, operandsToUcmasListeningPhraseVi } from '@/services/googleTts';
+import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, getNgheTinhGapConfig } from '@/services/googleTts';
 
 interface PracticeSessionExamProps {
     user: UserProfile;
@@ -149,37 +149,25 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         setIsFlashing(false);
     };
 
-    const playSingleAudio = async (text: string, rate: number): Promise<void> => {
-        const lang = 'vi-VN';
-        await playStableTts(text, lang, rate, {
-            onAudio: (a) => {
-                audioRef.current = a;
-            },
-        });
-    };
-
     const playAudio = async (idx: number) => {
         if (isPlayingAudio) return;
         setIsPlayingAudio(true);
         const q = questions[idx];
         const speed = navState?.customConfig?.speed || 1.0;
-
         const rate = Math.min(Math.max(0.9 / speed, 0.5), 2.5);
+        const gapConfig = getNgheTinhGapConfig();
 
-        // 1. "Chuẩn bị"
-        await playSingleAudio("Chuẩn bị", 1.2);
-
-        // 2. Numbers (quy tắc UCMAS: dấu giống liên tiếp chỉ đọc 1 lần)
-        await new Promise(r => setTimeout(r, 300));
-        const text = operandsToUcmasListeningPhraseVi(q.operands);
-        await playSingleAudio(text, rate);
-
-        // 3. "Bằng"
-        await new Promise(r => setTimeout(r, 300));
-        await playSingleAudio("Bằng", 1.2);
-
-        setIsPlayingAudio(false);
-        audioRef.current = null;
+        try {
+            await playConcatenatedListeningVi(q.operands, 'vi-VN', rate, {
+                gapConfig,
+                onAudio: (a) => {
+                    audioRef.current = a;
+                },
+            });
+        } finally {
+            setIsPlayingAudio(false);
+            audioRef.current = null;
+        }
     };
 
     const submitExam = async () => {

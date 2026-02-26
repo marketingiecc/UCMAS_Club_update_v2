@@ -1,3 +1,5 @@
+import { SUPABASE_URL } from '../config/env';
+
 function baseLang(lang: string) {
   return (lang || 'vi').split('-')[0]; // vi-VN -> vi
 }
@@ -163,6 +165,11 @@ export type ListeningOp = 'addsub' | 'mul' | 'div';
  * Build token sequence for listening phrase: [Chuẩn_bị, ...calc, Bằng].
  * addsub: operands as signed numbers (UCMAS cộng/trừ).
  * mul/div: operands as [a, b] for "a nhân/chia b".
+ *
+ * UCMAS Nghe tính reading rules (không đọc dấu phẩy):
+ * - Same sign consecutively: read operator once, numbers flow without pause. VD: [8,5,3] → tám cộng năm ba
+ * - Sign change: read "cộng" or "trừ" before number. VD: [8,5,-2] → tám cộng năm trừ hai
+ * - numberToVietnameseTokens handles special cases: mười lăm (15), mốt (21), lăm (25), linh (105)
  */
 export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'addsub'): string[] {
   const tokens: string[] = ['Chuẩn_bị'];
@@ -178,7 +185,6 @@ export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'a
         tokens.push(...numTokens);
       } else {
         if (sign === prevOp) {
-          tokens.push('_comma');
           tokens.push(...numTokens);
         } else {
           tokens.push(sign === '+' ? 'cộng' : 'trừ');
@@ -197,10 +203,73 @@ export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'a
 }
 
 /**
- * Chuyển operands thành câu đọc theo quy tắc UCMAS Nghe tính:
- * - Dấu cộng/trừ giống nhau liên tiếp: chỉ đọc 1 lần dấu, dấu phẩy thay cho các dấu lặp
+ * Trả về tokens và loại khoảng chờ sau mỗi token (để điều khiển pause khi ghép âm).
+ */
+export function operandsToTokensWithGapTypes(operands: number[], op: ListeningOp = 'addsub'): { tokens: string[]; gapAfter: NgheTinhGapType[] } {
+  const tokens: string[] = [];
+  const gapAfter: NgheTinhGapType[] = [];
+  const push = (t: string, gap: NgheTinhGapType) => { tokens.push(t); gapAfter.push(gap); };
+
+  if (op === 'addsub' && operands.length > 0) {
+    push('Chuẩn_bị', 'chuan_bi');
+    let prevOp: '+' | '-' | null = null;
+    for (let i = 0; i < operands.length; i++) {
+      const n = operands[i];
+      const sign: '+' | '-' = n >= 0 ? '+' : '-';
+      const absVal = Math.abs(n);
+      const numTokens = numberToVietnameseTokens(absVal);
+      if (i === 0) {
+        for (let j = 0; j < numTokens.length; j++) {
+          const isLastInNumber = j === numTokens.length - 1;
+          const nextOpHasOperator = operands.length > 1;
+          push(numTokens[j], isLastInNumber && nextOpHasOperator ? 'between_operands' : isLastInNumber ? 'none' : 'within_number');
+        }
+      } else {
+        if (sign === prevOp) {
+          for (let j = 0; j < numTokens.length; j++) {
+            const isLastInNumber = j === numTokens.length - 1;
+            const hasMore = i < operands.length - 1;
+            push(numTokens[j], isLastInNumber && hasMore ? 'between_operands' : isLastInNumber ? 'none' : 'within_number');
+          }
+        } else {
+          push(sign === '+' ? 'cộng' : 'trừ', 'after_operator');
+          for (let j = 0; j < numTokens.length; j++) {
+            const isLastInNumber = j === numTokens.length - 1;
+            const hasMore = i < operands.length - 1;
+            push(numTokens[j], isLastInNumber && hasMore ? 'between_operands' : isLastInNumber ? 'none' : 'within_number');
+          }
+        }
+      }
+      prevOp = sign;
+    }
+    push('Bằng', 'none');
+  } else if (op === 'mul' && operands.length >= 2) {
+    push('Chuẩn_bị', 'chuan_bi');
+    const t0 = numberToVietnameseTokens(operands[0]);
+    t0.forEach((t, j) => push(t, j < t0.length - 1 ? 'within_number' : 'after_operator'));
+    push('nhân', 'after_operator');
+    const t1 = numberToVietnameseTokens(operands[1]);
+    t1.forEach((t, j) => push(t, j < t1.length - 1 ? 'within_number' : 'none'));
+    push('Bằng', 'none');
+  } else if (op === 'div' && operands.length >= 2) {
+    push('Chuẩn_bị', 'chuan_bi');
+    const t0 = numberToVietnameseTokens(operands[0]);
+    t0.forEach((t, j) => push(t, j < t0.length - 1 ? 'within_number' : 'after_operator'));
+    push('chia', 'after_operator');
+    const t1 = numberToVietnameseTokens(operands[1]);
+    t1.forEach((t, j) => push(t, j < t1.length - 1 ? 'within_number' : 'none'));
+    push('Bằng', 'none');
+  } else {
+    push('Chuẩn_bị', 'none');
+  }
+  return { tokens, gapAfter };
+}
+
+/**
+ * Chuyển operands thành câu đọc theo quy tắc UCMAS Nghe tính (không đọc dấu phẩy):
+ * - Dấu cộng/trừ giống nhau liên tiếp: chỉ đọc 1 lần dấu, số nối tiếp không pause
  * - Đổi dấu: đọc "cộng" hoặc "trừ" trước số
- * VD: [8,5,3,-2,-1,7,4] → "tám cộng năm, ba trừ hai, một cộng bảy, bốn"
+ * VD: [8,5,3,-2,-1,7,4] → "tám cộng năm ba trừ hai một cộng bảy bốn"
  */
 export function operandsToUcmasListeningPhraseVi(operands: number[]): string {
   if (!operands.length) return '';
@@ -215,7 +284,7 @@ export function operandsToUcmasListeningPhraseVi(operands: number[]): string {
       parts.push(numWord);
     } else {
       if (op === prevOp) {
-        parts.push(`, ${numWord}`);
+        parts.push(` ${numWord}`);
       } else {
         const opWord = op === '+' ? 'cộng' : 'trừ';
         parts.push(` ${opWord} ${numWord}`);
@@ -234,7 +303,55 @@ export function buildListeningPhraseVi(operands: number[]): string {
   return `Chuẩn bị. ${calc}. Bằng.`;
 }
 
-/** Pause (ms) sau "Chuẩn bị" trước khi đọc phép tính */
+/**
+ * Các loại khoảng chờ khi đọc phép tính ghép âm (UCMAS):
+ * - chuan_bi: sau "Chuẩn bị", trước phép tính
+ * - within_number: giữa các chữ trong 1 số (VD: hai - mươi - năm)
+ * - between_operands: giữa 2 số hạng (chính là tốc độ đọc)
+ * - after_operator: sau "cộng" hoặc "trừ", trước số tiếp theo
+ */
+export type NgheTinhGapType = 'chuan_bi' | 'within_number' | 'between_operands' | 'after_operator' | 'none';
+
+export interface NgheTinhGapConfig {
+  /** Khoảng chờ (ms) giữa từng chữ trong 1 số có nhiều chữ số. VD: hai-mươi-năm */
+  gapWithinNumberMs: number;
+  /** Khoảng chờ (ms) giữa 2 số hạng. Chính là tốc độ đọc. */
+  gapBetweenOperandsMs: number;
+  /** Khoảng chờ (ms) sau khi đọc "cộng" hoặc "trừ". */
+  gapAfterOperatorMs: number;
+  /** Khoảng chờ (ms) sau khi đọc "Chuẩn bị". */
+  gapAfterChuanBiMs: number;
+}
+
+const STORAGE_KEY_NGHE_TINH_GAP = 'ucmas_nghe_tinh_gap_config';
+
+export const DEFAULT_NGHE_TINH_GAP_CONFIG: NgheTinhGapConfig = {
+  gapWithinNumberMs: 0,
+  gapBetweenOperandsMs: 80,
+  gapAfterOperatorMs: 40,
+  gapAfterChuanBiMs: 1000,
+};
+
+export function getNgheTinhGapConfig(): NgheTinhGapConfig {
+  try {
+    const raw = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_NGHE_TINH_GAP);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<NgheTinhGapConfig>;
+      return { ...DEFAULT_NGHE_TINH_GAP_CONFIG, ...parsed };
+    }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_NGHE_TINH_GAP_CONFIG };
+}
+
+export function setNgheTinhGapConfig(cfg: NgheTinhGapConfig): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_NGHE_TINH_GAP, JSON.stringify(cfg));
+    }
+  } catch { /* ignore */ }
+}
+
+/** Pause (ms) sau "Chuẩn bị" trước khi đọc phép tính (default, khi chưa dùng config) */
 const LISTENING_PAUSE_AFTER_CHUAN_BI_MS = 1000;
 
 /** Base path cho file âm pre-recorded (public folder) */
@@ -256,10 +373,21 @@ function looksLikeMp3(arrayBuffer: ArrayBuffer): boolean {
   return false;
 }
 
+/** Bucket Supabase Storage cho âm Nghe tính (public). */
+const NGHE_TINH_SUPABASE_BUCKET = 'nghe-tinh-audio';
+
 function getTokenAudioUrlAbsolute(token: string): string {
   const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
+  const fileName = `${fn}.mp3`;
+
+  // Ưu tiên Supabase Storage khi có SUPABASE_URL
+  if (SUPABASE_URL && SUPABASE_URL.startsWith('https://')) {
+    const base = SUPABASE_URL.replace(/\/$/, '');
+    return `${base}/storage/v1/object/public/${NGHE_TINH_SUPABASE_BUCKET}/${fileName}`;
+  }
+
   const base = (typeof import.meta !== 'undefined' && (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL) || '';
-  const path = (`${base}/${NGHE_TINH_AUDIO_PATH}/${fn}.mp3`).replace(/\/+/g, '/');
+  const path = (`${base}/${NGHE_TINH_AUDIO_PATH}/${fileName}`).replace(/\/+/g, '/');
   if (typeof window !== 'undefined' && window.location?.origin) {
     return new URL(path, window.location.origin).href;
   }
@@ -287,14 +415,71 @@ async function decodeAudioBuffer(ctx: AudioContext, arrayBuffer: ArrayBuffer): P
   }
 }
 
-function concatenateAudioBuffers(ctx: AudioContext, buffers: AudioBuffer[]): AudioBuffer {
-  const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
-  const numChannels = Math.max(1, buffers[0]?.numberOfChannels ?? 1);
-  const sampleRate = buffers[0]?.sampleRate ?? ctx.sampleRate;
+/** Ngưỡng để coi là im lặng (giảm khoảng nghỉ giữa các token khi ghép) */
+const SILENCE_THRESHOLD = 0.005;
+/** Tối đa (ms) cắt ở cuối mỗi buffer – giảm pause giữa hàng chục và hàng đơn vị */
+const MAX_TRIM_TRAILING_MS = 350;
+/** Cắt tối thiểu (ms) ở cuối mỗi buffer – đảm bảo khoảng nghỉ luôn ngắn */
+const MIN_TRIM_TRAILING_MS = 150;
+/** Tối đa (ms) cắt ở đầu mỗi buffer – giảm im lặng đầu file */
+const MAX_TRIM_LEADING_MS = 150;
+
+function trimLeadingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
+  const sampleRate = buf.sampleRate;
+  const maxTrimSamples = Math.min(buf.length, Math.floor((MAX_TRIM_LEADING_MS / 1000) * sampleRate));
+  if (maxTrimSamples <= 0) return buf;
+  const ch0 = buf.getChannelData(0);
+  let firstSound = maxTrimSamples;
+  for (let i = 0; i < maxTrimSamples; i++) {
+    if (Math.abs(ch0[i]) > SILENCE_THRESHOLD) {
+      firstSound = i;
+      break;
+    }
+  }
+  if (firstSound <= 0) return buf;
+  const keepLength = buf.length - firstSound;
+  if (keepLength <= 0) return buf;
+  const trimmed = ctx.createBuffer(buf.numberOfChannels, keepLength, sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    trimmed.getChannelData(c).set(buf.getChannelData(c).subarray(firstSound, buf.length));
+  }
+  return trimmed;
+}
+
+function trimTrailingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
+  const sampleRate = buf.sampleRate;
+  const maxTrimSamples = Math.min(buf.length, Math.floor((MAX_TRIM_TRAILING_MS / 1000) * sampleRate));
+  const minTrimSamples = Math.min(buf.length - 1, Math.floor((MIN_TRIM_TRAILING_MS / 1000) * sampleRate));
+  if (maxTrimSamples <= 0) return buf;
+  const ch0 = buf.getChannelData(0);
+  let keepLength = buf.length;
+  for (let i = buf.length - 1; i >= Math.max(0, buf.length - maxTrimSamples); i--) {
+    if (Math.abs(ch0[i]) > SILENCE_THRESHOLD) {
+      keepLength = i + 1;
+      break;
+    }
+    keepLength = i;
+  }
+  const finalKeep = Math.min(keepLength, Math.max(1, buf.length - minTrimSamples));
+  if (finalKeep >= buf.length) return buf;
+  const trimmed = ctx.createBuffer(buf.numberOfChannels, finalKeep, sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    trimmed.getChannelData(c).set(buf.getChannelData(c).subarray(0, finalKeep));
+  }
+  return trimmed;
+}
+
+function concatenateAudioBuffers(ctx: AudioContext, buffers: AudioBuffer[], trimGaps = true): AudioBuffer {
+  const processed = trimGaps && buffers.length > 1
+    ? buffers.map((b, i) => (i < buffers.length - 1 ? trimTrailingSilence(b, ctx) : b))
+    : buffers;
+  const totalLength = processed.reduce((acc, b) => acc + b.length, 0);
+  const numChannels = Math.max(1, processed[0]?.numberOfChannels ?? 1);
+  const sampleRate = processed[0]?.sampleRate ?? ctx.sampleRate;
   const result = ctx.createBuffer(numChannels, totalLength, sampleRate);
   const channels = Array.from({ length: numChannels }, (_, i) => result.getChannelData(i));
   let offset = 0;
-  for (const buf of buffers) {
+  for (const buf of processed) {
     const len = buf.length;
     const ch = Math.min(buf.numberOfChannels, numChannels);
     for (let c = 0; c < ch; c++) {
@@ -305,165 +490,103 @@ function concatenateAudioBuffers(ctx: AudioContext, buffers: AudioBuffer[]): Aud
   return result;
 }
 
+function getGapMs(gapType: NgheTinhGapType, cfg: NgheTinhGapConfig): number {
+  switch (gapType) {
+    case 'chuan_bi': return cfg.gapAfterChuanBiMs;
+    case 'within_number': return cfg.gapWithinNumberMs;
+    case 'between_operands': return cfg.gapBetweenOperandsMs;
+    case 'after_operator': return cfg.gapAfterOperatorMs;
+    default: return 0;
+  }
+}
+
 /**
  * Phát Nghe tính bằng ghép âm pre-recorded. Âm thiếu → gọi Google TTS bổ sung.
- * Cùng API với playListeningPhraseVi.
+ * Cùng API với playListeningPhraseVi. Dùng NgheTinhGapConfig để điều khiển khoảng chờ.
  */
 export async function playConcatenatedListeningVi(
   operands: number[],
   lang: string,
   rate: number,
-  opts?: { onAudio?: (audio: HTMLAudioElement | null) => void; onMissingTokens?: (tokens: string[]) => void }
+  opts?: {
+    onAudio?: (audio: HTMLAudioElement | null) => void;
+    onMissingTokens?: (tokens: string[]) => void;
+    gapConfig?: NgheTinhGapConfig;
+  }
 ): Promise<void> {
   if (typeof window === 'undefined' || !window.AudioContext) {
     await playListeningPhraseVi(operands, lang, rate, opts);
     return;
   }
 
-  const tokens = operandsToTokenSequence(operands, 'addsub');
-  const idxChuanBi = tokens.indexOf('Chuẩn_bị');
-  const idxBang = tokens.lastIndexOf('Bằng');
-  const part1 = idxChuanBi >= 0 ? [tokens[idxChuanBi]] : [];
-  const part2 = idxBang > idxChuanBi ? tokens.slice(idxChuanBi + 1, idxBang) : [];
-  const part3 = idxBang >= 0 ? [tokens[idxBang]] : [];
-
-  const playSegment = async (
-    segmentTokens: string[],
-    ttsFallback: (text: string) => Promise<void>
-  ): Promise<void> => {
-    if (segmentTokens.length === 0) return;
-
-    const groups: Array<
-      | { kind: 'pre'; tokens: string[] }
-      | { kind: 'tts'; text: string; tokens: string[] }
-      | { kind: 'pause'; ms: number }
-    > = [];
-    let i = 0;
-    while (i < segmentTokens.length) {
-      const run: string[] = [];
-      while (i < segmentTokens.length) {
-        const t = segmentTokens[i];
-        const buf = await fetchTokenAudioOrNull(t);
-        if (buf) {
-          run.push(t);
-          i++;
-        } else break;
-      }
-      if (run.length > 0) groups.push({ kind: 'pre', tokens: run });
-      if (i < segmentTokens.length) {
-        const t = segmentTokens[i];
-        if (t === '_comma') {
-          opts?.onMissingTokens?.(['_comma']);
-          groups.push({ kind: 'pause', ms: 80 });
-          i++;
-        } else {
-          const ttsRun: string[] = [];
-          while (i < segmentTokens.length) {
-            const tok = segmentTokens[i];
-            if (tok === '_comma') break;
-            const buf = await fetchTokenAudioOrNull(tok);
-            if (!buf) {
-              ttsRun.push(tok);
-              opts?.onMissingTokens?.([tok]);
-              i++;
-            } else break;
-          }
-          if (ttsRun.length > 0) {
-            const text = ttsRun.map(tokenToTtsText).join(' ');
-            groups.push({ kind: 'tts', text, tokens: ttsRun });
-          }
-        }
-      }
-    }
-
-    const pauseMs = (ms: number) => Math.max(20, Math.round(ms / rate));
-    for (const g of groups) {
-      if (g.kind === 'pause') {
-        await new Promise((r) => setTimeout(r, pauseMs(g.ms)));
-      } else if (g.kind === 'pre') {
-        try {
-          let decodeFailed = false;
-          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-          if (ctx.state === 'suspended') await ctx.resume();
-          const buffers: AudioBuffer[] = [];
-          for (const t of g.tokens) {
-            const arr = await fetchTokenAudioOrNull(t);
-            if (arr) {
-              const buf = await decodeAudioBuffer(ctx, arr);
-              if (buf) buffers.push(buf);
-              else decodeFailed = true;
-            } else decodeFailed = true;
-          }
-          if (decodeFailed && buffers.length < g.tokens.length) {
-            await ttsFallback(g.tokens.map(tokenToTtsText).join(' '));
-          } else if (buffers.length > 0) {
-            const concat = concatenateAudioBuffers(ctx, buffers);
-            const src = ctx.createBufferSource();
-            src.buffer = concat;
-            src.playbackRate.value = rate;
-            src.connect(ctx.destination);
-            src.start(0);
-            await new Promise<void>((res) => {
-              src.onended = () => res();
-            });
-          }
-        } catch {
-          await ttsFallback(g.tokens.map(tokenToTtsText).join(' '));
-        }
-      } else if (g.kind === 'tts') {
-        if (g.tokens.length === 1 && typeof window !== 'undefined') {
-          const token = g.tokens[0];
-          try {
-            const { audioUrl, revoke, base64 } = await synthesizeWithGoogleCloudTextToSpeechMp3(g.text, lang, rate);
-            const audio = new Audio(audioUrl);
-            audio.playbackRate = 1.0;
-            opts?.onAudio?.(audio);
-            await new Promise<void>((res, rej) => {
-              audio.onended = () => {
-                revoke();
-                res();
-              };
-              audio.onerror = () => {
-                revoke();
-                rej(new Error('TTS playback failed'));
-              };
-              audio.play().catch(rej);
-            });
-            opts?.onAudio?.(null);
-            try {
-              const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
-              await fetch('/__save-nghe-tinh-audio', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: fn, base64 }),
-              });
-            } catch {
-              /* ignore save failure */
-            }
-          } catch {
-            await ttsFallback(g.text);
-          }
-        } else {
-          await ttsFallback(g.text);
-        }
-      }
-    }
-  };
+  const gapConfig = opts?.gapConfig ?? getNgheTinhGapConfig();
+  const { tokens, gapAfter } = operandsToTokensWithGapTypes(operands, 'addsub');
+  if (tokens.length === 0) return;
 
   const ttsFallback = async (text: string) => {
     if (!text.trim()) return;
     await playStableTts(text, lang, rate, opts);
   };
 
-  await playSegment(part1, ttsFallback);
-  await new Promise((r) => setTimeout(r, LISTENING_PAUSE_AFTER_CHUAN_BI_MS));
-  await playSegment(part2, ttsFallback);
-  await playSegment(part3, ttsFallback);
+  const playOneToken = async (token: string): Promise<void> => {
+    const arr = await fetchTokenAudioOrNull(token);
+    if (arr) {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      if (ctx.state === 'suspended') await ctx.resume();
+      const buf = await decodeAudioBuffer(ctx, arr);
+      if (buf) {
+        let trimmed = buf;
+        if (token !== 'Chuẩn_bị' && token !== 'Bằng') {
+          trimmed = trimLeadingSilence(trimmed, ctx);
+          trimmed = trimTrailingSilence(trimmed, ctx);
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = trimmed;
+        src.playbackRate.value = rate;
+        src.connect(ctx.destination);
+        src.start(0);
+        await new Promise<void>((res) => { src.onended = () => res(); });
+        return;
+      }
+    }
+    opts?.onMissingTokens?.([token]);
+    if (token.length <= 6 && typeof window !== 'undefined') {
+      try {
+        const text = tokenToTtsText(token);
+        const { audioUrl, revoke, base64 } = await synthesizeWithGoogleCloudTextToSpeechMp3(text, lang, rate);
+        const audio = new Audio(audioUrl);
+        opts?.onAudio?.(audio);
+        await new Promise<void>((res, rej) => {
+          audio.onended = () => { revoke(); opts?.onAudio?.(null); res(); };
+          audio.onerror = () => { revoke(); opts?.onAudio?.(null); rej(new Error('TTS failed')); };
+          audio.play().catch(rej);
+        });
+        const fn = TOKEN_TO_FILENAME[token] ?? tokenToFilename(token);
+        // Upload lên Supabase Storage (tự động lưu âm mới)
+        const { uploadNgheTinhAudio } = await import('./ngheTinhStorageService');
+        await uploadNgheTinhAudio(fn, base64).catch(() => {});
+        // Fallback: lưu local khi chạy dev (Vite middleware)
+        await fetch('/__save-nghe-tinh-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: fn, base64 }) }).catch(() => {});
+        return;
+      } catch { /* fallthrough */ }
+    }
+    await ttsFallback(tokenToTtsText(token));
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    await playOneToken(tokens[i]);
+    const gapType = gapAfter[i];
+    const gap = getGapMs(gapType, gapConfig);
+    if (gap > 0) {
+      await new Promise((r) => setTimeout(r, gap));
+    }
+  }
 }
 
 /**
- * Phát câu Nghe tính với pause 1,5s sau "Chuẩn bị".
+ * Phát câu Nghe tính với pause sau "Chuẩn bị".
  * Dùng thay cho buildListeningPhraseVi + playStableTts trên các trang Nghe tính.
+ * Khoảng chờ sau Chuẩn bị lấy từ NgheTinhGapConfig.
  */
 export async function playListeningPhraseVi(
   operands: number[],
@@ -473,9 +596,10 @@ export async function playListeningPhraseVi(
 ): Promise<void> {
   const partChuanBi = 'Chuẩn bị.';
   const partCalculation = `${operandsToUcmasListeningPhraseVi(operands)}. Bằng.`;
+  const gapCfg = getNgheTinhGapConfig();
 
   await playStableTts(partChuanBi, lang, rate, opts);
-  await new Promise((r) => setTimeout(r, LISTENING_PAUSE_AFTER_CHUAN_BI_MS));
+  await new Promise((r) => setTimeout(r, gapCfg.gapAfterChuanBiMs));
   await playStableTts(partCalculation, lang, rate, opts);
 }
 

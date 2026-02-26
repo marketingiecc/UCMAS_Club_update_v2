@@ -4,8 +4,14 @@ import {
   playStableTts,
   playConcatenatedListeningVi,
   operandsToTokenSequence,
+  getNgheTinhGapConfig,
+  setNgheTinhGapConfig,
+  DEFAULT_NGHE_TINH_GAP_CONFIG,
+  type NgheTinhGapConfig,
 } from '../services/googleTts';
 import CustomSlider from '../components/CustomSlider';
+import { generateExam } from '../services/examService';
+import type { Question } from '../types';
 
 const FIXED_LANG = 'vi-VN';
 const FIXED_VOICE = 'vi-VN-Standard-A';
@@ -27,17 +33,50 @@ function parseOperandsInput(input: string): number[] {
     });
 }
 
+function getDigitRange(digits: number): [number, number] {
+  if (digits <= 1) return [1, 9];
+  const min = Math.pow(10, digits - 1);
+  const max = Math.pow(10, digits) - 1;
+  return [min, max];
+}
+
 const NgheTinhTestPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('tts');
   const [text, setText] = useState('Một, hai, ba, bốn, năm, sáu, bảy, tám, chín.');
   const [operandsInput, setOperandsInput] = useState('8, 5, -3, 2, 7');
   const [speed, setSpeed] = useState(1.0);
+  const [randomDigits, setRandomDigits] = useState(2);
+  const [randomRows, setRandomRows] = useState(5);
+  const [randomCount, setRandomCount] = useState(5);
+  const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
+  const [currentGenIndex, setCurrentGenIndex] = useState(0);
   const [missingTokens, setMissingTokens] = useState<string[]>([]);
   const missingDuringPlayRef = useRef<string[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState('Sẵn sàng');
+  const [gapConfig, setGapConfig] = useState<NgheTinhGapConfig>(() => getNgheTinhGapConfig());
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const updateGapConfig = (k: keyof NgheTinhGapConfig, v: number) => {
+    setGapConfig((prev) => {
+      const next = { ...prev, [k]: Math.max(0, v) };
+      return next;
+    });
+  };
+  const saveGapConfig = async () => {
+    setNgheTinhGapConfig(gapConfig);
+    try {
+      const { saveNgheTinhGapConfig } = await import('../services/ngheTinhConfigService');
+      await saveNgheTinhGapConfig(gapConfig);
+      setStatus('Đã lưu thành công. Cài đặt áp dụng cho toàn bộ trang Nghe tính (Luyện tập, Thi thử, Cuộc thi).');
+    } catch {
+      setStatus('Đã lưu cài đặt (chỉ áp dụng trên thiết bị này). Để áp dụng toàn hệ thống, cần kết nối Supabase.');
+    }
+  };
+  const resetGapConfig = () => {
+    setGapConfig({ ...DEFAULT_NGHE_TINH_GAP_CONFIG });
+  };
 
   const operands = parseOperandsInput(operandsInput);
   const tokenSequence = operands.length > 0 ? operandsToTokenSequence(operands, 'addsub') : [];
@@ -98,6 +137,7 @@ const NgheTinhTestPage: React.FC = () => {
     try {
       const rate = getSpeechRate(speed);
       await playConcatenatedListeningVi(operands, FIXED_LANG, rate, {
+        gapConfig,
         onAudio: (audio) => {
           audioRef.current = audio;
         },
@@ -111,6 +151,74 @@ const NgheTinhTestPage: React.FC = () => {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       setStatus(`Lỗi: ${detail}`);
+    } finally {
+      setIsPlaying(false);
+      audioRef.current = null;
+    }
+  };
+
+  const handleGenerateRandom = () => {
+    const [min, max] = getDigitRange(randomDigits);
+    const questions = generateExam({
+      mode: 'listening' as any,
+      level: 1,
+      numQuestions: Math.min(10, Math.max(1, randomCount)),
+      numOperandsRange: [randomRows, randomRows],
+      digitRange: [min, max],
+    });
+    setGeneratedQuestions(questions);
+    setCurrentGenIndex(0);
+    if (questions.length > 0) {
+      setOperandsInput(questions[0].operands.join(', '));
+    }
+  };
+
+  const handleGenPrev = () => {
+    if (generatedQuestions.length === 0) return;
+    const idx = (currentGenIndex - 1 + generatedQuestions.length) % generatedQuestions.length;
+    setCurrentGenIndex(idx);
+    setOperandsInput(generatedQuestions[idx].operands.join(', '));
+  };
+
+  const handleGenNext = () => {
+    if (generatedQuestions.length === 0) return;
+    const idx = (currentGenIndex + 1) % generatedQuestions.length;
+    setCurrentGenIndex(idx);
+    setOperandsInput(generatedQuestions[idx].operands.join(', '));
+  };
+
+  const handleGenerateAndPlay = async () => {
+    const [min, max] = getDigitRange(randomDigits);
+    const questions = generateExam({
+      mode: 'listening' as any,
+      level: 1,
+      numQuestions: Math.min(10, Math.max(1, randomCount)),
+      numOperandsRange: [randomRows, randomRows],
+      digitRange: [min, max],
+    });
+    setGeneratedQuestions(questions);
+    setCurrentGenIndex(0);
+    if (questions.length === 0) return;
+    setOperandsInput(questions[0].operands.join(', '));
+    stopPlayback();
+    missingDuringPlayRef.current = [];
+    setMissingTokens([]);
+    setIsPlaying(true);
+    setStatus('Đang phát (ghép âm)...');
+    try {
+      const rate = getSpeechRate(speed);
+      await playConcatenatedListeningVi(questions[0].operands, FIXED_LANG, rate, {
+        gapConfig,
+        onAudio: (audio) => { audioRef.current = audio; },
+        onMissingTokens: (tokens) => {
+          missingDuringPlayRef.current.push(...tokens);
+          setMissingTokens(missingDuringPlayRef.current.slice());
+        },
+      });
+      const count = missingDuringPlayRef.current.length;
+      setStatus(count > 0 ? `Phát xong (đã bổ sung ${count} âm bằng TTS)` : 'Phát xong');
+    } catch (e) {
+      setStatus(`Lỗi: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsPlaying(false);
       audioRef.current = null;
@@ -211,6 +319,174 @@ const NgheTinhTestPage: React.FC = () => {
                   maxLabel="Chậm (1.5s)"
                 />
               </div>
+
+              <div className="mb-6 p-4 bg-amber-50/80 border border-amber-200 rounded-xl">
+                <div className="text-xs font-heading font-bold text-amber-800 mb-3 uppercase">
+                  Khoảng chờ khi ghép âm (UCMAS)
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                      Trong 1 số (ms) – VD: hai-mươi-năm
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={200}
+                      value={gapConfig.gapWithinNumberMs}
+                      onChange={(e) => updateGapConfig('gapWithinNumberMs', parseInt(e.target.value, 10) || 0)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                      Giữa 2 số hạng (ms) – Tốc độ đọc
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={500}
+                      value={gapConfig.gapBetweenOperandsMs}
+                      onChange={(e) => updateGapConfig('gapBetweenOperandsMs', parseInt(e.target.value, 10) || 0)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                      Sau cộng/trừ (ms)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={200}
+                      value={gapConfig.gapAfterOperatorMs}
+                      onChange={(e) => updateGapConfig('gapAfterOperatorMs', parseInt(e.target.value, 10) || 0)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                      Sau Chuẩn bị (ms)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={3000}
+                      value={gapConfig.gapAfterChuanBiMs}
+                      onChange={(e) => updateGapConfig('gapAfterChuanBiMs', parseInt(e.target.value, 10) || 0)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveGapConfig}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs hover:bg-amber-700"
+                  >
+                    Lưu cài đặt
+                  </button>
+                  <button
+                    onClick={resetGapConfig}
+                    className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 font-bold text-xs hover:bg-gray-100"
+                  >
+                    Đặt lại mặc định
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-6 p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                <div className="text-xs font-heading font-bold text-gray-600 mb-3 uppercase">
+                  Phép tính ngẫu nhiên (giống Sáng tạo phép tính)
+                </div>
+                <div className="flex flex-wrap gap-4 mb-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 block mb-1">Số chữ số</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setRandomDigits(d)}
+                          className={`w-8 h-8 rounded-md font-bold text-xs transition ${
+                            randomDigits === d ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 block mb-1">Số dòng tính</label>
+                    <div className="flex gap-1 flex-wrap max-w-[280px]">
+                      {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20].map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => setRandomRows(r)}
+                          className={`px-2 py-1 rounded-md font-bold text-[10px] transition ${
+                            randomRows === r ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 block mb-1">Số lượng câu</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 5, 10].map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setRandomCount(c)}
+                          className={`w-8 h-8 rounded-md font-bold text-xs transition ${
+                            randomCount === c ? 'bg-ucmas-blue text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={handleGenerateRandom}
+                    disabled={isPlaying}
+                    className="px-4 py-2 rounded-lg bg-ucmas-blue text-white font-heading font-bold text-sm hover:opacity-90 disabled:opacity-60"
+                  >
+                    Tạo ngẫu nhiên
+                  </button>
+                  <button
+                    onClick={handleGenerateAndPlay}
+                    disabled={isPlaying}
+                    className="px-4 py-2 rounded-lg bg-ucmas-red text-white font-heading font-bold text-sm hover:opacity-90 disabled:opacity-60"
+                  >
+                    Tạo và Phát
+                  </button>
+                  {generatedQuestions.length > 1 && (
+                    <div className="flex gap-1 items-center">
+                      <button
+                        onClick={handleGenPrev}
+                        disabled={isPlaying}
+                        className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 font-bold text-sm hover:bg-gray-100 disabled:opacity-60"
+                      >
+                        Trước
+                      </button>
+                      <span className="text-xs text-gray-600 px-2">
+                        {currentGenIndex + 1} / {generatedQuestions.length}
+                      </span>
+                      <button
+                        onClick={handleGenNext}
+                        disabled={isPlaying}
+                        className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 font-bold text-sm hover:bg-gray-100 disabled:opacity-60"
+                      >
+                        Tiếp
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-heading font-bold text-gray-500 mb-1 uppercase">
                   Operands (số cách nhau bằng dấu phẩy, số âm có dấu -)

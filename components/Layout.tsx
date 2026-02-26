@@ -42,6 +42,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
     };
   }, []);
 
+  // Đồng bộ cấu hình Nghe tính từ Supabase (áp dụng cho toàn hệ thống)
+  useEffect(() => {
+    import('../services/ngheTinhConfigService').then(({ fetchNgheTinhGapConfig }) => {
+      void fetchNgheTinhGapConfig();
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (siteSeo) applySiteSeoToDocument(siteSeo);
     // Re-apply on route changes (HashRouter doesn't change HTML head by itself)
