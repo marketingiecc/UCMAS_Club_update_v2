@@ -170,8 +170,9 @@ export type ListeningOp = 'addsub' | 'mul' | 'div';
  * mul/div: operands as [a, b] for "a nhân/chia b".
  *
  * UCMAS Nghe tính reading rules (không đọc dấu phẩy):
- * - Same sign consecutively: read operator once, numbers flow without pause. VD: [8,5,3] → tám cộng năm ba
- * - Sign change: read "cộng" or "trừ" before number. VD: [8,5,-2] → tám cộng năm trừ hai
+ * - Số hạng thứ 2: luôn đọc "Cộng" hoặc "Trừ" trước số. VD: [8,5,...] → tám cộng năm
+ * - Số hạng tiếp theo (3, 4, ...): dấu giống số trước → không đọc dấu; đổi dấu → đọc "cộng" hoặc "trừ".
+ *   VD: [8,5,3,-2,-1] → tám cộng năm ba trừ hai một
  * - numberToVietnameseTokens handles special cases: mười lăm (15), mốt (21), lăm (25), linh (105)
  */
 export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'addsub'): string[] {
@@ -186,7 +187,12 @@ export function operandsToTokenSequence(operands: number[], op: ListeningOp = 'a
       const numTokens = numberToVietnameseTokens(absVal);
       if (i === 0) {
         tokens.push(...numTokens);
+      } else if (i === 1) {
+        // Số hạng thứ 2: luôn đọc dấu Cộng hoặc Trừ
+        tokens.push(sign === '+' ? 'cộng' : 'trừ');
+        tokens.push(...numTokens);
       } else {
+        // Số hạng 3+: theo nguyên tắc cũ (đổi dấu thì đọc, cùng dấu thì không)
         if (sign === prevOp) {
           tokens.push(...numTokens);
         } else {
@@ -227,7 +233,16 @@ export function operandsToTokensWithGapTypes(operands: number[], op: ListeningOp
           const nextOpHasOperator = operands.length > 1;
           push(numTokens[j], isLastInNumber && nextOpHasOperator ? 'between_operands' : isLastInNumber ? 'none' : 'within_number');
         }
+      } else if (i === 1) {
+        // Số hạng thứ 2: luôn đọc dấu Cộng hoặc Trừ
+        push(sign === '+' ? 'cộng' : 'trừ', 'after_operator');
+        for (let j = 0; j < numTokens.length; j++) {
+          const isLastInNumber = j === numTokens.length - 1;
+          const hasMore = i < operands.length - 1;
+          push(numTokens[j], isLastInNumber && hasMore ? 'between_operands' : isLastInNumber ? 'none' : 'within_number');
+        }
       } else {
+        // Số hạng 3+: theo nguyên tắc cũ (đổi dấu thì đọc, cùng dấu thì không)
         if (sign === prevOp) {
           for (let j = 0; j < numTokens.length; j++) {
             const isLastInNumber = j === numTokens.length - 1;
@@ -270,8 +285,8 @@ export function operandsToTokensWithGapTypes(operands: number[], op: ListeningOp
 
 /**
  * Chuyển operands thành câu đọc theo quy tắc UCMAS Nghe tính (không đọc dấu phẩy):
- * - Dấu cộng/trừ giống nhau liên tiếp: chỉ đọc 1 lần dấu, số nối tiếp không pause
- * - Đổi dấu: đọc "cộng" hoặc "trừ" trước số
+ * - Số hạng thứ 2: luôn đọc "Cộng" hoặc "Trừ" trước số
+ * - Số hạng tiếp theo: dấu giống số trước → không đọc dấu; đổi dấu → đọc "cộng" hoặc "trừ"
  * VD: [8,5,3,-2,-1,7,4] → "tám cộng năm ba trừ hai một cộng bảy bốn"
  */
 export function operandsToUcmasListeningPhraseVi(operands: number[]): string {
@@ -285,6 +300,9 @@ export function operandsToUcmasListeningPhraseVi(operands: number[]): string {
     const numWord = numberToVietnameseWords(absVal);
     if (i === 0) {
       parts.push(numWord);
+    } else if (i === 1) {
+      const opWord = op === '+' ? 'cộng' : 'trừ';
+      parts.push(` ${opWord} ${numWord}`);
     } else {
       if (op === prevOp) {
         parts.push(` ${numWord}`);

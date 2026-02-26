@@ -1,5 +1,12 @@
 # Lưu trữ Audio Nghe tính
 
+## Nguyên tắc đọc Nghe tính (cộng/trừ)
+
+Cách đọc phép tính cộng/trừ trên các trang làm bài Nghe tính:
+
+- **Số hạng thứ 2:** Luôn đọc dấu "Cộng" hoặc "Trừ" trước số. VD: `[8, 5, ...]` → *tám **cộng** năm …*
+- **Số hạng tiếp theo (3, 4, …):** Dấu giống số trước → không đọc dấu; đổi dấu → đọc "cộng" hoặc "trừ". VD: `[8, 5, 3, -2, -1, 7]` → *tám cộng năm ba **trừ** hai một **cộng** bảy*
+
 ## Nguồn âm (ưu tiên)
 
 Khi `VITE_SUPABASE_URL` được cấu hình, ứng dụng **tự động** dùng Supabase Storage:
