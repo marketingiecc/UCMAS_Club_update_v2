@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   cancelBrowserSpeechSynthesis,
   playStableTts,
@@ -55,6 +55,8 @@ const NgheTinhTestPage: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState('Sẵn sàng');
   const [gapConfig, setGapConfig] = useState<NgheTinhGapConfig>(() => getNgheTinhGapConfig());
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'info'; msg: string } | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -64,18 +66,31 @@ const NgheTinhTestPage: React.FC = () => {
       return next;
     });
   };
-  const saveGapConfig = async () => {
+
+  const saveGapConfig = useCallback(async () => {
     setNgheTinhGapConfig(gapConfig);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+    let supabaseOk = false;
     try {
       const { saveNgheTinhGapConfig } = await import('../services/ngheTinhConfigService');
       await saveNgheTinhGapConfig(gapConfig);
-      setStatus('✓ Lưu thành công! Cài đặt áp dụng cho toàn bộ trang Nghe tính.');
+      supabaseOk = true;
     } catch {
-      setStatus('Đã lưu cài đặt (chỉ áp dụng trên thiết bị này). Để áp dụng toàn hệ thống, cần kết nối Supabase.');
+      /* Supabase unavailable */
     }
-  };
+
+    if (supabaseOk) {
+      setSaveStatus({ type: 'success', msg: 'Lưu thành công! Cài đặt áp dụng toàn hệ thống.' });
+    } else {
+      setSaveStatus({ type: 'info', msg: 'Đã lưu trên thiết bị này. Kết nối Supabase để áp dụng toàn hệ thống.' });
+    }
+    saveTimerRef.current = setTimeout(() => setSaveStatus(null), 4000);
+  }, [gapConfig]);
+
   const resetGapConfig = () => {
     setGapConfig({ ...DEFAULT_NGHE_TINH_GAP_CONFIG });
+    setSaveStatus(null);
   };
 
   const operands = parseOperandsInput(operandsInput);
@@ -378,7 +393,7 @@ const NgheTinhTestPage: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
                   <button
                     onClick={saveGapConfig}
                     className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs hover:bg-amber-700"
@@ -391,6 +406,18 @@ const NgheTinhTestPage: React.FC = () => {
                   >
                     Đặt lại mặc định
                   </button>
+                  {saveStatus && (
+                    <span
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity ${
+                        saveStatus.type === 'success'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}
+                    >
+                      {saveStatus.type === 'success' ? '✓ ' : 'ℹ '}
+                      {saveStatus.msg}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -503,19 +530,55 @@ const NgheTinhTestPage: React.FC = () => {
                     onClick={() => setOperandsInput('8, 5, -3, 2, 7')}
                     className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
-                    Mẫu cộng/trừ
+                    Cộng/trừ cơ bản
                   </button>
                   <button
-                    onClick={() => setOperandsInput('123, 456')}
+                    onClick={() => setOperandsInput('25, 37, -14, 8')}
                     className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
-                    Số lớn
+                    2 chữ số
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('123, 456, -789')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    3 chữ số
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('5, 3, 7, 2, 8, -4, -1, 6')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    8 số hạng
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('11, 15, 21, 25, -105')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Phát âm đặc biệt
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('1234, -5678')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Hàng nghìn
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('50, -20, 15, -5, 30')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Hỗn hợp
                   </button>
                   <button
                     onClick={() => setOperandsInput('1000000')}
                     className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
                     1 triệu
+                  </button>
+                  <button
+                    onClick={() => setOperandsInput('10, 20, 30, -40, 50, -60, 70, -80, 90, 100')}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    10 số hạng tròn
                   </button>
                 </div>
               </div>

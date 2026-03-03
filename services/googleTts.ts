@@ -9,8 +9,30 @@ const DEFAULT_VI_CLOUD_VOICE = 'vi-VN-Standard-A';
 /** Digits 0-9 in Vietnamese (for reading numbers). */
 const VI_DIGITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'] as const;
 
-/** Chỉ trim khoảng im lặng ở các token SỐ (0–9). Giữ nguyên nghìn, triệu, tỷ, mươi, trăm… để học sinh nghe rõ. */
-const TRIM_DIGIT_TOKENS = new Set<string>(VI_DIGITS);
+/**
+ * Context-aware trim parameters per token category.
+ * Each category has different leading/trailing trim limits to preserve naturalness.
+ */
+interface TrimParams {
+  maxLeadingMs: number;
+  maxTrailingMs: number;
+}
+
+const TRIM_DIGITS: TrimParams = { maxLeadingMs: 80, maxTrailingMs: 200 };
+const TRIM_UNITS: TrimParams = { maxLeadingMs: 60, maxTrailingMs: 180 };
+const TRIM_OPERATORS: TrimParams = { maxLeadingMs: 50, maxTrailingMs: 120 };
+const TRIM_BOOKENDS: TrimParams = { maxLeadingMs: 50, maxTrailingMs: 100 };
+
+const TOKEN_TRIM_MAP = new Map<string, TrimParams>([
+  ...VI_DIGITS.map((d) => [d, TRIM_DIGITS] as [string, TrimParams]),
+  ['mười', TRIM_UNITS], ['mươi', TRIM_UNITS], ['mốt', TRIM_UNITS],
+  ['lăm', TRIM_UNITS], ['linh', TRIM_UNITS],
+  ['trăm', TRIM_UNITS], ['nghìn', TRIM_UNITS], ['triệu', TRIM_UNITS], ['tỷ', TRIM_UNITS],
+  ['cộng', TRIM_OPERATORS], ['trừ', TRIM_OPERATORS],
+  ['nhân', TRIM_OPERATORS], ['chia', TRIM_OPERATORS],
+  ['phẩy', TRIM_OPERATORS],
+  ['Chuẩn_bị', TRIM_BOOKENDS], ['Bằng', TRIM_BOOKENDS],
+]);
 
 /**
  * Convert a number to Vietnamese words for TTS (so "12" is read as "mười hai" not "twelve").
@@ -347,9 +369,9 @@ export interface NgheTinhGapConfig {
 const STORAGE_KEY_NGHE_TINH_GAP = 'ucmas_nghe_tinh_gap_config';
 
 export const DEFAULT_NGHE_TINH_GAP_CONFIG: NgheTinhGapConfig = {
-  gapWithinNumberMs: 0,
-  gapBetweenOperandsMs: 80,
-  gapAfterOperatorMs: 40,
+  gapWithinNumberMs: 30,
+  gapBetweenOperandsMs: 120,
+  gapAfterOperatorMs: 60,
   gapAfterChuanBiMs: 1000,
 };
 
@@ -436,18 +458,14 @@ async function decodeAudioBuffer(ctx: AudioContext, arrayBuffer: ArrayBuffer): P
   }
 }
 
-/** Ngưỡng để coi là im lặng (giảm khoảng nghỉ giữa các token khi ghép) */
-const SILENCE_THRESHOLD = 0.005;
-/** Tối đa (ms) cắt ở cuối mỗi buffer – giảm pause giữa hàng chục và hàng đơn vị */
-const MAX_TRIM_TRAILING_MS = 350;
-/** Cắt tối thiểu (ms) ở cuối mỗi buffer – đảm bảo khoảng nghỉ luôn ngắn */
-const MIN_TRIM_TRAILING_MS = 150;
-/** Tối đa (ms) cắt ở đầu mỗi buffer – giảm im lặng đầu file */
-const MAX_TRIM_LEADING_MS = 150;
+/** Amplitude below this is treated as silence when trimming */
+const SILENCE_THRESHOLD = 0.01;
+/** Safety margin (ms) kept after last audible sample to avoid clipping word tails */
+const TRIM_SAFETY_MARGIN_MS = 20;
 
-function trimLeadingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
+function trimLeadingSilence(buf: AudioBuffer, ctx: AudioContext, maxLeadingMs: number): AudioBuffer {
   const sampleRate = buf.sampleRate;
-  const maxTrimSamples = Math.min(buf.length, Math.floor((MAX_TRIM_LEADING_MS / 1000) * sampleRate));
+  const maxTrimSamples = Math.min(buf.length, Math.floor((maxLeadingMs / 1000) * sampleRate));
   if (maxTrimSamples <= 0) return buf;
   const ch0 = buf.getChannelData(0);
   let firstSound = maxTrimSamples;
@@ -467,27 +485,103 @@ function trimLeadingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
   return trimmed;
 }
 
-function trimTrailingSilence(buf: AudioBuffer, ctx: AudioContext): AudioBuffer {
+function trimTrailingSilence(buf: AudioBuffer, ctx: AudioContext, maxTrailingMs: number): AudioBuffer {
   const sampleRate = buf.sampleRate;
-  const maxTrimSamples = Math.min(buf.length, Math.floor((MAX_TRIM_TRAILING_MS / 1000) * sampleRate));
-  const minTrimSamples = Math.min(buf.length - 1, Math.floor((MIN_TRIM_TRAILING_MS / 1000) * sampleRate));
+  const maxTrimSamples = Math.min(buf.length, Math.floor((maxTrailingMs / 1000) * sampleRate));
   if (maxTrimSamples <= 0) return buf;
+  const safetyMarginSamples = Math.floor((TRIM_SAFETY_MARGIN_MS / 1000) * sampleRate);
   const ch0 = buf.getChannelData(0);
-  let keepLength = buf.length;
+  let lastSound = buf.length - maxTrimSamples;
   for (let i = buf.length - 1; i >= Math.max(0, buf.length - maxTrimSamples); i--) {
     if (Math.abs(ch0[i]) > SILENCE_THRESHOLD) {
-      keepLength = i + 1;
+      lastSound = i;
       break;
     }
-    keepLength = i;
   }
-  const finalKeep = Math.min(keepLength, Math.max(1, buf.length - minTrimSamples));
-  if (finalKeep >= buf.length) return buf;
-  const trimmed = ctx.createBuffer(buf.numberOfChannels, finalKeep, sampleRate);
+  const keepLength = Math.min(buf.length, lastSound + 1 + safetyMarginSamples);
+  if (keepLength >= buf.length) return buf;
+  if (keepLength <= 0) return buf;
+  const trimmed = ctx.createBuffer(buf.numberOfChannels, keepLength, sampleRate);
   for (let c = 0; c < buf.numberOfChannels; c++) {
-    trimmed.getChannelData(c).set(buf.getChannelData(c).subarray(0, finalKeep));
+    trimmed.getChannelData(c).set(buf.getChannelData(c).subarray(0, keepLength));
   }
   return trimmed;
+}
+
+/** Duration (ms) of fade-in/fade-out applied to each token to prevent click artifacts */
+const FADE_MS = 10;
+
+function applyFadeIn(buf: AudioBuffer, fadeMs: number = FADE_MS): void {
+  const fadeSamples = Math.min(buf.length, Math.floor((fadeMs / 1000) * buf.sampleRate));
+  if (fadeSamples <= 0) return;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const ch = buf.getChannelData(c);
+    for (let i = 0; i < fadeSamples; i++) {
+      ch[i] *= i / fadeSamples;
+    }
+  }
+}
+
+function applyFadeOut(buf: AudioBuffer, fadeMs: number = FADE_MS): void {
+  const fadeSamples = Math.min(buf.length, Math.floor((fadeMs / 1000) * buf.sampleRate));
+  if (fadeSamples <= 0) return;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const ch = buf.getChannelData(c);
+    const start = buf.length - fadeSamples;
+    for (let i = 0; i < fadeSamples; i++) {
+      ch[start + i] *= 1 - i / fadeSamples;
+    }
+  }
+}
+
+/**
+ * Crossfade the tail of bufA with the head of bufB.
+ * Returns a single buffer: [bufA_head ... overlap(crossfade) ... bufB_tail].
+ */
+function crossfadeBuffers(ctx: AudioContext, bufA: AudioBuffer, bufB: AudioBuffer, overlapMs: number): AudioBuffer {
+  const sampleRate = bufA.sampleRate;
+  const overlapSamples = Math.min(
+    Math.floor((overlapMs / 1000) * sampleRate),
+    bufA.length,
+    bufB.length,
+  );
+  if (overlapSamples <= 0) {
+    const total = bufA.length + bufB.length;
+    const numCh = Math.max(bufA.numberOfChannels, bufB.numberOfChannels);
+    const out = ctx.createBuffer(numCh, total, sampleRate);
+    for (let c = 0; c < numCh; c++) {
+      const outCh = out.getChannelData(c);
+      if (c < bufA.numberOfChannels) outCh.set(bufA.getChannelData(c), 0);
+      if (c < bufB.numberOfChannels) outCh.set(bufB.getChannelData(c), bufA.length);
+    }
+    return out;
+  }
+
+  const totalLength = bufA.length + bufB.length - overlapSamples;
+  const numCh = Math.max(bufA.numberOfChannels, bufB.numberOfChannels);
+  const out = ctx.createBuffer(numCh, totalLength, sampleRate);
+
+  for (let c = 0; c < numCh; c++) {
+    const outCh = out.getChannelData(c);
+    const chA = c < bufA.numberOfChannels ? bufA.getChannelData(c) : null;
+    const chB = c < bufB.numberOfChannels ? bufB.getChannelData(c) : null;
+
+    // Copy bufA non-overlapping head
+    if (chA) outCh.set(chA.subarray(0, bufA.length - overlapSamples), 0);
+
+    // Crossfade region
+    const overlapStart = bufA.length - overlapSamples;
+    for (let i = 0; i < overlapSamples; i++) {
+      const t = i / overlapSamples;
+      const aVal = chA ? chA[bufA.length - overlapSamples + i] * (1 - t) : 0;
+      const bVal = chB ? chB[i] * t : 0;
+      outCh[overlapStart + i] = aVal + bVal;
+    }
+
+    // Copy bufB non-overlapping tail
+    if (chB) outCh.set(chB.subarray(overlapSamples), bufA.length);
+  }
+  return out;
 }
 
 function createSilenceBuffer(ctx: AudioContext, durationMs: number, sampleRate?: number): AudioBuffer {
@@ -577,9 +671,18 @@ async function getTokenAudioBuffer(
   return null;
 }
 
+/** Crossfade overlap (ms) used between syllables of the same number */
+const CROSSFADE_WITHIN_NUMBER_MS = 10;
+
 /**
  * Phát Nghe tính: ghép toàn bộ thành 1 buffer rồi phát một mạch, không ngắt.
  * Âm thiếu → TTS bổ sung. Sau khi nghe xong buffer tự giải phóng (không tạo file).
+ *
+ * Context-aware processing:
+ * - Every token is trimmed based on its category (digits, units, operators, bookends)
+ * - Fade-in/fade-out applied to all tokens to prevent clicks
+ * - within_number gaps use crossfade for smooth syllable connection
+ * - Other gaps use silence buffers
  */
 export async function playConcatenatedListeningVi(
   operands: number[],
@@ -610,16 +713,63 @@ export async function playConcatenatedListeningVi(
       await playListeningPhraseVi(operands, lang, rate, opts);
       return;
     }
-    let trimmed = buf;
-    if (TRIM_DIGIT_TOKENS.has(tokens[i])) {
-      trimmed = trimLeadingSilence(trimmed, ctx);
-      trimmed = trimTrailingSilence(trimmed, ctx);
+    let processed = buf;
+    const trimParams = TOKEN_TRIM_MAP.get(tokens[i]);
+    if (trimParams) {
+      processed = trimLeadingSilence(processed, ctx, trimParams.maxLeadingMs);
+      processed = trimTrailingSilence(processed, ctx, trimParams.maxTrailingMs);
     }
-    buffers.push(trimmed);
+    applyFadeIn(processed);
+    applyFadeOut(processed);
+    buffers.push(processed);
   }
 
+  // Build final buffer: crossfade for within_number, silence gaps for others
   const gapMs = tokens.map((_, i) => getGapMs(gapAfter[i], gapConfig));
-  const full = concatenateBuffersWithGaps(ctx, buffers, gapMs);
+  const sampleRate = buffers[0]?.sampleRate ?? ctx.sampleRate;
+
+  const parts: AudioBuffer[] = [];
+  for (let i = 0; i < buffers.length; i++) {
+    if (i > 0 && gapAfter[i - 1] === 'within_number') {
+      const prevIdx = parts.length - 1;
+      if (prevIdx >= 0) {
+        const gapSilenceMs = gapMs[i - 1];
+        if (gapSilenceMs > 0) {
+          const silBuf = createSilenceBuffer(ctx, gapSilenceMs, sampleRate);
+          const prevWithSil = crossfadeBuffers(ctx, parts[prevIdx], silBuf, 0);
+          parts[prevIdx] = crossfadeBuffers(ctx, prevWithSil, buffers[i], CROSSFADE_WITHIN_NUMBER_MS);
+        } else {
+          parts[prevIdx] = crossfadeBuffers(ctx, parts[prevIdx], buffers[i], CROSSFADE_WITHIN_NUMBER_MS);
+        }
+        // After crossfading this token in, still add its own trailing gap
+        const ownGap = gapMs[i] ?? 0;
+        if (ownGap > 0 && gapAfter[i] !== 'within_number') {
+          parts.push(createSilenceBuffer(ctx, ownGap, sampleRate));
+        }
+        continue;
+      }
+    }
+
+    parts.push(buffers[i]);
+    const gap = gapMs[i] ?? 0;
+    if (gap > 0 && gapAfter[i] !== 'within_number') {
+      parts.push(createSilenceBuffer(ctx, gap, sampleRate));
+    }
+  }
+
+  // Concatenate all parts into one final buffer
+  const numChannels = Math.max(1, parts[0]?.numberOfChannels ?? 1);
+  const totalLength = parts.reduce((acc, b) => acc + b.length, 0);
+  const full = ctx.createBuffer(numChannels, totalLength, sampleRate);
+  const channels = Array.from({ length: numChannels }, (_, c) => full.getChannelData(c));
+  let offset = 0;
+  for (const buf of parts) {
+    const ch = Math.min(buf.numberOfChannels, numChannels);
+    for (let c = 0; c < ch; c++) {
+      channels[c].set(buf.getChannelData(c), offset);
+    }
+    offset += buf.length;
+  }
 
   const src = ctx.createBufferSource();
   src.buffer = full;
