@@ -28,6 +28,7 @@ interface PathExerciseEntry {
   track_id?: string;
   day_id?: string;
   order_no?: number;
+  study_level_id?: string;
   level_symbol: string;
   day_no: number;
   mode: 'visual' | 'audio' | 'flash';
@@ -311,8 +312,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const userStudyLevelId = (user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol) || getDefaultStudyLevelId()) as StudyLevelId;
   const userLegacyLevelSymbol = getLegacySymbolFromStudyLevelId(userStudyLevelId);
   const exercisesForLevel = useMemo(
-    () => pathExercises.filter(e => e.level_symbol === userLegacyLevelSymbol),
-    [pathExercises, userLegacyLevelSymbol]
+    () => pathExercises.filter((e) => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === userStudyLevelId),
+    [pathExercises, userStudyLevelId]
   );
   const pathDaysCompleted = useMemo(
     () => getPathDaysCompleted(user.id),
@@ -324,7 +325,10 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     let mounted = true;
     (async () => {
       try {
-        const snap = await trainingTrackService.getPublishedTrackSnapshot(userLegacyLevelSymbol, PATH_TOTAL_DAYS);
+        const snap = await trainingTrackService.getPublishedTrackSnapshot({
+          studyLevelId: userStudyLevelId,
+          levelSymbol: userLegacyLevelSymbol,
+        }, PATH_TOTAL_DAYS);
         if (!mounted) return;
         if (snap) {
           setPathSnapshot(snap);
@@ -334,6 +338,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
               track_id: snap.track_id,
               day_id: ex.day_id,
               order_no: ex.order_no,
+              study_level_id: ex.study_level_id,
               level_symbol: ex.level_symbol,
               day_no: ex.day_no,
               mode: ex.mode,
@@ -360,7 +365,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     return () => {
       mounted = false;
     };
-  }, [userLegacyLevelSymbol]);
+  }, [userLegacyLevelSymbol, userStudyLevelId]);
 
   // Load progress for visible week (checkmarks + score notes)
   useEffect(() => {
@@ -399,7 +404,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     let mounted = true;
     const fetchCups = async () => {
       try {
-        const set = await trainingTrackService.getCollectedCups(user.id);
+        const set = await trainingTrackService.getCollectedCups(user.id, userStudyLevelId);
         if (mounted) setClaimedWeeks(set);
       } catch (e) {
         console.error(e);
@@ -407,7 +412,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     };
     fetchCups();
     return () => { mounted = false; };
-  }, [user.id]);
+  }, [user.id, userStudyLevelId]);
 
   // Popup logic
   const [showClaimPopup, setShowClaimPopup] = useState<{ visible: boolean; success: boolean; message: string; subMessage?: string }>({ visible: false, success: false, message: '' });
@@ -427,7 +432,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     // If a day has NO exercises, it is technically "complete" (nothing to do).
     // So we check if there are ANY incomplete days among the days that HAVE exercises.
 
-    const daysWithExercises = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLegacyLevelSymbol));
+    const daysWithExercises = days.filter(
+      d => pathExercises.some((e) => e.day_no === d && (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === userStudyLevelId)
+    );
     // If a week has 0 exercises total, can they claim? Probably yes or just N/A. Let's assume yes if they visited.
 
     const incompleteDays = daysWithExercises.filter(d => {
@@ -451,7 +458,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
     // Optimistic UI update or just wait for clean result?
     // User requested NO reload.
-    const res = await trainingTrackService.claimCup(user.id, weekIdx);
+    const res = await trainingTrackService.claimCup(user.id, userStudyLevelId, weekIdx);
 
     if (res.success) {
       setClaimedWeeks(prev => new Set(prev).add(weekIdx));
@@ -933,7 +940,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
                       const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
 
-                      const currentWeekNeededDays = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLegacyLevelSymbol));
+                      const currentWeekNeededDays = days.filter(
+                        d => pathExercises.some((e) => e.day_no === d && (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === userStudyLevelId)
+                      );
                       const isWeekCompleted = currentWeekNeededDays.length > 0 && currentWeekNeededDays.every(d => {
                         const id = pathSnapshot?.dayIdByNo[d];
                         return id && completedDayIds.has(id);
@@ -990,7 +999,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                               const hasExercises = dayExs.length > 0;
                               const hasCompleted = pathSnapshot
                                 ? completedDayIds.has(pathSnapshot.dayIdByNo[day] || '')
-                                : (pathDaysCompleted[userLegacyLevelSymbol]?.[day] === true);
+                                : (pathDaysCompleted[userStudyLevelId]?.[day] === true);
                               const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
 
                               const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };

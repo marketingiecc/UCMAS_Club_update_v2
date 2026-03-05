@@ -1,6 +1,11 @@
 import { supabase } from './mockBackend';
 import type { TrackDayTemplatePayloadV1, TrackModeKey as TemplateModeKey } from './trackDayLibraryService';
-import { getStudyLevelIdFromLegacySymbol } from '../config/levelsAndDifficulty';
+import {
+  getLegacySymbolFromStudyLevelId,
+  getStudyLevelIdFromLegacySymbol,
+  getStudyLevelLabel,
+  type StudyLevelId,
+} from '../config/levelsAndDifficulty';
 
 type ModeKey = 'visual' | 'audio' | 'flash';
 
@@ -53,16 +58,41 @@ function clampSpeedSeconds(n: unknown) {
   return Math.max(0.1, Math.min(1.5, x));
 }
 
-async function getLatestPublishedTrack(levelSymbol: string) {
-  const { data, error } = await supabase
+function buildTrackCupId(studyLevelId: string, weekIndex: number): string {
+  // weekIndex on UI is 0-based; store 1-based in ID for readability
+  const weekNo = Math.max(1, Math.floor(weekIndex) + 1);
+  return `track:${studyLevelId}:week:${String(weekNo).padStart(2, '0')}`;
+}
+
+type TrackLevelRef = { studyLevelId?: string | null; levelSymbol?: string | null };
+
+function normalizeTrackLevelRef(levelRef: string | TrackLevelRef): { studyLevelId: string | null; levelSymbol: string | null } {
+  if (typeof levelRef === 'string') {
+    return { studyLevelId: getStudyLevelIdFromLegacySymbol(levelRef), levelSymbol: levelRef };
+  }
+  const studyLevelId = levelRef.studyLevelId ? String(levelRef.studyLevelId) : null;
+  const levelSymbol = levelRef.levelSymbol
+    ? String(levelRef.levelSymbol)
+    : (studyLevelId ? getLegacySymbolFromStudyLevelId(studyLevelId as StudyLevelId) : null);
+  return { studyLevelId, levelSymbol };
+}
+
+async function getLatestPublishedTrack(levelRef: string | TrackLevelRef) {
+  const { studyLevelId, levelSymbol } = normalizeTrackLevelRef(levelRef);
+  let q = supabase
     .from('training_tracks' as any)
     .select('*')
-    .eq('level_symbol', levelSymbol)
     .eq('is_published', true)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
+  if (studyLevelId) {
+    q = q.eq('study_level_id', studyLevelId);
+  } else if (levelSymbol) {
+    q = q.eq('level_symbol', levelSymbol);
+  }
+
+  const { data, error } = await q.maybeSingle();
   if (error) throw new Error(error.message);
   return data as any | null;
 }
@@ -103,7 +133,7 @@ async function ensureTrackDays(trackId: string, totalDays: number) {
   return dayIdByNo;
 }
 
-async function fetchExercisesForDayIds(dayIds: string[], levelSymbol: string, dayNoById: Record<string, number>) {
+async function fetchExercisesForDayIds(dayIds: string[], levelRef: { studyLevelId: string | null; levelSymbol: string | null }, dayNoById: Record<string, number>) {
   if (dayIds.length === 0) return [];
   const { data, error } = await supabase
     .from('training_day_exercises' as any)
@@ -125,8 +155,8 @@ async function fetchExercisesForDayIds(dayIds: string[], levelSymbol: string, da
     return {
       id: String(r.id),
       day_id: dayId,
-      study_level_id: getStudyLevelIdFromLegacySymbol(levelSymbol),
-      level_symbol: levelSymbol,
+      study_level_id: levelRef.studyLevelId || getStudyLevelIdFromLegacySymbol(levelRef.levelSymbol),
+      level_symbol: levelRef.levelSymbol || getLegacySymbolFromStudyLevelId(levelRef.studyLevelId as StudyLevelId),
       day_no: dayNoById[dayId] ?? 0,
       order_no: Number(r.order_no ?? 0),
       mode: asModeKey(r.mode),
@@ -150,8 +180,9 @@ export const trainingTrackService = {
    * Get or create a published track for a level, ensure all days exist,
    * then return full exercises snapshot.
    */
-  async getPublishedTrackSnapshot(levelSymbol: string, totalDays: number = 96): Promise<TrackSnapshot | null> {
-    const track = await getLatestPublishedTrack(levelSymbol);
+  async getPublishedTrackSnapshot(levelRef: string | TrackLevelRef, totalDays: number = 96): Promise<TrackSnapshot | null> {
+    const normalized = normalizeTrackLevelRef(levelRef);
+    const track = await getLatestPublishedTrack(normalized);
     if (!track) return null;
 
     const dayIdByNo = await ensureTrackDays(track.id, totalDays);
@@ -160,12 +191,16 @@ export const trainingTrackService = {
     Object.entries(dayIdByNo).forEach(([no, id]) => {
       dayNoById[id] = Number(no);
     });
-    const exercises = await fetchExercisesForDayIds(dayIds, levelSymbol, dayNoById);
+    const levelFromTrack = {
+      studyLevelId: (track.study_level_id ?? normalized.studyLevelId ?? null) as string | null,
+      levelSymbol: (track.level_symbol ?? normalized.levelSymbol ?? null) as string | null,
+    };
+    const exercises = await fetchExercisesForDayIds(dayIds, levelFromTrack, dayNoById);
 
     return {
       track_id: String(track.id),
-      study_level_id: getStudyLevelIdFromLegacySymbol(String(track.level_symbol)),
-      level_symbol: String(track.level_symbol),
+      study_level_id: levelFromTrack.studyLevelId || getStudyLevelIdFromLegacySymbol(levelFromTrack.levelSymbol),
+      level_symbol: levelFromTrack.levelSymbol || getLegacySymbolFromStudyLevelId(levelFromTrack.studyLevelId as StudyLevelId),
       total_days: clampInt(track.total_days ?? totalDays, 1, 365),
       dayIdByNo,
       exercises,
@@ -176,8 +211,9 @@ export const trainingTrackService = {
    * Admin: ensure a published track exists, and ensure day rows.
    * Returns the track_id.
    */
-  async ensurePublishedTrack(levelSymbol: string, totalDays: number = 96): Promise<{ track_id: string; dayIdByNo: Record<number, string> }> {
-    let track = await getLatestPublishedTrack(levelSymbol);
+  async ensurePublishedTrack(levelRef: string | TrackLevelRef, totalDays: number = 96): Promise<{ track_id: string; dayIdByNo: Record<number, string> }> {
+    const normalized = normalizeTrackLevelRef(levelRef);
+    let track = await getLatestPublishedTrack(normalized);
 
     if (!track) {
       const { data: userData, error: uErr } = await supabase.auth.getUser();
@@ -185,9 +221,10 @@ export const trainingTrackService = {
       if (!userData.user) throw new Error('Phiên đăng nhập hết hạn.');
 
       const payload = {
-        title: `Lộ trình luyện tập ${levelSymbol}`,
+        title: `Lộ trình luyện tập ${getStudyLevelLabel(normalized.studyLevelId)}`,
         description: null,
-        level_symbol: levelSymbol,
+        level_symbol: normalized.levelSymbol,
+        study_level_id: normalized.studyLevelId,
         total_days: totalDays,
         is_published: true,
         created_by: userData.user.id,
@@ -216,6 +253,7 @@ export const trainingTrackService = {
   },
 
   async adminUpsertExercise(input: {
+    study_level_id?: string | null;
     level_symbol: string;
     day_no: number;
     mode: ModeKey;
@@ -235,7 +273,10 @@ export const trainingTrackService = {
   }): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
       const totalDays = 96;
-      const { dayIdByNo } = await trainingTrackService.ensurePublishedTrack(input.level_symbol, totalDays);
+      const { dayIdByNo } = await trainingTrackService.ensurePublishedTrack({
+        studyLevelId: input.study_level_id,
+        levelSymbol: input.level_symbol,
+      }, totalDays);
       const dayNo = clampInt(input.day_no, 1, totalDays);
       const dayId = dayIdByNo[dayNo];
       if (!dayId) return { success: false, error: 'Không tìm thấy day_id cho ngày này.' };
@@ -319,6 +360,7 @@ export const trainingTrackService = {
    * This will upsert 3 exercises (visual/audio/flash) using existing rows when possible.
    */
   async adminUpsertDayFromTemplate(input: {
+    study_level_id?: string | null;
     level_symbol: string;
     day_no: number;
     templatePayload: TrackDayTemplatePayloadV1;
@@ -326,7 +368,10 @@ export const trainingTrackService = {
   }): Promise<{ success: boolean; ids?: Record<TemplateModeKey, string>; error?: string }> {
     try {
       const totalDays = 96;
-      const { dayIdByNo } = await trainingTrackService.ensurePublishedTrack(input.level_symbol, totalDays);
+      const { dayIdByNo } = await trainingTrackService.ensurePublishedTrack({
+        studyLevelId: input.study_level_id,
+        levelSymbol: input.level_symbol,
+      }, totalDays);
       const dayNo = clampInt(input.day_no, 1, totalDays);
       const dayId = dayIdByNo[dayNo];
       if (!dayId) return { success: false, error: 'Không tìm thấy day_id cho ngày này.' };
@@ -374,6 +419,7 @@ export const trainingTrackService = {
         const res = await trainingTrackService.adminUpsertExercise({
           id: rowToUse?.id ?? null,
           order_no,
+          study_level_id: input.study_level_id,
           level_symbol: input.level_symbol,
           day_no: dayNo,
           mode,
@@ -561,18 +607,26 @@ export const trainingTrackService = {
     }
   },
 
-  async getCollectedCups(userId: string): Promise<Set<number>> {
+  async getCollectedCups(userId: string, studyLevelId: StudyLevelId): Promise<Set<number>> {
     try {
       const { data, error } = await supabase
         .from('user_collected_cups' as any)
-        .select('week_index')
+        .select('week_index, cup_id')
         .eq('user_id', userId);
       if (error) {
-        // Table might not exist yet if migration wasn't run, handle gracefully
         console.warn('getCollectedCups error (ignore if table missing):', error.message);
         return new Set();
       }
-      return new Set((data || []).map((r: any) => Number(r.week_index)));
+      const out = new Set<number>();
+      const prefix = `track:${studyLevelId}:week:`;
+      (data || []).forEach((r: any) => {
+        const cupId = r?.cup_id != null ? String(r.cup_id) : '';
+        if (!cupId.startsWith(prefix)) return;
+        const weekRaw = cupId.slice(prefix.length);
+        const weekNo = Number(weekRaw);
+        if (Number.isFinite(weekNo) && weekNo >= 1) out.add(weekNo - 1);
+      });
+      return out;
     } catch (e) {
       return new Set();
     }
@@ -595,11 +649,18 @@ export const trainingTrackService = {
     }
   },
 
-  async claimCup(userId: string, weekIndex: number): Promise<{ success: boolean; error?: string }> {
+  async claimCup(userId: string, studyLevelId: StudyLevelId, weekIndex: number): Promise<{ success: boolean; error?: string }> {
     try {
+      const cupId = buildTrackCupId(studyLevelId, weekIndex);
       const { error } = await supabase
         .from('user_collected_cups' as any)
-        .insert({ user_id: userId, week_index: weekIndex });
+        .insert({
+          user_id: userId,
+          week_index: weekIndex,
+          cup_id: cupId,
+          cup_type: 'track_week',
+          study_level_id: studyLevelId,
+        } as any);
       if (error) throw new Error(error.message);
       return { success: true };
     } catch (e: any) {

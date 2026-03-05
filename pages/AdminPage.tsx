@@ -4,10 +4,9 @@ import { UserProfile, AttemptResult, Question } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DIFFICULTIES,
-  LEVEL_SYMBOLS_ORDER,
   STUDY_LEVELS,
   getLegacySymbolFromStudyLevelId,
-  getLevelLabel,
+  getStudyLevelIdFromLegacySymbol,
   getStudyLevelLabel,
   type StudyLevelId,
 } from '../config/levelsAndDifficulty';
@@ -24,13 +23,12 @@ const MODES = [
 const TRACK_TOTAL_DAYS = 96;
 const TRACK_DAYS_PER_WEEK = 6;
 const TRACK_TOTAL_WEEKS = 16;
-const ALL_TRACK_LEVEL_SYMBOLS = Array.from(new Set(STUDY_LEVELS.map((lv) => getLegacySymbolFromStudyLevelId(lv.id))));
-
 /** Bài luyện tập trong lộ trình (1 bài = 1 ngày, 1 chế độ, có thể kèm JSON) */
 export interface TrackExerciseEntry {
   id: string;
   day_id?: string;
   order_no?: number;
+  study_level_id?: StudyLevelId;
   level_symbol: string;
   day_no: number;
   mode: 'visual' | 'audio' | 'flash';
@@ -76,7 +74,7 @@ const AdminPage: React.FC = () => {
   });
   const [trackSyncStatus, setTrackSyncStatus] = useState<string>('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalPresetLevel, setModalPresetLevel] = useState<string | null>(null);
+  const [modalPresetLevel, setModalPresetLevel] = useState<StudyLevelId | null>(null);
   /** Khi set: hiển thị danh sách 120 ngày để thiết lập cho cấp này */
   const [selectedLevelForDays, setSelectedLevelForDays] = useState<StudyLevelId | null>(null);
   const [selectedTrackWeekIndex, setSelectedTrackWeekIndex] = useState(0);
@@ -89,6 +87,7 @@ const AdminPage: React.FC = () => {
     error: null,
   });
   const [trackForm, setTrackForm] = useState({
+    study_level_id: 'study_basic' as StudyLevelId,
     level_symbol: 'A',
     day_no: 1,
     mode: 'visual' as 'visual' | 'audio' | 'flash',
@@ -108,18 +107,23 @@ const AdminPage: React.FC = () => {
     localStorage.setItem('ucmas_track_exercises', JSON.stringify(list));
   };
 
-  const mergeLevelExercises = (levelSymbol: string, nextForLevel: TrackExerciseEntry[]) => {
-    const others = trackExercises.filter((e) => e.level_symbol !== levelSymbol);
+  const mergeLevelExercises = (studyLevelId: StudyLevelId, nextForLevel: TrackExerciseEntry[]) => {
+    const others = trackExercises.filter((e) => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) !== studyLevelId);
     const merged = [...others, ...nextForLevel];
     saveTrackExercises(merged);
   };
 
-  const refreshTrackFromSupabase = async (levelSymbol?: string) => {
+  const refreshTrackFromSupabase = async (studyLevelId?: StudyLevelId) => {
     try {
       setTrackSyncStatus('⏳ Đang tải lộ trình từ Supabase...');
 
-      const levels = levelSymbol ? [levelSymbol] : ALL_TRACK_LEVEL_SYMBOLS;
-      const snaps = await Promise.all(levels.map((lv) => trainingTrackService.getPublishedTrackSnapshot(lv, TRACK_TOTAL_DAYS)));
+      const levels = studyLevelId ? [studyLevelId] : STUDY_LEVELS.map((lv) => lv.id);
+      const snaps = await Promise.all(
+        levels.map((lv) => trainingTrackService.getPublishedTrackSnapshot({
+          studyLevelId: lv,
+          levelSymbol: getLegacySymbolFromStudyLevelId(lv),
+        }, TRACK_TOTAL_DAYS))
+      );
       const all: TrackExerciseEntry[] = [];
       snaps.forEach((snap) => {
         if (!snap) return;
@@ -128,6 +132,7 @@ const AdminPage: React.FC = () => {
             id: ex.id,
             day_id: ex.day_id,
             order_no: ex.order_no,
+            study_level_id: (ex.study_level_id || snap.study_level_id || getStudyLevelIdFromLegacySymbol(ex.level_symbol)) as StudyLevelId,
             level_symbol: ex.level_symbol,
             day_no: ex.day_no,
             mode: ex.mode,
@@ -146,9 +151,12 @@ const AdminPage: React.FC = () => {
         });
       });
 
-      if (levelSymbol) {
+      if (studyLevelId) {
         // Only replace a single level
-        mergeLevelExercises(levelSymbol, all.filter((e) => e.level_symbol === levelSymbol));
+        mergeLevelExercises(
+          studyLevelId,
+          all.filter((e) => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === studyLevelId)
+        );
       } else {
         saveTrackExercises(all);
       }
@@ -161,14 +169,18 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const openCreateModal = (levelSymbol: string, dayNo?: number, editId?: string) => {
-    setModalPresetLevel(levelSymbol);
+  const openCreateModal = (studyLevelId: StudyLevelId, dayNo?: number, editId?: string) => {
+    const levelSymbol = getLegacySymbolFromStudyLevelId(studyLevelId);
+    setModalPresetLevel(studyLevelId);
     const day = dayNo ?? 1;
-    const byDay = trackExercises.filter(e => e.level_symbol === levelSymbol && e.day_no === day);
+    const byDay = trackExercises.filter(
+      e => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === studyLevelId && e.day_no === day
+    );
     const existing = editId ? byDay.find(e => e.id === editId) : null;
     const defaultsFrom = existing ?? byDay[byDay.length - 1] ?? null;
     const existingTemplate = byDay.find((e) => e.source === 'json_upload' && e.template_id && e.template_name) ?? null;
     setTrackForm({
+      study_level_id: studyLevelId,
       level_symbol: levelSymbol,
       day_no: day,
       mode: (defaultsFrom?.mode as 'visual' | 'audio' | 'flash') ?? 'visual',
@@ -196,6 +208,7 @@ const AdminPage: React.FC = () => {
     if (trackForm.template_payload) {
       setTrackSyncStatus('⏳ Đang lưu theo tệp (3 chế độ) lên Supabase...');
       const res = await trainingTrackService.adminUpsertDayFromTemplate({
+        study_level_id: trackForm.study_level_id,
         level_symbol: trackForm.level_symbol,
         day_no: trackForm.day_no,
         templatePayload: trackForm.template_payload,
@@ -207,7 +220,7 @@ const AdminPage: React.FC = () => {
         setTrackSyncStatus(`❌ Lưu thất bại: ${res.error || 'Unknown error'}`);
         return;
       }
-      await refreshTrackFromSupabase(trackForm.level_symbol);
+      await refreshTrackFromSupabase(trackForm.study_level_id);
       closeModal();
       return;
     }
@@ -216,6 +229,7 @@ const AdminPage: React.FC = () => {
     setTrackSyncStatus('⏳ Đang lưu bài lên Supabase...');
     const res = await trainingTrackService.adminUpsertExercise({
       id: trackForm.editingId,
+      study_level_id: trackForm.study_level_id,
       level_symbol: trackForm.level_symbol,
       day_no: trackForm.day_no,
       mode: trackForm.mode,
@@ -232,7 +246,7 @@ const AdminPage: React.FC = () => {
       return;
     }
 
-    await refreshTrackFromSupabase(trackForm.level_symbol);
+    await refreshTrackFromSupabase(trackForm.study_level_id);
     closeModal();
   };
 
@@ -245,23 +259,25 @@ const AdminPage: React.FC = () => {
       setTrackSyncStatus(`❌ Xóa thất bại: ${res.error || 'Unknown error'}`);
       return;
     }
-    if (ex?.level_symbol) {
-      await refreshTrackFromSupabase(ex.level_symbol);
+    if (ex?.study_level_id || ex?.level_symbol) {
+      await refreshTrackFromSupabase((ex.study_level_id || getStudyLevelIdFromLegacySymbol(ex.level_symbol)) as StudyLevelId);
     } else {
       // fallback: remove from local cache
       saveTrackExercises(trackExercises.filter(e => e.id !== id));
     }
   };
 
-  const deleteJsonTemplateForDay = async (levelSymbol: string, dayNo: number) => {
-    const list = trackExercises.filter((e) => e.level_symbol === levelSymbol && e.day_no === dayNo && e.source === 'json_upload');
+  const deleteJsonTemplateForDay = async (studyLevelId: StudyLevelId, dayNo: number) => {
+    const list = trackExercises.filter(
+      (e) => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === studyLevelId && e.day_no === dayNo && e.source === 'json_upload'
+    );
     if (list.length === 0) return;
     if (!window.confirm(`Xóa toàn bộ bài JSON của ngày ${dayNo} (${list.length} bài)?`)) return;
     setTrackSyncStatus('⏳ Đang xóa tệp JSON khỏi ngày...');
     for (const ex of list) {
       await trainingTrackService.adminDeleteExercise(ex.id);
     }
-    await refreshTrackFromSupabase(levelSymbol);
+    await refreshTrackFromSupabase(studyLevelId);
     setTrackSyncStatus('✅ Đã xóa tệp khỏi ngày');
     setTimeout(() => setTrackSyncStatus(''), 1500);
   };
@@ -637,13 +653,14 @@ const AdminPage: React.FC = () => {
                 <p className="text-gray-500 text-sm mb-8 px-2">Chọn cấp độ và bấm Thiết lập để cấu hình bài luyện tập cho lộ trình mới (1–96), chia 16 tuần (mỗi tuần 6 ngày). Có thể thêm nhiều bài trong 1 ngày.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 px-2">
                   {STUDY_LEVELS.map((studyLevel) => {
-                    const symbol = getLegacySymbolFromStudyLevelId(studyLevel.id);
                     const daysConfigured = new Set(
                       trackExercises
-                        .filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS)
+                        .filter(e => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === studyLevel.id && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS)
                         .map(e => e.day_no)
                     ).size;
-                    const totalExercises = trackExercises.filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS).length;
+                    const totalExercises = trackExercises.filter(
+                      e => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === studyLevel.id && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS
+                    ).length;
                     return (
                       <div key={studyLevel.id} className="bg-gray-50 rounded-2xl border-2 border-gray-100 p-6 flex flex-col items-center justify-center min-h-[140px] hover:border-ucmas-blue/30 transition-colors">
                         <div className="text-2xl font-heading font-black text-ucmas-blue mb-2">{studyLevel.name}</div>
@@ -699,7 +716,9 @@ const AdminPage: React.FC = () => {
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
                       {days.map((day) => {
-                        const dayList = trackExercises.filter(e => e.level_symbol === selectedLevelSymbol && e.day_no === day);
+                        const dayList = trackExercises.filter(
+                          e => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === selectedLevelForDays && e.day_no === day
+                        );
                         const dayTemplate = dayList.find((e) => e.source === 'json_upload' && e.template_id && e.template_name) ?? null;
                         const summary = dayList.length
                           ? dayList
@@ -741,7 +760,7 @@ const AdminPage: React.FC = () => {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => deleteJsonTemplateForDay(selectedLevelSymbol, day)}
+                                      onClick={() => deleteJsonTemplateForDay(selectedLevelForDays, day)}
                                       className="px-3 py-1 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100"
                                     >
                                       Xóa tệp
@@ -753,7 +772,7 @@ const AdminPage: React.FC = () => {
                               <div className="flex flex-col gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => openCreateModal(selectedLevelSymbol, day)}
+                                  onClick={() => openCreateModal(selectedLevelForDays, day)}
                                   className="px-4 py-2 bg-ucmas-blue text-white rounded-xl text-[10px] font-heading font-black uppercase shadow hover:bg-blue-700 transition"
                                 >
                                   + Thêm bài
@@ -776,7 +795,7 @@ const AdminPage: React.FC = () => {
                                     <div className="flex gap-2 shrink-0">
                                       <button
                                         type="button"
-                                        onClick={() => openCreateModal(selectedLevelSymbol, day, ex.id)}
+                                        onClick={() => openCreateModal(selectedLevelForDays, day, ex.id)}
                                         className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
                                       >
                                         Sửa
@@ -840,12 +859,16 @@ const AdminPage: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeModal}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b border-gray-100 px-8 py-6 flex justify-between items-center rounded-t-3xl z-10">
-                <h3 className="text-xl font-heading font-black text-gray-800 uppercase tracking-tight">Thiết lập ngày {trackForm.day_no} — {getLevelLabel(trackForm.level_symbol)}</h3>
+                <h3 className="text-xl font-heading font-black text-gray-800 uppercase tracking-tight">
+                  Thiết lập ngày {trackForm.day_no} — {getStudyLevelLabel(trackForm.study_level_id)}
+                </h3>
                 <button type="button" onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
               </div>
               <form onSubmit={handleTrackFormSubmit} className="p-8 space-y-5">
                 {(() => {
-                  const list = trackExercises.filter(e => e.level_symbol === trackForm.level_symbol && e.day_no === trackForm.day_no);
+                  const list = trackExercises.filter(
+                    e => (e.study_level_id || getStudyLevelIdFromLegacySymbol(e.level_symbol)) === trackForm.study_level_id && e.day_no === trackForm.day_no
+                  );
                   if (list.length === 0) return null;
                   return (
                     <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
@@ -864,7 +887,7 @@ const AdminPage: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex gap-2 shrink-0">
-                              <button type="button" onClick={() => openCreateModal(trackForm.level_symbol, trackForm.day_no, ex.id)} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50">
+                              <button type="button" onClick={() => openCreateModal(trackForm.study_level_id, trackForm.day_no, ex.id)} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50">
                                 Sửa
                               </button>
                               <button type="button" onClick={() => deleteTrackExercise(ex.id)} className="px-3 py-1.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100">
@@ -931,11 +954,14 @@ const AdminPage: React.FC = () => {
                   <div>
                     <label className="block text-xs font-heading font-black text-gray-500 uppercase mb-1.5">Cấp độ</label>
                     <select
-                      value={trackForm.level_symbol}
-                      onChange={e => setTrackForm(f => ({ ...f, level_symbol: e.target.value }))}
+                      value={trackForm.study_level_id}
+                      onChange={e => setTrackForm(f => {
+                        const studyId = e.target.value as StudyLevelId;
+                        return { ...f, study_level_id: studyId, level_symbol: getLegacySymbolFromStudyLevelId(studyId) };
+                      })}
                       className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue"
                     >
-                      {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                      {STUDY_LEVELS.map((lv) => <option key={lv.id} value={lv.id}>{lv.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1069,6 +1095,7 @@ const AdminPage: React.FC = () => {
             setDayQuickTemplatePicker(null);
             setTrackSyncStatus('⏳ Đang đổi tệp JSON cho ngày...');
             const res = await trainingTrackService.adminUpsertDayFromTemplate({
+              study_level_id: ctx.study_level_id,
               level_symbol: ctx.level_symbol,
               day_no: ctx.day_no,
               templatePayload: item.payload,
@@ -1078,7 +1105,7 @@ const AdminPage: React.FC = () => {
               setTrackSyncStatus(`❌ Đổi tệp thất bại: ${res.error || 'Unknown error'}`);
               return;
             }
-            await refreshTrackFromSupabase(ctx.level_symbol);
+            await refreshTrackFromSupabase(ctx.study_level_id);
             setTrackSyncStatus('✅ Đã đổi tệp JSON');
             setTimeout(() => setTrackSyncStatus(''), 1500);
           }}

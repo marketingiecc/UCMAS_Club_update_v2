@@ -277,6 +277,44 @@ alter table public.profiles
   alter column study_level_id set default 'study_basic',
   alter column exam_level_id set default 'exam_basic';
 
+-- =========================================================
+-- 5) Training tracks: split by study_level_id (independent)
+-- =========================================================
+alter table public.training_tracks
+  add column if not exists study_level_id text;
+
+create index if not exists idx_training_tracks_study_level_id
+  on public.training_tracks(study_level_id);
+
+-- Backfill existing tracks from legacy level_symbol
+update public.training_tracks t
+set study_level_id = case t.level_symbol
+  when 'Z' then 'study_basic_extended'
+  when 'A' then 'study_basic'
+  when 'C' then 'study_elementary_a'
+  when 'D' then 'study_elementary_b'
+  when 'E' then 'study_intermediate_a'
+  when 'F' then 'study_intermediate_b'
+  when 'G' then 'study_advanced_a'
+  when 'H' then 'study_advanced_b'
+  when 'I' then 'study_enhanced'
+  when 'K' then 'study_excellent_a'
+  else t.study_level_id
+end
+where t.study_level_id is null;
+
+-- Add FK for track->study level once data is backfilled.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'training_tracks_study_level_id_fkey'
+  ) then
+    alter table public.training_tracks
+      add constraint training_tracks_study_level_id_fkey
+      foreign key (study_level_id) references public.study_levels(id);
+  end if;
+end $$;
+
 -- Recreate FKs after all normalization/backfill is complete.
 do $$
 begin
@@ -298,7 +336,7 @@ begin
 end $$;
 
 -- =========================================================
--- 5) Ensure cups RLS policy exists (if table exists)
+-- 6) Ensure cups RLS policy exists (if table exists)
 -- =========================================================
 do $$
 begin
@@ -322,7 +360,7 @@ begin
 end $$;
 
 -- =========================================================
--- 6) Recreate RPC with study_level_id + exam_level_id
+-- 7) Recreate RPC with study_level_id + exam_level_id
 -- =========================================================
 drop function if exists public.rpc_get_students_progress_summary(uuid, uuid, text, timestamptz, timestamptz, int, int);
 
