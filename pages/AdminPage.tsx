@@ -2,7 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { backend } from '../services/mockBackend';
 import { UserProfile, AttemptResult, Question } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES } from '../config/levelsAndDifficulty';
+import {
+  DIFFICULTIES,
+  LEVEL_SYMBOLS_ORDER,
+  STUDY_LEVELS,
+  getLegacySymbolFromStudyLevelId,
+  getLevelLabel,
+  getStudyLevelLabel,
+  type StudyLevelId,
+} from '../config/levelsAndDifficulty';
 import { trainingTrackService, type TrackExercise as DbTrackExercise } from '../services/trainingTrackService';
 import TrackDayLibraryPickerModal from '../components/TrackDayLibraryPickerModal';
 import { downloadTrackDayTemplateSampleJson, trackDayLibraryService, type TrackDayTemplatePayloadV1 } from '../services/trackDayLibraryService';
@@ -16,6 +24,7 @@ const MODES = [
 const TRACK_TOTAL_DAYS = 96;
 const TRACK_DAYS_PER_WEEK = 6;
 const TRACK_TOTAL_WEEKS = 16;
+const ALL_TRACK_LEVEL_SYMBOLS = Array.from(new Set(STUDY_LEVELS.map((lv) => getLegacySymbolFromStudyLevelId(lv.id))));
 
 /** Bài luyện tập trong lộ trình (1 bài = 1 ngày, 1 chế độ, có thể kèm JSON) */
 export interface TrackExerciseEntry {
@@ -69,10 +78,10 @@ const AdminPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPresetLevel, setModalPresetLevel] = useState<string | null>(null);
   /** Khi set: hiển thị danh sách 120 ngày để thiết lập cho cấp này */
-  const [selectedLevelForDays, setSelectedLevelForDays] = useState<string | null>(null);
+  const [selectedLevelForDays, setSelectedLevelForDays] = useState<StudyLevelId | null>(null);
   const [selectedTrackWeekIndex, setSelectedTrackWeekIndex] = useState(0);
   const [trackTemplatePickerOpen, setTrackTemplatePickerOpen] = useState(false);
-  const [dayQuickTemplatePicker, setDayQuickTemplatePicker] = useState<{ level_symbol: string; day_no: number } | null>(null);
+  const [dayQuickTemplatePicker, setDayQuickTemplatePicker] = useState<{ study_level_id: StudyLevelId; level_symbol: string; day_no: number } | null>(null);
   const [templateViewer, setTemplateViewer] = useState<{ open: boolean; loading: boolean; item: any | null; error: string | null }>({
     open: false,
     loading: false,
@@ -109,7 +118,7 @@ const AdminPage: React.FC = () => {
     try {
       setTrackSyncStatus('⏳ Đang tải lộ trình từ Supabase...');
 
-      const levels = levelSymbol ? [levelSymbol] : LEVEL_SYMBOLS_ORDER;
+      const levels = levelSymbol ? [levelSymbol] : ALL_TRACK_LEVEL_SYMBOLS;
       const snaps = await Promise.all(levels.map((lv) => trainingTrackService.getPublishedTrackSnapshot(lv, TRACK_TOTAL_DAYS)));
       const all: TrackExerciseEntry[] = [];
       snaps.forEach((snap) => {
@@ -627,7 +636,8 @@ const AdminPage: React.FC = () => {
                 <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">Thiết kế lộ trình luyện tập</h3>
                 <p className="text-gray-500 text-sm mb-8 px-2">Chọn cấp độ và bấm Thiết lập để cấu hình bài luyện tập cho lộ trình mới (1–96), chia 16 tuần (mỗi tuần 6 ngày). Có thể thêm nhiều bài trong 1 ngày.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 px-2">
-                  {LEVEL_SYMBOLS_ORDER.map((symbol) => {
+                  {STUDY_LEVELS.map((studyLevel) => {
+                    const symbol = getLegacySymbolFromStudyLevelId(studyLevel.id);
                     const daysConfigured = new Set(
                       trackExercises
                         .filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS)
@@ -635,13 +645,13 @@ const AdminPage: React.FC = () => {
                     ).size;
                     const totalExercises = trackExercises.filter(e => e.level_symbol === symbol && e.day_no >= 1 && e.day_no <= TRACK_TOTAL_DAYS).length;
                     return (
-                      <div key={symbol} className="bg-gray-50 rounded-2xl border-2 border-gray-100 p-6 flex flex-col items-center justify-center min-h-[140px] hover:border-ucmas-blue/30 transition-colors">
-                        <div className="text-2xl font-heading font-black text-ucmas-blue mb-2">{getLevelLabel(symbol)}</div>
+                      <div key={studyLevel.id} className="bg-gray-50 rounded-2xl border-2 border-gray-100 p-6 flex flex-col items-center justify-center min-h-[140px] hover:border-ucmas-blue/30 transition-colors">
+                        <div className="text-2xl font-heading font-black text-ucmas-blue mb-2">{studyLevel.name}</div>
                         {daysConfigured > 0 && <div className="text-xs text-gray-500 mb-1">{daysConfigured} ngày đã thiết lập</div>}
                         {totalExercises > 0 && <div className="text-[10px] text-gray-400 mb-3">{totalExercises} bài</div>}
                         <button
                           type="button"
-                          onClick={() => setSelectedLevelForDays(symbol)}
+                          onClick={() => setSelectedLevelForDays(studyLevel.id)}
                           className="px-4 py-2.5 bg-ucmas-blue text-white rounded-xl text-xs font-heading font-black uppercase shadow-md hover:bg-blue-700 transition"
                         >
                           Thiết lập
@@ -660,7 +670,7 @@ const AdminPage: React.FC = () => {
                 >
                   ← Quay lại chọn cấp độ
                 </button>
-                <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">{getLevelLabel(selectedLevelForDays)} — 16 tuần (96 ngày)</h3>
+                <h3 className="text-2xl font-heading font-black text-gray-800 uppercase tracking-tight mb-2 px-2">{getStudyLevelLabel(selectedLevelForDays)} — 16 tuần (96 ngày)</h3>
                 <p className="text-gray-500 text-sm mb-6 px-2">Chọn tuần, sau đó bấm vào ngày để thêm bài. Mỗi ngày có thể có nhiều bài (nhấn “+ Thêm bài”).</p>
 
                 <div className="flex gap-2 flex-wrap items-center px-2 mb-5">
@@ -685,10 +695,11 @@ const AdminPage: React.FC = () => {
                 {(() => {
                   const startDay = selectedTrackWeekIndex * TRACK_DAYS_PER_WEEK + 1;
                   const days = Array.from({ length: TRACK_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= TRACK_TOTAL_DAYS);
+                  const selectedLevelSymbol = getLegacySymbolFromStudyLevelId(selectedLevelForDays);
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
                       {days.map((day) => {
-                        const dayList = trackExercises.filter(e => e.level_symbol === selectedLevelForDays && e.day_no === day);
+                        const dayList = trackExercises.filter(e => e.level_symbol === selectedLevelSymbol && e.day_no === day);
                         const dayTemplate = dayList.find((e) => e.source === 'json_upload' && e.template_id && e.template_name) ?? null;
                         const summary = dayList.length
                           ? dayList
@@ -723,14 +734,14 @@ const AdminPage: React.FC = () => {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setDayQuickTemplatePicker({ level_symbol: selectedLevelForDays, day_no: day })}
+                                      onClick={() => setDayQuickTemplatePicker({ study_level_id: selectedLevelForDays, level_symbol: selectedLevelSymbol, day_no: day })}
                                       className="px-3 py-1 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
                                     >
                                       Đổi tệp
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => deleteJsonTemplateForDay(selectedLevelForDays, day)}
+                                      onClick={() => deleteJsonTemplateForDay(selectedLevelSymbol, day)}
                                       className="px-3 py-1 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-heading font-black uppercase hover:bg-red-100"
                                     >
                                       Xóa tệp
@@ -742,7 +753,7 @@ const AdminPage: React.FC = () => {
                               <div className="flex flex-col gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => openCreateModal(selectedLevelForDays, day)}
+                                  onClick={() => openCreateModal(selectedLevelSymbol, day)}
                                   className="px-4 py-2 bg-ucmas-blue text-white rounded-xl text-[10px] font-heading font-black uppercase shadow hover:bg-blue-700 transition"
                                 >
                                   + Thêm bài
@@ -765,7 +776,7 @@ const AdminPage: React.FC = () => {
                                     <div className="flex gap-2 shrink-0">
                                       <button
                                         type="button"
-                                        onClick={() => openCreateModal(selectedLevelForDays, day, ex.id)}
+                                        onClick={() => openCreateModal(selectedLevelSymbol, day, ex.id)}
                                         className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[10px] font-heading font-black uppercase hover:bg-gray-50"
                                       >
                                         Sửa
