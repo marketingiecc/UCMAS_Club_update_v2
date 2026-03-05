@@ -31,6 +31,9 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
     const n = parseUserNumber(userAnswers[i]);
     return isCorrectAnswer(n, q.correctAnswer);
   }).length;
+  const totalQuestions = questions.length;
+  const safeTotal = Math.max(1, totalQuestions);
+  const percentage = Math.round((correctCount / safeTotal) * 100);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black bg-opacity-50 backdrop-blur-sm animate-fade-in">
@@ -41,9 +44,9 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
           <div className="min-w-0">
             <h3 className="text-base sm:text-xl font-heading-bold truncate">{title || 'Chi tiết kết quả'}</h3>
             <p className="text-blue-100 text-xs sm:text-sm mt-1 sm:mt-2 font-medium">
-              Đúng: <span className="font-heading-bold text-white text-lg">{correctCount}</span>/{questions.length} câu
+              Đúng: <span className="font-heading-bold text-white text-lg">{correctCount}</span>/{totalQuestions} câu
               <span className="ml-3 text-ucmas-yellow">
-                {Math.round((correctCount / questions.length) * 100)}%
+                {percentage}%
               </span>
             </p>
           </div>
@@ -58,6 +61,11 @@ const ResultDetailModal: React.FC<ResultDetailModalProps> = ({ isOpen, onClose, 
 
         {/* Content - Scrollable */}
         <div className="p-3 sm:p-6 overflow-y-auto bg-gray-50 flex-grow">
+          {totalQuestions === 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-600 text-center">
+              Chưa có dữ liệu chi tiết cho bài làm này.
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {questions.map((q, idx) => {
               const userAns = userAnswers[idx];

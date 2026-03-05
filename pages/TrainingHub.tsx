@@ -63,10 +63,14 @@ type SelectedMode = 'visual' | 'audio' | 'flash';
 const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<TabId>('mode');
+  const isModeTabLocked = user.role !== 'admin';
+  const [activeTab, setActiveTab] = useState<TabId>(isModeTabLocked ? 'path' : 'mode');
   useEffect(() => {
     const state = location.state as { openTab?: TabId; openMode?: SelectedMode; pathDay?: number } | null;
-    if (state?.openTab) setActiveTab(state.openTab);
+    if (state?.openTab) {
+      const requestedTab = (state.openTab === 'mode' && isModeTabLocked) ? 'path' : state.openTab;
+      setActiveTab(requestedTab);
+    }
     if (state?.openMode) {
       if (state.openTab === 'elite') setSelectedModeElite(state.openMode);
       if (state.openTab === 'mode') setSelectedModePractice(state.openMode);
@@ -77,7 +81,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
       const w = Math.floor((state.pathDay - 1) / PATH_DAYS_PER_WEEK);
       if (Number.isFinite(w) && w >= 0) setPathWeekIndex(w);
     }
-  }, [location.state]);
+  }, [isModeTabLocked, location.state]);
 
   // Lộ trình: tab con (0-3 = 1-30, 31-60, 61-90, 91-120), ngày đang xem chi tiết
   const [pathWeekIndex, setPathWeekIndex] = useState(0);
@@ -511,9 +515,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
         <h1 className="text-lg sm:text-xl font-heading-bold text-ucmas-blue mb-3 lg:mb-6">Trung tâm luyện tập</h1>
         <nav className="flex flex-row lg:flex-col gap-2 lg:gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0">
           {[
-            { id: 'mode' as TabId, label: 'Luyện theo chế độ', icon: '📋' },
             { id: 'path' as TabId, label: 'Luyện theo lộ trình', icon: '🏁' },
             { id: 'elite' as TabId, label: 'Luyện thi HSG', icon: '🏆' },
+            ...(!isModeTabLocked ? [{ id: 'mode' as TabId, label: 'Luyện theo chế độ', icon: '📋' }] : []),
           ].map((tab) => (
             <button
               key={tab.id}
@@ -533,7 +537,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {activeTab === 'mode' && (
+        {activeTab === 'mode' && !isModeTabLocked && (
           <div className="space-y-4 sm:space-y-8">
             <h2 className="text-xl sm:text-2xl font-heading-bold text-ucmas-blue">Luyện theo chế độ</h2>
             <p className="text-gray-600 text-sm sm:text-base">Chọn cấp độ, độ khó và số câu. Kết quả lưu vào Lịch sử luyện tập.</p>

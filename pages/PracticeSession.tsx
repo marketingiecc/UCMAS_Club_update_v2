@@ -63,6 +63,20 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   useEffect(() => {
     if (user.role === 'admin') return;
 
+    const isAllowedNonAdminFlow =
+      origin === 'contests_creative' ||
+      returnTo?.tab === 'elite' ||
+      returnTo?.tab === 'path' ||
+      locationState?.elite === true;
+
+    if (!isAllowedNonAdminFlow) {
+      navigate('/training', { replace: true, state: { openTab: 'elite' as const } });
+    }
+  }, [locationState?.elite, navigate, origin, returnTo?.tab, user.role]);
+
+  useEffect(() => {
+    if (user.role === 'admin') return;
+
     const now = new Date();
     const expiry = user.license_expiry ? new Date(user.license_expiry) : null;
     const hasActiveLicense = !!(expiry && expiry > now);
@@ -1015,7 +1029,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             'text-5xl md:text-6xl';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
+    <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8 flex gap-8">
       {/* Left Sidebar (hide in Flash for max size) */}
       {currentMode !== Mode.FLASH && (
         <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit shrink-0">
@@ -1083,16 +1097,18 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             <span className="text-2xl font-heading font-mono font-black">{Math.floor(timeLeft / 60)}:{((timeLeft % 60)).toString().padStart(2, '0')}</span>
           </div>
 
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
+          <div className="flex-1 flex flex-col items-center justify-start lg:justify-center p-4 lg:p-8 bg-white relative overflow-y-auto">
 
             {/* VISUAL MODE DISPLAY */}
             {currentMode === Mode.VISUAL && (
-              <div className="bg-gray-50 px-10 py-5 rounded-[2rem] w-fit mx-auto shadow-inner border border-gray-100 flex flex-col items-end">
-                {currentQ.operands.map((num, i) => (
-                  <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`} style={{ fontFamily: 'DnEalianManuscript' }}>{num}</div>
-                ))}
-                <div className="border-t-4 border-gray-300 w-full mt-4 mb-4"></div>
-                <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
+              <div className="max-h-[60vh] overflow-y-auto w-full flex justify-center">
+                <div className="bg-gray-50 px-6 lg:px-10 py-5 rounded-[2rem] w-fit mx-auto shadow-inner border border-gray-100 flex flex-col items-end">
+                  {currentQ.operands.map((num, i) => (
+                    <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`} style={{ fontFamily: 'DnEalianManuscript' }}>{num}</div>
+                  ))}
+                  <div className="border-t-4 border-gray-300 w-full mt-4 mb-4"></div>
+                  <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
+                </div>
               </div>
             )}
 

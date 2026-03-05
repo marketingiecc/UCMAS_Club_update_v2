@@ -346,8 +346,11 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
     try {
       let correct = 0;
+      let answeredCount = 0;
       questions.forEach((q, idx) => {
-        const userNum = parseUserNumber(answers[idx]);
+        const raw = answers[idx];
+        if (raw !== undefined && String(raw).trim() !== '') answeredCount++;
+        const userNum = parseUserNumber(raw);
         if (isCorrectAnswer(userNum, q.correctAnswer)) correct++;
       });
 
@@ -368,8 +371,21 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
         userId: user.id,
         examId: navState?.examId,
         mode: currentMode,
-        config: navState?.customConfig || {},
-        score: { correct, total: questions.length },
+        config: {
+          ...(navState?.customConfig || {}),
+          attempt_snapshot: {
+            answered_count: answeredCount,
+            total_questions: questions.length,
+            answers,
+            questions: questions.map((q) => ({
+              id: q.id,
+              operands: q.operands,
+              correctAnswer: q.correctAnswer,
+              displayLines: q.displayLines,
+            })),
+          },
+        },
+        score: { correct, total: answeredCount },
         duration: Math.max(0, (initialTimeLimit || 0) - (timeLeft || 0)),
         isCreative: !!navState?.customConfig?.isCreative
       });
@@ -651,7 +667,7 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const levelLabel = getLevelLabel(levelSymbol);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8 min-h-[80vh]">
+    <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8 flex gap-8">
       {/* Left Sidebar (hide in Flash for max size) */}
       <div className="hidden lg:block w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 h-fit shrink-0">
           <div className="flex items-center gap-3 mb-6">
@@ -742,15 +758,17 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
             <span className="text-2xl font-heading font-mono font-black">{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
           </div>
 
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white relative">
+          <div className="flex-1 flex flex-col items-center justify-start lg:justify-center p-4 lg:p-8 bg-white relative overflow-y-auto">
             {/* VISUAL MODE DISPLAY */}
             {currentMode === Mode.VISUAL && currentQ && (
-              <div className="bg-gray-50 px-10 py-5 rounded-[2rem] w-fit mx-auto shadow-inner border border-gray-100 flex flex-col items-end">
-                {visualLines.map((line, i) => (
-                  <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`} style={{ fontFamily: 'DnEalianManuscript' }}>{line}</div>
-                ))}
-                <div className="border-t-4 border-gray-300 w-full mt-4 mb-4"></div>
-                <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
+              <div className="max-h-[60vh] overflow-y-auto w-full flex justify-center">
+                <div className="bg-gray-50 px-6 lg:px-10 py-5 rounded-[2rem] w-fit mx-auto shadow-inner border border-gray-100 flex flex-col items-end">
+                  {visualLines.map((line, i) => (
+                    <div key={i} className={`${visualTextClass} font-heading font-black text-ucmas-blue mb-1.5 font-mono tracking-tighter leading-tight`} style={{ fontFamily: 'DnEalianManuscript' }}>{line}</div>
+                  ))}
+                  <div className="border-t-4 border-gray-300 w-full mt-4 mb-4"></div>
+                  <div className={`${visualTextClass} font-heading font-black text-gray-300`}>?</div>
+                </div>
               </div>
             )}
 

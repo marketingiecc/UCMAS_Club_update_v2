@@ -34,10 +34,48 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
           setSelectedAnswers(answers);
           setSelectedAttempt(h);
       } else {
-          // Luyện tập có thể không lưu answers chi tiết trong bảng cũ, 
-          // nhưng ta vẫn hiển thị thông tin snapshot nếu có
-          setSelectedAttempt(h);
+          const snapshot = h?.config?.attempt_snapshot;
+          const questions = Array.isArray(snapshot?.questions) ? snapshot.questions : [];
+          const answers = snapshot?.answers && typeof snapshot.answers === 'object' ? snapshot.answers : {};
+          if (questions.length === 0) {
+            alert('Bản ghi này chỉ có kết quả tổng, chưa có dữ liệu chi tiết bài làm.');
+            return;
+          }
+          setSelectedAnswers(answers);
+          setSelectedAttempt({ ...h, exam_data: { ...(h.exam_data || {}), questions } });
       }
+  };
+
+  const getAttemptedCount = (h: any) => {
+      const fromSnapshot = Number(h?.config?.attempt_snapshot?.answered_count || 0);
+      if (Number.isFinite(fromSnapshot) && fromSnapshot > 0) return fromSnapshot;
+      const fromScore = Number(h?.score_total || 0);
+      if (Number.isFinite(fromScore) && fromScore > 0) return fromScore;
+      return 0;
+  };
+
+  const getScoreLabel = (h: any) => {
+      const correct = Number(h?.score_correct || 0);
+      const attempted = getAttemptedCount(h);
+      return `${correct}/${attempted}`;
+  };
+
+  const getPracticeTypeLabel = (h: any) => {
+      if (activeTab === 'contest') return 'Thi đấu';
+      if (h.is_custom_creative) return 'Sáng tạo';
+      return h.assigned_practice_exams?.name || h.practice_exams?.name || 'Giao đề';
+  };
+
+  const getPracticeTypeClass = (h: any) => {
+      if (activeTab === 'contest') return 'bg-ucmas-blue/10 text-ucmas-blue border border-ucmas-blue/20';
+      if (h.is_custom_creative) return 'bg-ucmas-red/10 text-ucmas-red border border-ucmas-red/20';
+      return 'bg-ucmas-green/10 text-ucmas-green border border-ucmas-green/20';
+  };
+
+  const getPracticeTypeClassMobile = (h: any) => {
+      if (activeTab === 'contest') return 'bg-ucmas-blue/10 text-ucmas-blue';
+      if (h.is_custom_creative) return 'bg-ucmas-red/10 text-ucmas-red';
+      return 'bg-ucmas-green/10 text-ucmas-green';
   };
 
   const list = activeTab === 'contest' ? history : pHistory;
@@ -88,11 +126,11 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
                             <td className="px-10 py-6 text-sm font-mono text-gray-600">{new Date(h.created_at).toLocaleString('vi-VN')}</td>
                             <td className="px-10 py-6 font-heading font-bold uppercase text-xs text-gray-800">{h.mode}</td>
                             <td className="px-10 py-6 font-heading-extrabold text-xl text-ucmas-blue">
-                                {h.score_correct || 0}<span className="text-sm text-gray-400 font-medium">/{h.score_total || 0}</span>
+                                {h.score_correct || 0}<span className="text-sm text-gray-400 font-medium">/{getAttemptedCount(h)}</span>
                             </td>
                             <td className="px-10 py-6">
-                                <span className={`text-[10px] font-heading-bold uppercase tracking-widest px-3 py-1.5 rounded-full ${activeTab === 'contest' ? 'bg-ucmas-blue/10 text-ucmas-blue border border-ucmas-blue/20' : h.is_custom_creative ? 'bg-ucmas-red/10 text-ucmas-red border border-ucmas-red/20' : 'bg-ucmas-green/10 text-ucmas-green border border-ucmas-green/20'}`}>
-                                    {activeTab === 'contest' ? 'Thi đấu' : h.is_custom_creative ? 'Sáng tạo' : h.practice_exams?.name || 'Giao đề'}
+                                <span className={`text-[10px] font-heading-bold uppercase tracking-widest px-3 py-1.5 rounded-full ${getPracticeTypeClass(h)}`}>
+                                    {getPracticeTypeLabel(h)}
                                 </span>
                             </td>
                             <td className="px-10 py-6 text-right">
@@ -116,9 +154,9 @@ const HistoryPage: React.FC<{ userId: string }> = ({ userId }) => {
                         <div className="text-xs text-gray-500 font-mono">{new Date(h.created_at).toLocaleString('vi-VN')}</div>
                         <div className="font-heading font-bold text-gray-800 mt-0.5 uppercase text-xs">{h.mode}</div>
                         <div className="text-sm mt-0.5">
-                            <span className="font-heading-extrabold text-ucmas-blue">{h.score_correct || 0}/{h.score_total || 0}</span>
-                            <span className={`ml-2 text-[10px] font-heading-bold uppercase px-2 py-0.5 rounded-full ${activeTab === 'contest' ? 'bg-ucmas-blue/10 text-ucmas-blue' : h.is_custom_creative ? 'bg-ucmas-red/10 text-ucmas-red' : 'bg-ucmas-green/10 text-ucmas-green'}`}>
-                                {activeTab === 'contest' ? 'Thi đấu' : h.is_custom_creative ? 'Sáng tạo' : h.practice_exams?.name || 'Giao đề'}
+                            <span className="font-heading-extrabold text-ucmas-blue">{getScoreLabel(h)}</span>
+                            <span className={`ml-2 text-[10px] font-heading-bold uppercase px-2 py-0.5 rounded-full ${getPracticeTypeClassMobile(h)}`}>
+                                {getPracticeTypeLabel(h)}
                             </span>
                         </div>
                     </div>

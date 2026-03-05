@@ -105,11 +105,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
     if (historyTab === 'contest') {
       const answers = await backend.getAttemptAnswers(h.id);
       setSelectedAnswers(answers);
+      setSelectedAttempt(h);
+      return;
     }
-    setSelectedAttempt(h);
+    const snapshot = h?.config?.attempt_snapshot;
+    const questions = Array.isArray(snapshot?.questions) ? snapshot.questions : [];
+    const answers = snapshot?.answers && typeof snapshot.answers === 'object' ? snapshot.answers : {};
+    if (questions.length === 0) {
+      alert('Bản ghi này chỉ có kết quả tổng, chưa có dữ liệu chi tiết bài làm.');
+      return;
+    }
+    setSelectedAnswers(answers);
+    setSelectedAttempt({ ...h, exam_data: { ...(h.exam_data || {}), questions } });
   };
 
   const list = historyTab === 'contest' ? history : pHistory;
+  const getAttemptedCount = (h: any) => {
+    const fromSnapshot = Number(h?.config?.attempt_snapshot?.answered_count || 0);
+    if (Number.isFinite(fromSnapshot) && fromSnapshot > 0) return fromSnapshot;
+    const fromScore = Number(h?.score_total || 0);
+    if (Number.isFinite(fromScore) && fromScore > 0) return fromScore;
+    return 0;
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6 sm:py-10">
@@ -349,7 +366,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
                       <td className="px-6 py-3 text-sm font-medium">{h.mode || '—'}</td>
                       <td className="px-6 py-3 text-sm">
                         {h.score_correct != null && h.score_total != null
-                          ? `${h.score_correct}/${h.score_total}`
+                          ? `${h.score_correct}/${getAttemptedCount(h)}`
                           : h.score ?? '—'}
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-600">
@@ -382,7 +399,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
                     <div className="text-xs text-gray-500 font-medium">{h.created_at ? new Date(h.created_at).toLocaleString('vi-VN') : '—'}</div>
                     <div className="font-heading font-semibold text-gray-800 mt-0.5">{h.mode || '—'}</div>
                     <div className="text-sm text-gray-600 mt-0.5">
-                      {h.score_correct != null && h.score_total != null ? `${h.score_correct}/${h.score_total}` : h.score ?? '—'}
+                      {h.score_correct != null && h.score_total != null ? `${h.score_correct}/${getAttemptedCount(h)}` : h.score ?? '—'}
                       <span className="ml-2 text-gray-400">• {historyTab === 'contest' ? 'Cuộc thi' : 'Luyện tập'}</span>
                     </div>
                   </div>
