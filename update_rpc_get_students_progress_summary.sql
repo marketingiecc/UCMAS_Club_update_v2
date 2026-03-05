@@ -36,6 +36,8 @@ returns table (
   email text,
   student_code text,
   phone text,
+  study_level_id text,  -- [NEW]
+  exam_level_id text,   -- [NEW]
   level_symbol text,    -- [NEW]
   cups_count int,       -- [NEW]
   class_names text,
@@ -278,6 +280,8 @@ begin
       p.email,
       p.student_code,
       p.phone,
+      p.study_level_id,
+      p.exam_level_id,
       p.level_symbol,
       coalesce(uca.total_cups, 0) as cups_count,
       ca.class_names,

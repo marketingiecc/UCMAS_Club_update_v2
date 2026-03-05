@@ -3,7 +3,20 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { UserProfile, Mode } from '../types';
 import CustomSlider from '../components/CustomSlider';
 import { practiceModeSettings, type DifficultyKey, type ModeKey } from '../services/practiceModeSettings';
-import { getLevelLabel, LEVEL_SYMBOLS_ORDER, DIFFICULTIES, type LevelSymbol } from '../config/levelsAndDifficulty';
+import {
+  DIFFICULTIES,
+  EXAM_LEVELS,
+  STUDY_LEVELS,
+  getDefaultExamLevelId,
+  getDefaultStudyLevelId,
+  getExamLevelIdFromLegacySymbol,
+  getLegacySymbolFromExamLevelId,
+  getLegacySymbolFromStudyLevelId,
+  getStudyLevelIdFromLegacySymbol,
+  getStudyLevelLabel,
+  type ExamLevelId,
+  type StudyLevelId,
+} from '../config/levelsAndDifficulty';
 import { canUseTrial, getTrialCount } from '../services/trialUsage';
 import { trainingTrackService, type TrackSnapshot } from '../services/trainingTrackService';
 
@@ -94,7 +107,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
   // Tab 1: Luyện theo chế độ — chọn chế độ trước, sau đó hiện form
   const [selectedModePractice, setSelectedModePractice] = useState<SelectedMode | null>(null);
-  const [modeLevel, setModeLevel] = useState<string>(user.level_symbol || 'A');
+  const [modeStudyLevelId, setModeStudyLevelId] = useState<StudyLevelId>(
+    (user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol) || getDefaultStudyLevelId()) as StudyLevelId
+  );
   const [modeDifficulty, setModeDifficulty] = useState<string>('basic');
   const [modeQuestionCount, setModeQuestionCount] = useState(20);
   const [modeSpeedRead, setModeSpeedRead] = useState(1.2);   // Tốc độ đọc (chỉ Nghe tính)
@@ -103,7 +118,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
 
   // Tab 3: Luyện thi HSG — chọn chế độ trước, sau đó hiện form
   const [selectedModeElite, setSelectedModeElite] = useState<SelectedMode | null>(null);
-  const [eliteLevel, setEliteLevel] = useState<string>(user.level_symbol || 'A');
+  const [eliteExamLevelId, setEliteExamLevelId] = useState<ExamLevelId>(
+    (user.exam_level_id || getExamLevelIdFromLegacySymbol(user.level_symbol) || getDefaultExamLevelId()) as ExamLevelId
+  );
   const [eliteSource, setEliteSource] = useState<'auto' | 'bank'>('auto');
   const [eliteDigits, setEliteDigits] = useState(2);
   const [eliteRows, setEliteRows] = useState(5);
@@ -142,7 +159,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
   const modeKey = selectedModePractice as ModeKey | null;
   const modeLimits = (
     modeKey
-      ? practiceModeSettings.getLimits(modeLevel as LevelSymbol, modeKey, modeDifficulty as DifficultyKey)
+      ? practiceModeSettings.getLimits(modeStudyLevelId, modeKey, modeDifficulty as DifficultyKey)
       : null
   );
 
@@ -185,7 +202,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     const speed = typeof rawSpeed === 'number' ? clampSpeedSeconds(rawSpeed) : undefined;
 
     // Apply admin-configured ranges for the selected level + difficulty.
-    const levelSym = (modeLevel || (user.level_symbol || 'A')) as LevelSymbol;
+    const levelSym = modeStudyLevelId || getStudyLevelIdFromLegacySymbol(user.level_symbol);
     const key: ModeKey =
       mode === Mode.VISUAL ? 'visual' :
         mode === Mode.LISTENING ? 'audio' :
@@ -203,7 +220,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     const speedMax = limits.speed_seconds_max ?? 1.5;
     const clampedSpeed = typeof speed === 'number' ? Math.min(speedMax, Math.max(speedMin, speed)) : undefined;
     const config = {
-      level_symbol: modeLevel,
+      study_level_id: modeStudyLevelId,
+      level_symbol: getLegacySymbolFromStudyLevelId(modeStudyLevelId),
       difficulty: modeDifficulty,
       question_count: qCount,
       digits,
@@ -233,7 +251,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
         customConfig: {
           numQuestions: 200,
           timeLimit: 480,
-          level: eliteLevel,
+          exam_level_id: eliteExamLevelId,
+          level: getLegacySymbolFromExamLevelId(eliteExamLevelId),
           source: eliteSource,
         },
         returnTo: { tab: 'elite' as const, mode: 'visual' as const },
@@ -289,10 +308,11 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     });
   };
 
-  const userLevel = user.level_symbol || 'A';
+  const userStudyLevelId = (user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol) || getDefaultStudyLevelId()) as StudyLevelId;
+  const userLegacyLevelSymbol = getLegacySymbolFromStudyLevelId(userStudyLevelId);
   const exercisesForLevel = useMemo(
-    () => pathExercises.filter(e => e.level_symbol === userLevel),
-    [pathExercises, userLevel]
+    () => pathExercises.filter(e => e.level_symbol === userLegacyLevelSymbol),
+    [pathExercises, userLegacyLevelSymbol]
   );
   const pathDaysCompleted = useMemo(
     () => getPathDaysCompleted(user.id),
@@ -304,7 +324,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     let mounted = true;
     (async () => {
       try {
-        const snap = await trainingTrackService.getPublishedTrackSnapshot(userLevel, PATH_TOTAL_DAYS);
+        const snap = await trainingTrackService.getPublishedTrackSnapshot(userLegacyLevelSymbol, PATH_TOTAL_DAYS);
         if (!mounted) return;
         if (snap) {
           setPathSnapshot(snap);
@@ -340,7 +360,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     return () => {
       mounted = false;
     };
-  }, [userLevel]);
+  }, [userLegacyLevelSymbol]);
 
   // Load progress for visible week (checkmarks + score notes)
   useEffect(() => {
@@ -407,7 +427,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     // If a day has NO exercises, it is technically "complete" (nothing to do).
     // So we check if there are ANY incomplete days among the days that HAVE exercises.
 
-    const daysWithExercises = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLevel));
+    const daysWithExercises = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLegacyLevelSymbol));
     // If a week has 0 exercises total, can they claim? Probably yes or just N/A. Let's assume yes if they visited.
 
     const incompleteDays = daysWithExercises.filter(d => {
@@ -472,7 +492,8 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
     }
     const modeSlug = ex.mode === 'visual' ? 'nhin_tinh' : ex.mode === 'audio' ? 'nghe_tinh' : 'flash';
     const config: Record<string, unknown> = {
-      level_symbol: userLevel,
+      study_level_id: userStudyLevelId,
+      level_symbol: userLegacyLevelSymbol,
       difficulty: ex.difficulty,
       question_count: ex.question_count,
       language: 'vi-VN',
@@ -491,7 +512,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
             trackId: ex.track_id,
             dayId: ex.day_id,
             exerciseId: ex.id,
-            levelSymbol: ex.level_symbol,
+              levelSymbol: userLegacyLevelSymbol,
             dayNo: ex.day_no,
           }
           : undefined,
@@ -622,9 +643,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                     </div>
                     <div className="p-6 space-y-5">
                       <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ</label>
-                        <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                        <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ học</label>
+                        <select value={modeStudyLevelId} onChange={(e) => setModeStudyLevelId(e.target.value as StudyLevelId)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:border-ucmas-blue focus:outline-none transition font-medium">
+                          {STUDY_LEVELS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
                       </div>
                       <div>
@@ -677,9 +698,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                     </div>
                     <div className="p-6 space-y-5">
                       <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Cấp độ</label>
-                        <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:border-ucmas-red focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                        <label className="block text-xs font-heading-bold text-ucmas-red uppercase tracking-wider mb-1.5">Cấp độ học</label>
+                        <select value={modeStudyLevelId} onChange={(e) => setModeStudyLevelId(e.target.value as StudyLevelId)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-red focus:border-ucmas-red focus:outline-none transition font-medium">
+                          {STUDY_LEVELS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
                       </div>
                       <div>
@@ -745,9 +766,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                     </div>
                     <div className="p-6 space-y-5">
                       <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Cấp độ</label>
-                        <select value={modeLevel} onChange={(e) => setModeLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-green focus:border-ucmas-green focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                        <label className="block text-xs font-heading-bold text-ucmas-green uppercase tracking-wider mb-1.5">Cấp độ học</label>
+                        <select value={modeStudyLevelId} onChange={(e) => setModeStudyLevelId(e.target.value as StudyLevelId)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-green focus:border-ucmas-green focus:outline-none transition font-medium">
+                          {STUDY_LEVELS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
                       </div>
                       <div>
@@ -804,7 +825,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
           <div className="space-y-6">
             <h2 className="text-2xl font-heading-bold text-ucmas-blue">Luyện theo lộ trình</h2>
             <p className="text-gray-600">
-              Lộ trình theo <strong>{getLevelLabel(userLevel)}</strong> (cài đặt tại Profile). Click vào từng ngày để xem bài và luyện tập.
+              Lộ trình theo <strong>{getStudyLevelLabel(userStudyLevelId)}</strong> (cài đặt tại Profile). Click vào từng ngày để xem bài và luyện tập.
             </p>
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-5 text-indigo-900 text-sm">
               Lộ trình mới gồm <strong>{PATH_TOTAL_DAYS} ngày</strong>, chia thành <strong>{PATH_TOTAL_WEEKS} tuần</strong> (mỗi tuần <strong>{PATH_DAYS_PER_WEEK} ngày</strong>). Mỗi ngày có thể có nhiều bài luyện tập (Nhìn tính, Nghe tính, Flash).
@@ -828,7 +849,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       <h3 className="text-xl font-heading-bold text-ucmas-blue mb-1">
                         Tuần {Math.ceil(selectedPathDay / PATH_DAYS_PER_WEEK)} • Ngày {((selectedPathDay - 1) % PATH_DAYS_PER_WEEK) + 1}
                       </h3>
-                      <p className="text-gray-500 text-sm mb-4">Tổng ngày {selectedPathDay} – {getLevelLabel(userLevel)}</p>
+                      <p className="text-gray-500 text-sm mb-4">Tổng ngày {selectedPathDay} – {getStudyLevelLabel(userStudyLevelId)}</p>
                       {(() => {
                         const dayExercises = exercisesForLevel.filter((e) => e.day_no === selectedPathDay);
                         if (dayExercises.length === 0) {
@@ -912,7 +933,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                       const startDay = pathWeekIndex * PATH_DAYS_PER_WEEK + 1;
                       const days = Array.from({ length: PATH_DAYS_PER_WEEK }, (_, i) => startDay + i).filter(d => d <= PATH_TOTAL_DAYS);
 
-                      const currentWeekNeededDays = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLevel));
+                      const currentWeekNeededDays = days.filter(d => pathExercises.some(e => e.day_no === d && e.level_symbol === userLegacyLevelSymbol));
                       const isWeekCompleted = currentWeekNeededDays.length > 0 && currentWeekNeededDays.every(d => {
                         const id = pathSnapshot?.dayIdByNo[d];
                         return id && completedDayIds.has(id);
@@ -935,7 +956,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                             </div>
                             <div className="text-right">
                               <div className="text-[10px] font-heading font-black uppercase tracking-widest text-gray-500">
-                                {getLevelLabel(userLevel)}
+                                {getStudyLevelLabel(userStudyLevelId)}
                               </div>
                               <div className="text-sm font-heading font-bold text-gray-700">
                                 Ngày {startDay}–{Math.min(startDay + PATH_DAYS_PER_WEEK - 1, PATH_TOTAL_DAYS)}
@@ -969,7 +990,7 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                               const hasExercises = dayExs.length > 0;
                               const hasCompleted = pathSnapshot
                                 ? completedDayIds.has(pathSnapshot.dayIdByNo[day] || '')
-                                : (pathDaysCompleted[userLevel]?.[day] === true);
+                                : (pathDaysCompleted[userLegacyLevelSymbol]?.[day] === true);
                               const modeSummary = hasExercises ? Array.from(new Set(dayExs.map(e => PATH_MODE_LABELS[e.mode]))).join(' · ') : 'Chưa có bài';
 
                               const point = ROAD_POINTS[idx] || { x: `${10 + idx * 15}%`, y: '50%' };
@@ -1196,9 +1217,9 @@ const TrainingHub: React.FC<TrainingHubProps> = ({ user }) => {
                     <div className="p-6 space-y-5">
                       <p className="text-gray-600 text-sm">Đếm ngược, xem lại câu, nộp sớm.</p>
                       <div>
-                        <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ</label>
-                        <select value={eliteLevel} onChange={(e) => setEliteLevel(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:outline-none transition font-medium">
-                          {LEVEL_SYMBOLS_ORDER.map((s) => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                        <label className="block text-xs font-heading-bold text-ucmas-blue uppercase tracking-wider mb-1.5">Cấp độ thi HSG</label>
+                        <select value={eliteExamLevelId} onChange={(e) => setEliteExamLevelId(e.target.value as ExamLevelId)} className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-ucmas-blue focus:outline-none transition font-medium">
+                          {EXAM_LEVELS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
                       </div>
                       <div>

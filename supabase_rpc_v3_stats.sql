@@ -23,6 +23,8 @@ returns table (
   email text,
   student_code text,
   phone text,
+  study_level_id text, -- Added
+  exam_level_id text, -- Added
   level_symbol text, -- Added
   class_names text,
   attempts_count int,
@@ -149,6 +151,8 @@ begin
     p.email,
     p.student_code,
     p.phone,
+    p.study_level_id,
+    p.exam_level_id,
     p.level_symbol, -- Returned
     ca.class_names,
     coalesce(aa.attempts_count, 0) as attempts_count,

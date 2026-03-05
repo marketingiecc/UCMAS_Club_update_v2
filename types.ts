@@ -11,6 +11,34 @@ export enum Mode {
 export type UserRole = 'admin' | 'teacher' | 'student' | 'user';
 
 export type LevelSymbol = 'Z' | 'A' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'K';
+export type StudyLevelId =
+  | 'study_kg1a'
+  | 'study_kg1b'
+  | 'study_kg2'
+  | 'study_kg3'
+  | 'study_kg4'
+  | 'study_advanced_a'
+  | 'study_advanced_b'
+  | 'study_basic'
+  | 'study_basic_extended'
+  | 'study_enhanced'
+  | 'study_elementary_a'
+  | 'study_elementary_b'
+  | 'study_intermediate_a'
+  | 'study_intermediate_b'
+  | 'study_excellent_a'
+  | 'study_excellent_b';
+export type ExamLevelId =
+  | 'exam_advanced_a'
+  | 'exam_advanced_b'
+  | 'exam_basic'
+  | 'exam_basic_extended'
+  | 'exam_enhanced'
+  | 'exam_elementary_a'
+  | 'exam_elementary_b'
+  | 'exam_intermediate_a'
+  | 'exam_intermediate_b'
+  | 'exam_excellent';
 
 export interface UserProfile {
   id: string;
@@ -18,6 +46,9 @@ export interface UserProfile {
   full_name: string;
   student_code?: string;
   phone?: string;
+  study_level_id?: StudyLevelId;
+  exam_level_id?: ExamLevelId;
+  /** Legacy fallback field during migration */
   level_symbol?: LevelSymbol;
   class_name?: string;
   center_id?: string;

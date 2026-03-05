@@ -6,7 +6,15 @@ import { generateExam, getExamConfig } from '../services/examService';
 import { Mode, Question, AttemptResult, UserProfile, CustomExam } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import CustomSlider from '../components/CustomSlider';
-import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import {
+  STUDY_LEVELS,
+  getDefaultStudyLevelId,
+  getLevelIndex,
+  getLegacySymbolFromStudyLevelId,
+  getStudyLevelIdFromLegacySymbol,
+  getStudyLevelLabel,
+  type StudyLevelId,
+} from '../config/levelsAndDifficulty';
 import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, playStableTts, getNgheTinhGapConfig } from '../services/googleTts';
 import { canUseTrial, consumeTrial, type TrialArea } from '../services/trialUsage';
 import { trainingTrackService } from '../services/trainingTrackService';
@@ -37,6 +45,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     origin?: 'contests_creative';
     returnTo?: { tab: 'elite' | 'mode' | 'path'; mode?: 'visual' | 'audio' | 'flash'; pathDay?: number };
     config?: {
+      study_level_id?: string;
       level_symbol?: string;
       difficulty?: string;
       question_count?: number;
@@ -127,7 +136,9 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   const [status, setStatus] = useState<'setup' | 'running' | 'finished'>('setup');
 
   const [formName, setFormName] = useState(user.full_name || '');
-  const [selectedLevelSymbol, setSelectedLevelSymbol] = useState<string>(user.level_symbol || 'A');
+  const [selectedStudyLevelId, setSelectedStudyLevelId] = useState<StudyLevelId>(
+    (user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol) || getDefaultStudyLevelId()) as StudyLevelId
+  );
   const [sourceType, setSourceType] = useState<'auto' | 'bank'>('auto');
   const [availableExams, setAvailableExams] = useState<CustomExam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>('');
@@ -183,6 +194,8 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     };
   }, []);
 
+  const selectedLevelSymbol = getLegacySymbolFromStudyLevelId(selectedStudyLevelId);
+
   useEffect(() => {
     if (sourceType === 'bank') {
       const fetchExams = async () => {
@@ -200,13 +213,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
     if (!hubConfig) return;
     setIsLoadingRule(true);
     try {
-      const levelSymbol = hubConfig.level_symbol || selectedLevelSymbol;
+      const levelSymbol = hubConfig.level_symbol || getLegacySymbolFromStudyLevelId(hubConfig.study_level_id || selectedStudyLevelId);
       const levelNum = getLevelIndex(levelSymbol);
       const numQuestions = hubConfig.question_count || 20;
       const speedSec = clampSpeedSeconds(hubConfig.speed_seconds ?? 1.2);
       // Ngôn ngữ cố định tiếng Việt (không nhận config từ hub)
       setSpeed(speedSec);
-      setSelectedLevelSymbol(levelSymbol);
+      setSelectedStudyLevelId((hubConfig.study_level_id || getStudyLevelIdFromLegacySymbol(levelSymbol)) as StudyLevelId);
       setSourceType('auto');
 
       const ruleData = await backend.getLatestExamRule(currentMode);
@@ -451,13 +464,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
   };
 
   const PATH_COMPLETED_KEY = 'ucmas_path_day_completed';
-  const markPathDayCompleted = (userId: string, level: string, dayNo: number) => {
+  const markPathDayCompleted = (userId: string, levelKey: string, dayNo: number) => {
     try {
       const raw = localStorage.getItem(PATH_COMPLETED_KEY);
       const all: Record<string, Record<string, Record<number, boolean>>> = raw ? JSON.parse(raw) : {};
       if (!all[userId]) all[userId] = {};
-      if (!all[userId][level]) all[userId][level] = {};
-      all[userId][level][dayNo] = true;
+      if (!all[userId][levelKey]) all[userId][levelKey] = {};
+      all[userId][levelKey][dayNo] = true;
       localStorage.setItem(PATH_COMPLETED_KEY, JSON.stringify(all));
     } catch { /* ignore */ }
   };
@@ -535,11 +548,11 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
         });
         if (!rec.success) {
           console.warn('recordExerciseAttempt failed, fallback localStorage:', rec.error);
-          if (returnTo.pathDay != null) markPathDayCompleted(user.id, selectedLevelSymbol, returnTo.pathDay);
+          if (returnTo.pathDay != null) markPathDayCompleted(user.id, selectedStudyLevelId, returnTo.pathDay);
         }
       } else if (returnTo?.tab === 'path' && returnTo.pathDay != null) {
         // Fallback legacy behavior
-        markPathDayCompleted(user.id, selectedLevelSymbol, returnTo.pathDay);
+        markPathDayCompleted(user.id, selectedStudyLevelId, returnTo.pathDay);
       }
     } catch (error: any) {
       console.error('Error submitting exam:', error);
@@ -601,13 +614,13 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
             </div>
 
             <div>
-              <label className={`block text-xs font-heading font-bold ${theme.color} mb-1.5 ml-1 uppercase`}>🎓 Cấp độ</label>
+              <label className={`block text-xs font-heading font-bold ${theme.color} mb-1.5 ml-1 uppercase`}>🎓 Cấp độ học</label>
               <select
-                value={selectedLevelSymbol}
-                onChange={e => setSelectedLevelSymbol(e.target.value)}
+                value={selectedStudyLevelId}
+                onChange={e => setSelectedStudyLevelId(e.target.value as StudyLevelId)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition appearance-none"
               >
-                {LEVEL_SYMBOLS_ORDER.map(s => <option key={s} value={s}>{getLevelLabel(s)}</option>)}
+                {STUDY_LEVELS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
 
@@ -634,7 +647,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
                   className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                 >
                   {availableExams.length === 0 ? (
-                    <option value="">-- Không có bài nào cho {getLevelLabel(selectedLevelSymbol)} --</option>
+                    <option value="">-- Không có bài nào cho {getStudyLevelLabel(selectedStudyLevelId)} --</option>
                   ) : (
                     availableExams.map(ex => (
                       <option key={ex.id} value={ex.id}>{ex.name} ({ex.questions.length} câu)</option>
@@ -745,7 +758,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           </div>
 
           <h2 className="text-2xl font-heading-extrabold text-ucmas-blue mb-2 uppercase tracking-tight">Kết Quả Luyện Tập</h2>
-          <p className="text-gray-600 text-sm mb-6 font-medium">{formName} • {getLevelLabel(selectedLevelSymbol)}</p>
+          <p className="text-gray-600 text-sm mb-6 font-medium">{formName} • {getStudyLevelLabel(selectedStudyLevelId)}</p>
 
           <div className="flex justify-center gap-1 mb-3 text-ucmas-yellow text-3xl">
             {[1, 2, 3, 4, 5].map(s => <span key={s} className="transform hover:scale-110 transition-transform">{percentage >= s * 20 ? '★' : '☆'}</span>)}
@@ -1044,7 +1057,7 @@ const PracticeSession: React.FC<PracticeSessionProps> = ({ user }) => {
           <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
             <div className="flex justify-between text-xs mb-2">
               <span className="text-gray-500 font-heading font-bold uppercase">Cấp độ</span>
-              <span className="font-heading font-bold text-ucmas-green">{getLevelLabel(selectedLevelSymbol)}</span>
+              <span className="font-heading font-bold text-ucmas-green">{getStudyLevelLabel(selectedStudyLevelId)}</span>
             </div>
             {currentMode !== Mode.VISUAL && (
               <div className="flex justify-between text-xs mb-2">

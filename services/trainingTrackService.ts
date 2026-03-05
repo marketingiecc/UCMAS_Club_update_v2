@@ -1,5 +1,6 @@
 import { supabase } from './mockBackend';
 import type { TrackDayTemplatePayloadV1, TrackModeKey as TemplateModeKey } from './trackDayLibraryService';
+import { getStudyLevelIdFromLegacySymbol } from '../config/levelsAndDifficulty';
 
 type ModeKey = 'visual' | 'audio' | 'flash';
 
@@ -8,6 +9,7 @@ export type TrackExercise = {
   id: string;
   /** training_track_days.id */
   day_id: string;
+  study_level_id?: string;
   level_symbol: string;
   day_no: number;
   order_no: number;
@@ -28,6 +30,7 @@ export type TrackExercise = {
 
 export type TrackSnapshot = {
   track_id: string;
+  study_level_id?: string;
   level_symbol: string;
   total_days: number;
   dayIdByNo: Record<number, string>;
@@ -122,6 +125,7 @@ async function fetchExercisesForDayIds(dayIds: string[], levelSymbol: string, da
     return {
       id: String(r.id),
       day_id: dayId,
+      study_level_id: getStudyLevelIdFromLegacySymbol(levelSymbol),
       level_symbol: levelSymbol,
       day_no: dayNoById[dayId] ?? 0,
       order_no: Number(r.order_no ?? 0),
@@ -160,6 +164,7 @@ export const trainingTrackService = {
 
     return {
       track_id: String(track.id),
+      study_level_id: getStudyLevelIdFromLegacySymbol(String(track.level_symbol)),
       level_symbol: String(track.level_symbol),
       total_days: clampInt(track.total_days ?? totalDays, 1, 365),
       dayIdByNo,

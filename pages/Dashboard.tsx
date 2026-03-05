@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserProfile, LevelSymbol } from '../types';
+import { UserProfile, StudyLevelId, ExamLevelId } from '../types';
 import { backend } from '../services/mockBackend';
 import { AttemptResult } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import { practiceService } from '../src/features/practice/services/practiceService';
-import { getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import {
+  EXAM_LEVELS,
+  STUDY_LEVELS,
+  getDefaultExamLevelId,
+  getDefaultStudyLevelId,
+} from '../config/levelsAndDifficulty';
 
 interface DashboardProps {
   user: UserProfile;
@@ -20,7 +25,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
   const [fullName, setFullName] = useState(user.full_name || '');
   const [studentCode, setStudentCode] = useState(user.student_code || '');
   const [phone, setPhone] = useState(user.phone || '');
-  const [levelSymbol, setLevelSymbol] = useState<LevelSymbol | ''>((user.level_symbol as LevelSymbol) || '');
+  const [studyLevelId, setStudyLevelId] = useState<StudyLevelId | ''>((user.study_level_id as StudyLevelId) || '');
+  const [examLevelId, setExamLevelId] = useState<ExamLevelId | ''>((user.exam_level_id as ExamLevelId) || '');
   const [className, setClassName] = useState(user.class_name || '');
   const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
   const [classQuery, setClassQuery] = useState(user.class_name || '');
@@ -43,7 +49,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
     setFullName(user.full_name || '');
     setStudentCode(user.student_code || '');
     setPhone(user.phone || '');
-    setLevelSymbol((user.level_symbol as LevelSymbol) || '');
+    setStudyLevelId((user.study_level_id as StudyLevelId) || '');
+    setExamLevelId((user.exam_level_id as ExamLevelId) || '');
     setClassName(user.class_name || '');
     setClassQuery(user.class_name || '');
     setCenterId(user.center_id || '');
@@ -88,7 +95,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
       full_name: fullName,
       student_code: studentCode || undefined,
       phone: phone || undefined,
-      level_symbol: levelSymbol || undefined,
+      study_level_id: (studyLevelId || getDefaultStudyLevelId()) as StudyLevelId,
+      exam_level_id: (examLevelId || getDefaultExamLevelId()) as ExamLevelId,
       class_name: className || undefined,
       center_id: centerId || undefined,
       center_name: centerName || undefined,
@@ -188,15 +196,32 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ học</label>
               <select
-                value={levelSymbol}
-                onChange={(e) => setLevelSymbol((e.target.value || '') as LevelSymbol)}
+                value={studyLevelId}
+                onChange={(e) => setStudyLevelId((e.target.value || '') as StudyLevelId)}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
               >
-                <option value="">— Chọn cấp độ —</option>
-                {LEVEL_SYMBOLS_ORDER.map((s) => (
-                  <option key={s} value={s}>{getLevelLabel(s)}</option>
+                <option value="">— Chọn cấp độ học —</option>
+                {STUDY_LEVELS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cấp độ thi học sinh giỏi</label>
+              <select
+                value={examLevelId}
+                onChange={(e) => setExamLevelId((e.target.value || '') as ExamLevelId)}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2"
+              >
+                <option value="">— Chọn cấp độ thi —</option>
+                {EXAM_LEVELS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
                 ))}
               </select>
             </div>

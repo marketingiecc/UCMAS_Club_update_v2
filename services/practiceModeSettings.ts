@@ -3,7 +3,12 @@
  * Lưu trong localStorage; sau có thể chuyển sang Supabase.
  */
 
-import { LEVEL_SYMBOLS_ORDER, type LevelSymbol } from '../config/levelsAndDifficulty';
+import {
+  STUDY_LEVELS,
+  getLegacySymbolFromStudyLevelId,
+  getStudyLevelIdFromLegacySymbol,
+  type StudyLevelId,
+} from '../config/levelsAndDifficulty';
 
 export type ModeKey = 'visual' | 'audio' | 'flash';
 export type DifficultyKey = 'basic' | 'advanced' | 'elite';
@@ -27,8 +32,8 @@ export type PracticeModeLevelSettings = Record<ModeKey, Record<DifficultyKey, Mo
  * - `by_level[level][mode][difficulty]`
  */
 export type PracticeModeSettings = {
-  version: 2;
-  by_level: Record<LevelSymbol, PracticeModeLevelSettings>;
+  version: 3;
+  by_level: Record<StudyLevelId, PracticeModeLevelSettings>;
 };
 
 const STORAGE_KEY = 'ucmas_practice_mode_settings';
@@ -62,12 +67,12 @@ function defaultLevelSettings(): PracticeModeLevelSettings {
 
 function defaultSettings(): PracticeModeSettings {
   const base = defaultLevelSettings();
-  const by_level = {} as Record<LevelSymbol, PracticeModeLevelSettings>;
-  LEVEL_SYMBOLS_ORDER.forEach((lv) => {
+  const by_level = {} as Record<StudyLevelId, PracticeModeLevelSettings>;
+  STUDY_LEVELS.forEach((lv) => {
     // Deep copy to avoid shared refs
-    by_level[lv] = JSON.parse(JSON.stringify(base)) as PracticeModeLevelSettings;
+    by_level[lv.id] = JSON.parse(JSON.stringify(base)) as PracticeModeLevelSettings;
   });
-  return { version: 2, by_level };
+  return { version: 3, by_level };
 }
 
 function sanitizeLevelSettings(levelSettings: PracticeModeLevelSettings): PracticeModeLevelSettings {
@@ -113,7 +118,7 @@ export const practiceModeSettings = {
   },
 
   /**
-   * Lấy toàn bộ settings (V2). Tự migrate từ V1 nếu phát hiện dữ liệu cũ.
+   * Lấy toàn bộ settings (V3). Tự migrate từ V1/V2 nếu phát hiện dữ liệu cũ.
    */
   getSettings(): PracticeModeSettings {
     try {
@@ -122,17 +127,35 @@ export const practiceModeSettings = {
 
       const parsedUnknown = JSON.parse(raw) as any;
 
-      // V2
+      // V3
+      if (parsedUnknown?.version === 3 && parsedUnknown?.by_level) {
+        const v3 = parsedUnknown as PracticeModeSettings;
+        const defaults = defaultSettings();
+        const by_level = { ...defaults.by_level, ...(v3.by_level as any) } as PracticeModeSettings['by_level'];
+
+        for (const lv of STUDY_LEVELS) {
+          by_level[lv.id] = sanitizeLevelSettings(by_level[lv.id] || defaults.by_level[lv.id]);
+        }
+
+        const normalized: PracticeModeSettings = { version: 3, by_level };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        return normalized;
+      }
+
+      // V2 (legacy): by_level keyed by level_symbol
       if (parsedUnknown?.version === 2 && parsedUnknown?.by_level) {
         const v2 = parsedUnknown as PracticeModeSettings;
         const defaults = defaultSettings();
-        const by_level = { ...defaults.by_level, ...(v2.by_level as any) } as PracticeModeSettings['by_level'];
+        const legacyByLevel = (v2 as any).by_level || {};
+        const by_level = { ...defaults.by_level } as PracticeModeSettings['by_level'];
 
-        for (const lv of LEVEL_SYMBOLS_ORDER) {
-          by_level[lv] = sanitizeLevelSettings(by_level[lv] || defaults.by_level[lv]);
+        for (const lv of STUDY_LEVELS) {
+          const legacySymbol = getLegacySymbolFromStudyLevelId(lv.id);
+          const old = legacyByLevel[legacySymbol];
+          by_level[lv.id] = sanitizeLevelSettings(old || defaults.by_level[lv.id]);
         }
 
-        const normalized: PracticeModeSettings = { version: 2, by_level };
+        const normalized: PracticeModeSettings = { version: 3, by_level };
         // Persist normalization (safe self-heal)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         return normalized;
@@ -141,8 +164,8 @@ export const practiceModeSettings = {
       // V1 (legacy): Record<ModeKey, Record<DifficultyKey, Limits>>
       const legacy = parsedUnknown as PracticeModeLevelSettings;
       const migrated = defaultSettings();
-      LEVEL_SYMBOLS_ORDER.forEach((lv) => {
-        migrated.by_level[lv] = sanitizeLevelSettings(JSON.parse(JSON.stringify(legacy || defaultLevelSettings())));
+      STUDY_LEVELS.forEach((lv) => {
+        migrated.by_level[lv.id] = sanitizeLevelSettings(JSON.parse(JSON.stringify(legacy || defaultLevelSettings())));
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -155,15 +178,15 @@ export const practiceModeSettings = {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   },
 
-  getLevelSettings(level: LevelSymbol): PracticeModeLevelSettings {
+  getLevelSettings(level: StudyLevelId): PracticeModeLevelSettings {
     const all = this.getSettings();
     return all.by_level[level] || defaultLevelSettings();
   },
 
-  setLevelSettings(level: LevelSymbol, levelSettings: PracticeModeLevelSettings): PracticeModeSettings {
+  setLevelSettings(level: StudyLevelId, levelSettings: PracticeModeLevelSettings): PracticeModeSettings {
     const all = this.getSettings();
     const next: PracticeModeSettings = {
-      version: 2,
+      version: 3,
       by_level: {
         ...all.by_level,
         [level]: sanitizeLevelSettings(JSON.parse(JSON.stringify(levelSettings))),
@@ -173,8 +196,11 @@ export const practiceModeSettings = {
     return next;
   },
 
-  getLimits(level: LevelSymbol, mode: ModeKey, diff: DifficultyKey): ModeDifficultyLimits {
-    const lvl = this.getLevelSettings(level);
+  getLimits(level: StudyLevelId | string, mode: ModeKey, diff: DifficultyKey): ModeDifficultyLimits {
+    const safeLevel = (STUDY_LEVELS.some((it) => it.id === level)
+      ? level
+      : getStudyLevelIdFromLegacySymbol(level)) as StudyLevelId;
+    const lvl = this.getLevelSettings(safeLevel);
     return lvl[mode][diff];
   },
 

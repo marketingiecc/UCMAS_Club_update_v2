@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { backend } from '../services/mockBackend';
 import type { UserProfile } from '../types';
+import { getStudyLevelIdFromLegacySymbol, getStudyLevelLabel } from '../config/levelsAndDifficulty';
 
 type DbClass = { id: string; name: string; center_id?: string | null };
 
@@ -275,6 +276,8 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
             student_code: r.student_code || undefined,
             phone: r.phone || undefined,
             cups_count: r.cups_count || 0,
+            study_level_id: r.study_level_id || getStudyLevelIdFromLegacySymbol(r.level_symbol),
+            exam_level_id: r.exam_level_id || undefined,
             level_symbol: r.level_symbol, // Bind Level
           } as UserProfile;
         });
@@ -495,7 +498,7 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
 
                       {/* Level */}
                       <div className="col-span-1 text-center font-heading font-black text-gray-700 text-sm">
-                        {s.level_symbol || '-'}
+                        {getStudyLevelLabel(s.study_level_id || getStudyLevelIdFromLegacySymbol(s.level_symbol))}
                       </div>
 
                       {/* Cups */}
@@ -564,8 +567,10 @@ const TeacherDashboardPage: React.FC<{ user: UserProfile }> = ({ user }) => {
                       <div className="text-xl font-black text-yellow-700 mt-1">{detailStudent?.cups_count || 0} 🏆</div>
                     </div>
                     <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                      <div className="text-[10px] text-indigo-600 uppercase font-black tracking-wide">Cấp độ</div>
-                      <div className="text-xl font-black text-indigo-700 mt-1">{detailStudent?.level_symbol || '-'}</div>
+                      <div className="text-[10px] text-indigo-600 uppercase font-black tracking-wide">Cấp độ học</div>
+                      <div className="text-xl font-black text-indigo-700 mt-1">
+                        {getStudyLevelLabel(detailStudent?.study_level_id || getStudyLevelIdFromLegacySymbol(detailStudent?.level_symbol))}
+                      </div>
                     </div>
                     <div className="p-3 bg-green-50 rounded-xl border border-green-100">
                       <div className="text-[10px] text-green-600 uppercase font-black tracking-wide">Luyện tập</div>

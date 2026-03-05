@@ -3,6 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
 import { Mode, UserProfile, Contest, ContestExam, ContestSession, Question, ContestRegistration, ContestAccessCode, CustomExam } from '../types';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
+import {
+  getDefaultExamLevelId,
+  getDefaultStudyLevelId,
+  getExamLevelIdFromLegacySymbol,
+  getLegacySymbolFromExamLevelId,
+  getStudyLevelIdFromLegacySymbol,
+} from '../config/levelsAndDifficulty';
 
 const supabaseUrl = SUPABASE_URL;
 const supabaseKey = SUPABASE_ANON_KEY;
@@ -177,6 +184,8 @@ export const backend = {
               allowed_modes: (data.allowed_modes as Mode[]) || [],
               student_code: data.student_code || undefined,
               phone: data.phone || undefined,
+              study_level_id: data.study_level_id || getStudyLevelIdFromLegacySymbol(data.level_symbol) || getDefaultStudyLevelId(),
+              exam_level_id: data.exam_level_id || getExamLevelIdFromLegacySymbol(data.level_symbol) || getDefaultExamLevelId(),
               level_symbol: data.level_symbol || undefined,
               class_name: data.class_name || undefined,
               center_id: data.center_id || undefined,
@@ -229,6 +238,8 @@ export const backend = {
               allowed_modes: Array.from(modes),
               student_code: profile.student_code,
               phone: profile.phone || undefined,
+              study_level_id: profile.study_level_id || getStudyLevelIdFromLegacySymbol(profile.level_symbol) || getDefaultStudyLevelId(),
+              exam_level_id: profile.exam_level_id || getExamLevelIdFromLegacySymbol(profile.level_symbol) || getDefaultExamLevelId(),
               level_symbol: profile.level_symbol || undefined,
               class_name: profile.class_name || undefined,
               center_id: profile.center_id || undefined,
@@ -305,6 +316,8 @@ export const backend = {
       allowed_modes: [],
       student_code: p.student_code || undefined,
       phone: p.phone || undefined,
+      study_level_id: p.study_level_id || getStudyLevelIdFromLegacySymbol(p.level_symbol) || getDefaultStudyLevelId(),
+      exam_level_id: p.exam_level_id || getExamLevelIdFromLegacySymbol(p.level_symbol) || getDefaultExamLevelId(),
       level_symbol: p.level_symbol || undefined,
       class_name: p.class_name || undefined,
       center_id: p.center_id || undefined,
@@ -732,6 +745,8 @@ export const backend = {
       allowed_modes: [],
       student_code: p.student_code || undefined,
       phone: p.phone || undefined,
+      study_level_id: p.study_level_id || getStudyLevelIdFromLegacySymbol(p.level_symbol) || getDefaultStudyLevelId(),
+      exam_level_id: p.exam_level_id || getExamLevelIdFromLegacySymbol(p.level_symbol) || getDefaultExamLevelId(),
       level_symbol: p.level_symbol || undefined,
       class_name: p.class_name || undefined,
       center_id: p.center_id || undefined,
@@ -1285,11 +1300,15 @@ export const backend = {
     };
   },
 
-  updateProfile: async (userId: string, data: Partial<Pick<UserProfile, 'full_name' | 'student_code' | 'phone' | 'level_symbol' | 'class_name' | 'center_id' | 'center_name'>>) => {
+  updateProfile: async (userId: string, data: Partial<Pick<UserProfile, 'full_name' | 'student_code' | 'phone' | 'study_level_id' | 'exam_level_id' | 'level_symbol' | 'class_name' | 'center_id' | 'center_name'>>) => {
     const payload: Record<string, unknown> = {};
     if (data.full_name !== undefined) payload.full_name = data.full_name;
     if (data.student_code !== undefined) payload.student_code = data.student_code;
     if (data.phone !== undefined) payload.phone = data.phone;
+    if (data.study_level_id !== undefined) payload.study_level_id = data.study_level_id;
+    if (data.exam_level_id !== undefined) payload.exam_level_id = data.exam_level_id;
+    // Keep legacy bridge field for old flows still reading level_symbol
+    if (data.exam_level_id !== undefined) payload.level_symbol = getLegacySymbolFromExamLevelId(data.exam_level_id);
     if (data.level_symbol !== undefined) payload.level_symbol = data.level_symbol;
     if (data.class_name !== undefined) payload.class_name = data.class_name;
     if (data.center_id !== undefined) payload.center_id = data.center_id;

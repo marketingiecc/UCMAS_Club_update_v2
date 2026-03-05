@@ -6,7 +6,14 @@ import { generateExam } from '../services/examService';
 import { Mode, Question, UserProfile } from '../types';
 import ResultDetailModal from '../components/ResultDetailModal';
 import { cancelBrowserSpeechSynthesis, playConcatenatedListeningVi, getNgheTinhGapConfig } from '../services/googleTts';
-import { getLevelIndex, getLevelLabel, LEVEL_SYMBOLS_ORDER } from '../config/levelsAndDifficulty';
+import {
+  EXAM_LEVELS,
+  getDefaultExamLevelId,
+  getExamLevelIdFromLegacySymbol,
+  getLegacySymbolFromExamLevelId,
+  getLevelIndex,
+  getLevelLabel,
+} from '../config/levelsAndDifficulty';
 import { generateExam as generateUcmasExam, type GeneratedQuestion as UcmasGeneratedQuestion, type LevelSymbol as UcmasLevelSymbol } from '../ucmas_exam_generator';
 import { canUseTrial, consumeTrial } from '../services/trialUsage';
 
@@ -123,8 +130,12 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
 
       // Elite Visual (Nhìn tính) must follow the rulebook in ucmas_exam_generator.ts
       if (currentMode === Mode.VISUAL && returnTo?.tab === 'elite' && (config.source ?? 'auto') === 'auto') {
-        const rawLevel = typeof config.level === 'string' ? config.level : (user.level_symbol || 'A');
-        const safeLevel = (LEVEL_SYMBOLS_ORDER.includes(rawLevel) ? rawLevel : 'A') as UcmasLevelSymbol;
+        const examLevelId =
+          typeof config.exam_level_id === 'string'
+            ? config.exam_level_id
+            : (user.exam_level_id || getExamLevelIdFromLegacySymbol(user.level_symbol) || getDefaultExamLevelId());
+        const rawLevel = typeof config.level === 'string' ? config.level : getLegacySymbolFromExamLevelId(examLevelId);
+        const safeLevel = (EXAM_LEVELS.some((x) => x.symbol === rawLevel) ? rawLevel : 'A') as UcmasLevelSymbol;
         const targetCount = typeof config.numQuestions === 'number' ? config.numQuestions : 200;
 
         const exam = generateUcmasExam(safeLevel, { seed: `${user.id}-${Date.now()}` });
@@ -658,13 +669,14 @@ const PracticeSessionExam: React.FC<PracticeSessionExamProps> = ({ user }) => {
   const tabStart = questionTab * QUESTIONS_PER_TAB;
   const tabEnd = Math.min(tabStart + QUESTIONS_PER_TAB, questions.length);
 
-  // Sidebar level display (mainly for Elite Visual: level is a symbol like 'A', 'C', ...)
   const rawLevel = (navState?.customConfig as any)?.level;
-  const levelSymbol =
-    typeof rawLevel === 'string'
-      ? rawLevel
-      : (user.level_symbol || 'A');
-  const levelLabel = getLevelLabel(levelSymbol);
+  const rawExamLevelId = (navState?.customConfig as any)?.exam_level_id;
+  const examLevelId =
+    typeof rawExamLevelId === 'string'
+      ? rawExamLevelId
+      : (user.exam_level_id || getExamLevelIdFromLegacySymbol(user.level_symbol) || getDefaultExamLevelId());
+  const levelSymbol = typeof rawLevel === 'string' ? rawLevel : getLegacySymbolFromExamLevelId(examLevelId);
+  const levelLabel = EXAM_LEVELS.find((x) => x.id === examLevelId)?.name || getLevelLabel(levelSymbol);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8 flex gap-8">

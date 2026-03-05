@@ -5,6 +5,7 @@ import { backend } from '../services/mockBackend';
 import { UserProfile } from '../types';
 import { trainingTrackService } from '../services/trainingTrackService';
 import { applySiteSeoToDocument, loadSiteSeoSettings, onSiteSeoUpdated, svgTextToDataUrl, type SiteSeoSettings } from '../services/siteSeoService';
+import { getStudyLevelLabel, getStudyLevelIdFromLegacySymbol } from '../config/levelsAndDifficulty';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -177,7 +178,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                     <div className="hidden lg:flex flex-col items-start">
                       <span className="text-sm font-heading-bold text-gray-800">{user.full_name || 'Học sinh'}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Cấp độ: {user.level_symbol || '—'}</span>
+                        <span className="text-xs text-gray-500">Cấp độ học: {getStudyLevelLabel(user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol))}</span>
                         <span className="flex items-center gap-1 text-xs font-heading font-bold text-ucmas-green bg-green-50 px-2 py-0.5 rounded-full border border-green-100" title="Số Cup đã nhận">
                           <img src="/svg/Cup.svg" alt="Cup" className="w-3 h-3" />
                           {localCupsCount}
@@ -255,7 +256,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, setUser }) => {
                     <div className="text-xs text-gray-500 truncate">
                       {user.student_code ? `Mã: ${user.student_code}` : user.email}
                       <span className="mx-2">•</span>
-                      Cấp độ: {user.level_symbol || '—'}
+                      Cấp độ học: {getStudyLevelLabel(user.study_level_id || getStudyLevelIdFromLegacySymbol(user.level_symbol))}
                     </div>
                     {user.role !== 'admin' && daysLeft > 0 && (
                       <div className="mt-1 inline-flex text-[10px] px-2 py-0.5 rounded-full font-heading font-bold border bg-green-50 text-green-700 border-green-100">
